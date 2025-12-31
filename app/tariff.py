@@ -186,11 +186,12 @@ def generate_24h_schedule(now: datetime, config, inputs=None) -> dict:
 
         if tariff != last_tariff:
             if last_tariff is not None:
+                duration = int((current - period_start).total_seconds() // 3600)
                 schedule['tariff_periods'].append({
                     'tariff': last_tariff,
                     'start': period_start.strftime('%H:%M'),
                     'end': current.strftime('%H:%M'),
-                    'duration_hours': (current - period_start).seconds // 3600
+                    'duration_hours': max(1, duration)  # Ensure at least 1 hour
                 })
             period_start = current
             last_tariff = tariff
@@ -199,11 +200,12 @@ def generate_24h_schedule(now: datetime, config, inputs=None) -> dict:
 
     # Add final period
     if last_tariff:
+        duration = int((end_time - period_start).total_seconds() // 3600)
         schedule['tariff_periods'].append({
             'tariff': last_tariff,
             'start': period_start.strftime('%H:%M'),
             'end': end_time.strftime('%H:%M'),
-            'duration_hours': (end_time - period_start).seconds // 3600
+            'duration_hours': max(1, duration)
         })
 
     # Generate EV charging plan with clear windows
