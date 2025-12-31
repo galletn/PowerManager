@@ -1,0 +1,218 @@
+## Power Manager Dashboard Cards
+## Kopieer naar je Lovelace dashboard
+
+# ==========================================
+# CARD 1: Klimaat Bediening (voor gezin)
+# Vereist: mushroom cards (HACS)
+# ==========================================
+type: vertical-stack
+cards:
+  - type: markdown
+    content: |
+      ## 🏠 Klimaat Bediening
+      Kies **Auto** om de Power Manager te laten beslissen, of kies zelf.
+  
+  - type: horizontal-stack
+    cards:
+      - type: custom:mushroom-select-card
+        entity: input_select.pm_override_ac_living
+        name: Living
+        icon: mdi:sofa
+        fill_container: true
+      - type: custom:mushroom-select-card
+        entity: input_select.pm_override_ac_slaapkamer
+        name: Slaapkamer
+        icon: mdi:bed
+        fill_container: true
+  
+  - type: horizontal-stack
+    cards:
+      - type: custom:mushroom-select-card
+        entity: input_select.pm_override_ac_bureau
+        name: Bureau
+        icon: mdi:desk
+        fill_container: true
+      - type: custom:mushroom-select-card
+        entity: input_select.pm_override_ac_mancave
+        name: Mancave
+        icon: mdi:gamepad-variant
+        fill_container: true
+  
+  - type: horizontal-stack
+    cards:
+      - type: custom:mushroom-select-card
+        entity: input_select.pm_override_pool
+        name: Zwembad
+        icon: mdi:pool
+        fill_container: true
+      - type: custom:mushroom-select-card
+        entity: input_select.pm_override_boiler
+        name: Boiler
+        icon: mdi:water-boiler
+        fill_container: true
+
+---
+
+# ==========================================
+# CARD 2: Simpele versie (native HA cards)
+# Geen extra plugins nodig
+# ==========================================
+type: vertical-stack
+cards:
+  - type: markdown
+    content: |
+      ## 🏠 Klimaat
+      **Auto** = Power Manager beslist
+  
+  - type: entities
+    entities:
+      - entity: input_select.pm_override_ac_living
+        name: 🛋️ Living
+      - entity: input_select.pm_override_ac_slaapkamer
+        name: 🛏️ Slaapkamer
+      - entity: input_select.pm_override_ac_bureau
+        name: 💻 Bureau
+      - entity: input_select.pm_override_ac_mancave
+        name: 🎮 Mancave
+      - type: divider
+      - entity: input_select.pm_override_pool
+        name: 🏊 Zwembad
+      - entity: input_select.pm_override_boiler
+        name: 🔥 Boiler
+      - entity: input_select.pm_override_ev
+        name: 🔌 Auto Laden
+
+---
+
+# ==========================================
+# CARD 3: Temperatuur overzicht
+# ==========================================
+type: glance
+title: 🌡️ Temperaturen
+entities:
+  - entity: sensor.livingroom_temperature_temperature
+    name: Living
+  - entity: sensor.bedroom_temperature_temperature
+    name: Slaapkamer
+  - entity: sensor.mancave_inside_temperature
+    name: Mancave
+
+---
+
+# ==========================================
+# CARD 4: Power Manager Status
+# ==========================================
+type: vertical-stack
+cards:
+  - type: markdown
+    content: |
+      ## ⚡ Power Manager
+      {{ states('input_text.power_manager_status') }}
+  
+  - type: markdown
+    content: |
+      ### 📋 Plan
+      {{ states('input_text.power_manager_plan') | replace(' • ', '\n\n') }}
+  
+  - type: markdown
+    content: |
+      ### 📜 Acties
+      {{ states('input_text.power_manager_actions') | replace(' | ', '\n\n') }}
+
+---
+
+# ==========================================
+# CARD 5: Snelle knoppen (voor kids)
+# Tap = aan, Hold = terug naar Auto
+# ==========================================
+type: vertical-stack
+cards:
+  - type: markdown
+    content: "## 🎛️ Snel Aan/Uit"
+  
+  - type: horizontal-stack
+    cards:
+      - type: button
+        name: Living Koelen
+        icon: mdi:snowflake
+        tap_action:
+          action: call-service
+          service: input_select.select_option
+          data:
+            entity_id: input_select.pm_override_ac_living
+            option: "❄️ Koelen"
+        hold_action:
+          action: call-service
+          service: input_select.select_option
+          data:
+            entity_id: input_select.pm_override_ac_living
+            option: "🤖 Auto"
+      
+      - type: button
+        name: Slaapkamer Koelen
+        icon: mdi:snowflake
+        tap_action:
+          action: call-service
+          service: input_select.select_option
+          data:
+            entity_id: input_select.pm_override_ac_slaapkamer
+            option: "❄️ Koelen"
+        hold_action:
+          action: call-service
+          service: input_select.select_option
+          data:
+            entity_id: input_select.pm_override_ac_slaapkamer
+            option: "🤖 Auto"
+  
+  - type: horizontal-stack
+    cards:
+      - type: button
+        name: Alles Auto
+        icon: mdi:robot
+        tap_action:
+          action: call-service
+          service: script.pm_all_auto
+        icon_color: green
+      
+      - type: button
+        name: Alles Uit
+        icon: mdi:power-off
+        tap_action:
+          action: call-service
+          service: script.pm_all_off
+        icon_color: red
+
+---
+
+# ==========================================
+# SCRIPTS (voeg toe aan scripts.yaml)
+# ==========================================
+# pm_all_auto:
+#   alias: "PM Alles Auto"
+#   sequence:
+#     - service: input_select.select_option
+#       target:
+#         entity_id:
+#           - input_select.pm_override_ac_living
+#           - input_select.pm_override_ac_slaapkamer
+#           - input_select.pm_override_ac_bureau
+#           - input_select.pm_override_ac_mancave
+#           - input_select.pm_override_pool
+#           - input_select.pm_override_boiler
+#           - input_select.pm_override_ev
+#       data:
+#         option: "🤖 Auto"
+#
+# pm_all_off:
+#   alias: "PM Alles Uit"
+#   sequence:
+#     - service: input_select.select_option
+#       target:
+#         entity_id:
+#           - input_select.pm_override_ac_living
+#           - input_select.pm_override_ac_slaapkamer
+#           - input_select.pm_override_ac_bureau
+#           - input_select.pm_override_ac_mancave
+#           - input_select.pm_override_pool
+#       data:
+#         option: "⏹️ Uit"
