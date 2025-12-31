@@ -29,9 +29,10 @@ class EVConfig:
     """EV charger settings."""
     min_amps: int = 6
     max_amps: int = 16
-    watts_per_amp: int = 692
+    watts_per_amp: int = 692  # 3-phase: ~230V × 3 = 690W per amp
     amp_change_threshold: int = 2
-    max_power: int = 4000  # Max charging power in watts (single phase limit)
+    # Note: Effective charging power is calculated dynamically based on grid limits
+    # Min power: 6A × 692W = 4.2kW, Max power: 16A × 692W = 11kW
 
 
 @dataclass

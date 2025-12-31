@@ -166,11 +166,13 @@ def generate_schedule(
 
             if car_battery is not None:
                 # Calculate realistic charging power based on:
-                # 1. EV charger max power setting (e.g., 4kW for single phase)
-                # 2. Grid limit minus base load buffer
-                charger_max_kw = config.ev.max_power / 1000  # Use configured max power
+                # 1. EV charger max power (max_amps × watts_per_amp)
+                # 2. Grid limit during super-off-peak minus buffer for other loads
+                charger_max_kw = config.ev.max_amps * config.ev.watts_per_amp / 1000
                 grid_limit_kw = config.max_import.super_off_peak / 1000
                 base_load_buffer_kw = 0.5  # 500W for house base load
+                # Effective = min of charger capability and grid headroom
+                # e.g., min(11kW, 8kW - 0.5kW) = 7.5kW
                 effective_charging_kw = min(charger_max_kw, grid_limit_kw - base_load_buffer_kw)
                 ev_estimate = calculate_ev_charging_needs(
                     car_battery, 80, car_capacity, effective_charging_kw
