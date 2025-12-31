@@ -9,13 +9,13 @@ StartLimitBurst=5
 Type=simple
 User=nicolas
 Group=nicolas
-WorkingDirectory=/opt/power-manager
-ExecStart=/opt/power-manager/venv/bin/python3 -m app.main
+WorkingDirectory=/opt/PowerManager
+ExecStart=/opt/PowerManager/venv/bin/python3 -m app.main
 Restart=always
 RestartSec=30
 
 # Environment
-Environment="PM_CONFIG=/opt/power-manager/config.yaml"
+Environment="PM_CONFIG=/opt/PowerManager/config.yaml"
 
 # Logging
 StandardOutput=journal

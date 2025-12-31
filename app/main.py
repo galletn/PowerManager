@@ -309,7 +309,12 @@ async def get_status():
         "alerts": last_alerts,
         "last_update": last_update.isoformat() if last_update else None,
         "schedule_24h": generate_24h_schedule(datetime.now(), config, last_inputs),
-        "timetable": _get_timetable_data()
+        "timetable": _get_timetable_data(),
+        "limits": {
+            "peak": config.max_import.peak,
+            "off_peak": config.max_import.off_peak,
+            "super_off_peak": config.max_import.super_off_peak
+        }
     }
 
 
@@ -374,6 +379,82 @@ async def health():
         "running": running,
         "last_update": last_update.isoformat() if last_update else None
     }
+
+
+@app.get("/api/limits")
+async def get_limits():
+    """Get current power limits."""
+    if config is None:
+        return JSONResponse({"error": "Not initialized"}, status_code=503)
+
+    # Try to read from HA input_numbers, fall back to config
+    limits = {
+        "peak": config.max_import.peak,
+        "off_peak": config.max_import.off_peak,
+        "super_off_peak": config.max_import.super_off_peak
+    }
+
+    try:
+        states = await ha_client.get_all_states()
+
+        peak_state = states.get(config.entities.limit_peak, {})
+        if peak_state.get("state") not in (None, "unavailable", "unknown"):
+            limits["peak"] = int(float(peak_state["state"]))
+
+        off_peak_state = states.get(config.entities.limit_off_peak, {})
+        if off_peak_state.get("state") not in (None, "unavailable", "unknown"):
+            limits["off_peak"] = int(float(off_peak_state["state"]))
+
+        super_state = states.get(config.entities.limit_super_off_peak, {})
+        if super_state.get("state") not in (None, "unavailable", "unknown"):
+            limits["super_off_peak"] = int(float(super_state["state"]))
+    except Exception as e:
+        logger.warning(f"Could not read limits from HA: {e}")
+
+    return limits
+
+
+@app.post("/api/limits")
+async def set_limits(peak: int = None, off_peak: int = None,
+                     super_off_peak: int = None):
+    """Set power limits via HA input_numbers."""
+    if config is None:
+        return JSONResponse({"error": "Not initialized"}, status_code=503)
+
+    results = {}
+
+    try:
+        if peak is not None:
+            await ha_client.call_service(
+                "input_number", "set_value",
+                config.entities.limit_peak,
+                value=peak
+            )
+            config.max_import.peak = peak
+            results["peak"] = peak
+
+        if off_peak is not None:
+            await ha_client.call_service(
+                "input_number", "set_value",
+                config.entities.limit_off_peak,
+                value=off_peak
+            )
+            config.max_import.off_peak = off_peak
+            results["off_peak"] = off_peak
+
+        if super_off_peak is not None:
+            await ha_client.call_service(
+                "input_number", "set_value",
+                config.entities.limit_super_off_peak,
+                value=super_off_peak
+            )
+            config.max_import.super_off_peak = super_off_peak
+            results["super_off_peak"] = super_off_peak
+
+        return {"status": "ok", "updated": results}
+    except Exception as e:
+        logger.error(f"Failed to set limits: {e}")
+        raise HTTPException(500, str(e))
 
 
 @app.get("/api/schedule")

@@ -151,6 +151,11 @@ class EntitiesConfig:
     status_plan: str = "input_text.power_manager_plan"
     status_actions: str = "input_text.power_manager_actions"
 
+    # Power limit helpers (configurable via dashboard)
+    limit_peak: str = "input_number.pm_limit_peak"
+    limit_off_peak: str = "input_number.pm_limit_off_peak"
+    limit_super_off_peak: str = "input_number.pm_limit_super_off_peak"
+
     # BMW Cars
     bmw_i5_battery: str = "sensor.i5_edrive40_battery_hv_state_of_charge"
     bmw_i5_range: str = "sensor.i5_edrive40_range_ev_remaining_range"

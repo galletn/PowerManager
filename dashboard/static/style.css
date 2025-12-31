@@ -653,6 +653,112 @@ h2 {
     opacity: 0.5;
 }
 
+/* Settings Section */
+.settings-section {
+    background: var(--ha-card-background);
+    border-radius: var(--ha-border-radius);
+    padding: 16px;
+    box-shadow: var(--ha-card-shadow);
+    margin-top: 16px;
+}
+
+.settings-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+}
+
+.settings-header h2 {
+    margin: 0;
+}
+
+.settings-toggle {
+    font-size: 20px;
+    font-weight: bold;
+    color: var(--ha-text-secondary);
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.settings-content {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--ha-divider);
+}
+
+.settings-group h3 {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--ha-text-secondary);
+    margin-bottom: 12px;
+}
+
+.limit-inputs {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.limit-input {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.limit-input label {
+    font-size: 12px;
+    color: var(--ha-text-secondary);
+}
+
+.limit-input input {
+    padding: 8px 12px;
+    border: 1px solid var(--ha-divider);
+    border-radius: 4px;
+    font-size: 14px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.limit-input input:focus {
+    outline: none;
+    border-color: var(--ha-primary-color);
+}
+
+.limit-unit {
+    font-size: 11px;
+    color: var(--ha-text-secondary);
+}
+
+.btn-save {
+    background: var(--ha-primary-color);
+    color: white;
+    border: none;
+    padding: 10px 24px;
+    border-radius: 4px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.btn-save:hover {
+    background: #0288d1;
+}
+
+.save-status {
+    margin-left: 12px;
+    font-size: 13px;
+    color: var(--ha-success);
+}
+
+.save-status.error {
+    color: var(--ha-error);
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     .dashboard {

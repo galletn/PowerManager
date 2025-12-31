@@ -355,6 +355,11 @@ function updateDashboard(data) {
     // Status indicator
     const statusIndicator = document.getElementById('status-indicator');
     statusIndicator.classList.remove('disconnected');
+
+    // Update power limits in settings
+    if (data.limits) {
+        updateLimits(data.limits);
+    }
 }
 
 // Fetch status from API
@@ -386,6 +391,66 @@ async function setOverride(device, mode) {
     } catch (error) {
         console.error('Failed to set override:', error);
         alert(`Failed to set ${device} to ${mode}: ${error.message}`);
+    }
+}
+
+// Toggle settings panel
+function toggleSettings() {
+    const content = document.getElementById('settings-content');
+    const toggle = document.getElementById('settings-toggle');
+    if (content.style.display === 'none') {
+        content.style.display = 'block';
+        toggle.textContent = '-';
+    } else {
+        content.style.display = 'none';
+        toggle.textContent = '+';
+    }
+}
+
+// Update limit inputs from data
+function updateLimits(limits) {
+    if (!limits) return;
+
+    const peakInput = document.getElementById('limit-peak');
+    const offPeakInput = document.getElementById('limit-off-peak');
+    const superOffPeakInput = document.getElementById('limit-super-off-peak');
+
+    if (peakInput && limits.peak) peakInput.value = limits.peak;
+    if (offPeakInput && limits.off_peak) offPeakInput.value = limits.off_peak;
+    if (superOffPeakInput && limits.super_off_peak) superOffPeakInput.value = limits.super_off_peak;
+}
+
+// Save power limits
+async function saveLimits() {
+    const peak = parseInt(document.getElementById('limit-peak').value);
+    const offPeak = parseInt(document.getElementById('limit-off-peak').value);
+    const superOffPeak = parseInt(document.getElementById('limit-super-off-peak').value);
+    const statusEl = document.getElementById('save-status');
+
+    try {
+        const params = new URLSearchParams();
+        params.append('peak', peak);
+        params.append('off_peak', offPeak);
+        params.append('super_off_peak', superOffPeak);
+
+        const response = await fetch(`/api/limits?${params.toString()}`, {
+            method: 'POST'
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+        statusEl.textContent = 'Saved!';
+        statusEl.className = 'save-status';
+        setTimeout(() => { statusEl.textContent = ''; }, 3000);
+
+        // Refresh to show updated values
+        fetchStatus();
+    } catch (error) {
+        console.error('Failed to save limits:', error);
+        statusEl.textContent = 'Failed to save';
+        statusEl.className = 'save-status error';
     }
 }
 
