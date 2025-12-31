@@ -430,10 +430,103 @@ h2 {
     color: var(--ha-text-secondary);
 }
 
+/* Device Activity Timelines */
+.device-timelines {
+    margin-top: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.device-timeline-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 20px;
+}
+
+.device-label {
+    width: 70px;
+    font-size: 11px;
+    color: var(--ha-text-secondary);
+    flex-shrink: 0;
+}
+
+.device-bar {
+    flex: 1;
+    height: 16px;
+    background: var(--ha-divider);
+    border-radius: 3px;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+}
+
+.device-bar-segment {
+    height: 100%;
+    transition: width 0.3s;
+}
+
+.device-bar-segment.active {
+    background: var(--ha-primary-color);
+}
+
+.device-bar-segment.inactive {
+    background: transparent;
+}
+
+.device-bar-segment.ev.active {
+    background: #2196f3;
+}
+
+.device-bar-segment.boiler.active {
+    background: #ff5722;
+}
+
+.device-bar-segment.table_heater.active {
+    background: #ff9800;
+}
+
+.device-bar-segment.pool_pump.active {
+    background: #00bcd4;
+}
+
+/* Total power row colors */
+.device-bar-segment.total.ok {
+    background: var(--ha-success);
+}
+
+.device-bar-segment.total.warning {
+    background: var(--ha-warning);
+}
+
+.device-bar-segment.total.over-limit {
+    background: var(--ha-error);
+}
+
+.device-timeline-row.total-row {
+    margin-top: 4px;
+    padding-top: 4px;
+    border-top: 1px solid var(--ha-divider);
+}
+
+.device-timeline-row.total-row .device-label {
+    font-weight: 500;
+    color: var(--ha-text-primary);
+}
+
+.device-power-label {
+    width: 45px;
+    font-size: 10px;
+    color: var(--ha-text-secondary);
+    text-align: right;
+    flex-shrink: 0;
+}
+
 .timeline-legend {
     display: flex;
     gap: 16px;
-    margin-top: 8px;
+    margin-top: 12px;
     font-size: 11px;
     color: var(--ha-text-secondary);
 }

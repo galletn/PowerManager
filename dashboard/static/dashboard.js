@@ -124,9 +124,90 @@ function updateSchedule(schedule) {
     }
 }
 
+// Build device activity timelines
+function buildDeviceTimelines(timetable, limits) {
+    if (!timetable || !timetable.hourly) return;
+
+    const devices = {
+        'ev': { bar: document.getElementById('ev-timeline'), label: document.getElementById('ev-power-label'), power: 11000 },
+        'boiler': { bar: document.getElementById('boiler-timeline'), label: document.getElementById('boiler-power-label'), power: 2500 },
+        'table_heater': { bar: document.getElementById('heater-timeline'), label: document.getElementById('heater-power-label'), power: 4100 },
+        'pool_pump': { bar: document.getElementById('pool-timeline'), label: document.getElementById('pool-power-label'), power: 500 }
+    };
+
+    const hours = timetable.hourly.slice(0, 24);
+    const totalHours = 24;
+
+    // Build activity array for each device
+    Object.keys(devices).forEach(deviceKey => {
+        const device = devices[deviceKey];
+        if (!device.bar) return;
+
+        let html = '';
+        hours.forEach((entry, idx) => {
+            const isActive = entry.devices && entry.devices[deviceKey];
+            const widthPercent = (1 / totalHours) * 100;
+            const activeClass = isActive ? 'active' : 'inactive';
+            html += `<div class="device-bar-segment ${deviceKey} ${activeClass}" style="width:${widthPercent}%"></div>`;
+        });
+
+        // Fill remaining hours if less than 24
+        for (let i = hours.length; i < 24; i++) {
+            const widthPercent = (1 / totalHours) * 100;
+            html += `<div class="device-bar-segment ${deviceKey} inactive" style="width:${widthPercent}%"></div>`;
+        }
+
+        device.bar.innerHTML = html;
+    });
+
+    // Build total power row showing if we exceed limits
+    const totalBar = document.getElementById('total-timeline');
+    const totalLabel = document.getElementById('total-power-label');
+    if (totalBar) {
+        let html = '';
+        let maxPower = 0;
+
+        hours.forEach((entry, idx) => {
+            const totalPower = entry.total_power || 0;
+            const limit = entry.limit || 8000;
+            const widthPercent = (1 / totalHours) * 100;
+
+            // Color based on utilization
+            let colorClass = 'ok';
+            if (totalPower > limit) {
+                colorClass = 'over-limit';
+            } else if (totalPower > limit * 0.8) {
+                colorClass = 'warning';
+            } else if (totalPower > 0) {
+                colorClass = 'ok';
+            } else {
+                colorClass = 'inactive';
+            }
+
+            maxPower = Math.max(maxPower, totalPower);
+            const title = `${entry.hour}: ${(totalPower/1000).toFixed(1)}kW / ${(limit/1000).toFixed(0)}kW limit`;
+            html += `<div class="device-bar-segment total ${colorClass}" style="width:${widthPercent}%" title="${title}"></div>`;
+        });
+
+        // Fill remaining hours
+        for (let i = hours.length; i < 24; i++) {
+            const widthPercent = (1 / totalHours) * 100;
+            html += `<div class="device-bar-segment total inactive" style="width:${widthPercent}%"></div>`;
+        }
+
+        totalBar.innerHTML = html;
+        if (totalLabel) {
+            totalLabel.textContent = maxPower > 0 ? `${(maxPower/1000).toFixed(1)}kW` : '';
+        }
+    }
+}
+
 // Update timetable with estimates
 function updateTimetable(timetable) {
     if (!timetable) return;
+
+    // Build device activity timelines
+    buildDeviceTimelines(timetable);
 
     // Update EV estimate
     const evEstimateEl = document.getElementById('ev-estimate');
