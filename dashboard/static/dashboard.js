@@ -130,6 +130,7 @@ function buildDeviceTimelines(timetable, limits) {
 
     // Get EV effective power from estimate (default 7.5kW if not available)
     const evPowerKw = timetable.ev_estimate?.charging_power_kw || 7.5;
+    const scheduledHours = timetable.scheduled_hours || {};
 
     const devices = {
         'ev': { bar: document.getElementById('ev-timeline'), label: document.getElementById('ev-power-label'), power: evPowerKw * 1000 },
@@ -141,11 +142,19 @@ function buildDeviceTimelines(timetable, limits) {
     const hours = timetable.hourly.slice(0, 24);
     const totalHours = 24;
 
-    // Update power labels
+    // Update power labels with kWh estimates
     Object.keys(devices).forEach(deviceKey => {
         const device = devices[deviceKey];
         if (device.label) {
-            device.label.textContent = `${(device.power / 1000).toFixed(1)}kW`;
+            const hrs = scheduledHours[deviceKey] || 0;
+            const kwh = (device.power / 1000) * hrs;
+            if (hrs > 0) {
+                device.label.textContent = `${kwh.toFixed(1)}kWh`;
+                device.label.title = `${hrs}h × ${(device.power/1000).toFixed(1)}kW`;
+            } else {
+                device.label.textContent = '-';
+                device.label.title = 'Not scheduled';
+            }
         }
     });
 

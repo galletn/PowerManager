@@ -42,6 +42,10 @@ last_alerts: list[dict] = []
 last_update: Optional[datetime] = None
 running = False
 
+# Alert cooldown tracking (alert_key -> last_sent_timestamp)
+alert_cooldowns: dict[str, datetime] = {}
+ALERT_COOLDOWN_MINUTES = 30  # Don't repeat same alert for 30 minutes
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -136,15 +140,30 @@ async def decision_loop():
             # Execute decisions
             await execute_decisions(result.decisions, inputs)
 
-            # Send alerts
+            # Send alerts (with cooldown to prevent spam)
             for alert in result.alerts:
                 if alert.notify_entity:
+                    # Create a key for this alert type
+                    alert_key = f"{alert.level}:{alert.notify_entity}"
+                    now_time = datetime.now()
+
+                    # Check cooldown
+                    last_sent = alert_cooldowns.get(alert_key)
+                    if last_sent:
+                        minutes_since = (now_time - last_sent).total_seconds() / 60
+                        if minutes_since < ALERT_COOLDOWN_MINUTES:
+                            logger.debug(f"Alert suppressed (cooldown): {alert_key}")
+                            continue
+
                     try:
                         await ha_client.send_notification(
                             alert.notify_entity,
                             "Power Manager Alert",
                             alert.message
                         )
+                        # Update cooldown
+                        alert_cooldowns[alert_key] = now_time
+                        logger.info(f"Alert sent: {alert.message}")
                     except Exception as e:
                         logger.error(f"Failed to send notification: {e}")
 
@@ -329,7 +348,8 @@ def _get_timetable_data():
             "ev_estimate": timetable.ev_estimate,
             "boiler_estimate": timetable.boiler_estimate,
             "warnings": timetable.warnings,
-            "hourly": timetable.timetable
+            "hourly": timetable.timetable,
+            "scheduled_hours": timetable.scheduled_hours or {}
         }
     except Exception as e:
         logger.error(f"Failed to generate timetable: {e}")

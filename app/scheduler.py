@@ -60,6 +60,7 @@ class ScheduleResult:
     boiler_estimate: Dict
     warnings: List[str]
     timetable: List[Dict]  # Simplified timetable for display
+    scheduled_hours: Dict[str, float] = None  # Hours scheduled per device
 
 
 def calculate_ev_charging_needs(
@@ -238,10 +239,12 @@ def generate_schedule(
     # Sort by priority
     devices.sort(key=lambda d: d.priority)
 
+    # Track scheduled hours per device
+    scheduled_hours: Dict[str, float] = {}
+
     # Schedule devices into slots
     for device in devices:
         hours_scheduled = 0
-        slots_needed = int(device.hours_needed * 2)  # 30-min slots
 
         # Find suitable slots
         for slot in slots:
@@ -261,6 +264,9 @@ def generate_schedule(
                 slot.add_device(device.name, device.power)
                 hours_scheduled += 0.5
 
+        # Store scheduled hours
+        scheduled_hours[device.name] = hours_scheduled
+
         # Check if we scheduled enough
         if hours_scheduled < device.hours_needed:
             if device.priority <= 2:  # Critical devices
@@ -277,7 +283,8 @@ def generate_schedule(
         ev_estimate=ev_estimate,
         boiler_estimate=boiler_estimate,
         warnings=warnings,
-        timetable=timetable
+        timetable=timetable,
+        scheduled_hours=scheduled_hours
     )
 
 
