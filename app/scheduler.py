@@ -165,10 +165,15 @@ def generate_schedule(
                 car_capacity = 65  # BMW iX1 eDrive20
 
             if car_battery is not None:
-                # Calculate charging power at max amps
-                charging_power_kw = config.ev.max_amps * config.ev.watts_per_amp / 1000
+                # Calculate realistic charging power based on grid limits
+                # Charger max: 16A × 692W = 11kW, but grid limit is 8kW super-off-peak
+                # Use effective power considering grid limit and base load buffer
+                charger_max_kw = config.ev.max_amps * config.ev.watts_per_amp / 1000
+                grid_limit_kw = config.max_import.super_off_peak / 1000
+                base_load_buffer_kw = 0.5  # 500W for house base load
+                effective_charging_kw = min(charger_max_kw, grid_limit_kw - base_load_buffer_kw)
                 ev_estimate = calculate_ev_charging_needs(
-                    car_battery, 80, car_capacity, charging_power_kw
+                    car_battery, 80, car_capacity, effective_charging_kw
                 )
 
         # Boiler needs
