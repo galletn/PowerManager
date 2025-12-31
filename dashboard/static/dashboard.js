@@ -319,8 +319,18 @@ function updateDashboard(data) {
         gridNode.classList.remove('exporting');
     }
 
-    // Power bar
-    const maxImport = 2500; // Default peak limit
+    // Power bar - use current tariff's limit
+    let maxImport = 2500; // Default peak limit
+    if (data.limits && data.schedule_24h?.summary?.[0]) {
+        const tariffNow = data.schedule_24h.summary[0].toLowerCase();
+        if (tariffNow.includes('super')) {
+            maxImport = data.limits.super_off_peak || 8000;
+        } else if (tariffNow.includes('off-peak') || tariffNow.includes('off peak')) {
+            maxImport = data.limits.off_peak || 5000;
+        } else {
+            maxImport = data.limits.peak || 2500;
+        }
+    }
     const usage = Math.max(0, gridPower);
     const usagePercent = Math.min(100, (usage / maxImport) * 100);
     const powerBarFill = document.getElementById('power-bar-fill');
@@ -334,6 +344,7 @@ function updateDashboard(data) {
         }
     }
     document.getElementById('power-used').textContent = formatWatts(usage);
+    document.getElementById('power-limit').textContent = `/ ${formatWatts(maxImport)} limit`;
 
     // Devices
     if (data.devices) {
