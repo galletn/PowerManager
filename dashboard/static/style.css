@@ -356,9 +356,15 @@ h2 {
     margin-bottom: 16px;
 }
 
-.timeline {
+.timeline-row {
     display: flex;
-    width: 100%;
+    align-items: center;
+    gap: 8px;
+}
+
+.timeline {
+    flex: 1;
+    display: flex;
     height: 32px;
     border-radius: 4px;
     overflow: hidden;
@@ -423,9 +429,9 @@ h2 {
 }
 
 .timeline-labels {
+    flex: 1;
     display: flex;
     justify-content: space-between;
-    margin-top: 4px;
     font-size: 10px;
     color: var(--ha-text-secondary);
 }

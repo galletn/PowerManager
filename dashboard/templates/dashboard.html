@@ -170,13 +170,20 @@
 
                     <!-- Timeline Visual -->
                     <div class="timeline-container">
-                        <div class="timeline" id="tariff-timeline"></div>
-                        <div class="timeline-labels">
-                            <span>Now</span>
-                            <span>+6h</span>
-                            <span>+12h</span>
-                            <span>+18h</span>
-                            <span>+24h</span>
+                        <div class="timeline-row">
+                            <span class="device-label"></span>
+                            <div class="timeline" id="tariff-timeline"></div>
+                            <span class="device-power-label"></span>
+                        </div>
+                        <div class="timeline-row">
+                            <span class="device-label" style="font-size:10px;color:var(--ha-text-secondary)">Now</span>
+                            <div class="timeline-labels">
+                                <span>+6h</span>
+                                <span>+12h</span>
+                                <span>+18h</span>
+                                <span>+24h</span>
+                            </div>
+                            <span class="device-power-label"></span>
                         </div>
                         <!-- Device Activity Rows -->
                         <div class="device-timelines" id="device-timelines">
