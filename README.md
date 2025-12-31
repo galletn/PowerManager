@@ -9,50 +9,91 @@ Automatically controls devices based on:
 - **EV charging** (smart charging based on available power)
 - **Manual overrides** (family members can override any device)
 
+## Features
+
+- Fully testable logic with 90%+ test coverage
+- Deterministic decision engine
+- Mock Home Assistant adapter for local testing
+- Scenario-based regression testing
+- CI/CD with GitHub Actions
+
 ## Repository Structure
 
 ```
-PowerManager/
-├── flows/                          # Node-RED flows
-│   ├── power-manager-v5.json       # Version 5.1 (Dutch)
-│   └── power-manager-v6.json       # Version 6.0 (English, recommended)
+Power Manager/
+├── node-red/
+│   └── flows.json              # Main Node-RED flow
+│
+├── src/
+│   ├── logic/                  # Pure business logic (testable)
+│   │   ├── tariff.js           # Tariff calculation
+│   │   ├── decisions.js        # Device decision engine
+│   │   ├── timing.js           # Timing/hysteresis
+│   │   ├── validation.js       # Input sanitization
+│   │   └── formatting.js       # Output formatting
+│   │
+│   ├── adapters/
+│   │   └── mock-adapter.js     # HA mock for testing
+│   │
+│   └── config/
+│       └── default-config.js   # Default configuration
+│
+├── test/
+│   ├── unit/                   # Unit tests
+│   ├── flow/                   # Flow integration tests
+│   └── fixtures/               # Test scenarios (JSON)
+│
 ├── homeassistant/
-│   ├── helpers/                    # HA input helpers
-│   │   ├── helpers-en.yaml         # English version
-│   │   └── helpers-nl.yaml         # Dutch version
-│   └── dashboard/                  # Lovelace dashboard cards
-│       ├── dashboard-en.yaml       # English version
-│       └── dashboard-nl.yaml       # Dutch version
-├── docs/                           # Documentation
-│   ├── README-en.md                # Full English documentation
-│   └── README-nl.md                # Full Dutch documentation
-└── README.md                       # This file
+│   ├── helpers/                # HA input helpers
+│   └── dashboard/              # Lovelace cards
+│
+├── docs/
+│   ├── README.md               # Full documentation
+│   └── TESTING.md              # Testing guide
+│
+├── archive/
+│   └── v5/                     # Archived Dutch version
+│
+├── package.json
+├── jest.config.js
+└── .github/workflows/test.yml  # CI pipeline
 ```
 
 ## Quick Start
 
-### 1. Install HA Helpers
+### Development Setup
 
-Add contents of `homeassistant/helpers/helpers-en.yaml` to your `configuration.yaml`:
+```bash
+# Install dependencies
+npm install
 
-```yaml
-# Include in configuration.yaml
-input_text: !include_dir_merge_named homeassistant/helpers/
-input_select: !include_dir_merge_named homeassistant/helpers/
+# Run tests
+npm test
+
+# Run tests in watch mode
+npm run test:watch
 ```
 
-Or copy the contents directly. Restart Home Assistant.
+### Home Assistant Setup
 
-### 2. Import Node-RED Flow
+1. **Add Helpers**: Copy `homeassistant/helpers/helpers.yaml` to your HA config
+2. **Import Flow**: Import `node-red/flows.json` into Node-RED
+3. **Add Dashboard**: Copy cards from `homeassistant/dashboard/dashboard.yaml`
 
-1. Open Node-RED
-2. Menu → Import (Ctrl+I)
-3. Select `flows/power-manager-v6.json`
-4. Click Import → Deploy
+## Testing
 
-### 3. Add Dashboard Cards (Optional)
+```bash
+# Run all tests with coverage
+npm test
 
-Copy cards from `homeassistant/dashboard/dashboard-en.yaml` to your Lovelace dashboard.
+# Run unit tests only
+npm run test:unit
+
+# Run specific test file
+npx jest test/unit/tariff.test.js
+```
+
+See [docs/TESTING.md](docs/TESTING.md) for detailed testing documentation.
 
 ## Controlled Devices
 
@@ -68,23 +109,31 @@ Copy cards from `homeassistant/dashboard/dashboard-en.yaml` to your Lovelace das
 | Electric Heater (Table) | 4.1 kW | Winter |
 | Electric Heater (Right) | 2.5 kW | Winter |
 
+## Architecture
+
+The system uses a clean separation between:
+
+1. **Pure Logic** (`src/logic/`) - Testable functions with no I/O
+2. **Adapters** (`src/adapters/`) - Interface to Home Assistant
+3. **Flow** (`node-red/flows.json`) - Orchestration and wiring
+
+This allows testing the decision engine without Node-RED or Home Assistant.
+
 ## Version History
 
 | Version | Changes |
 |---------|---------|
+| v6.1 | Testable architecture, extracted logic modules, CI/CD |
 | v6.0 | English translation, input validation, mutex, EV amp threshold |
 | v5.1 | Forward-looking plan display, heater timing info |
 | v5.0 | Manual overrides, seasonal logic, 4 AC units |
 
 ## Documentation
 
-- **English**: [docs/README-en.md](docs/README-en.md)
-- **Dutch**: [docs/README-nl.md](docs/README-nl.md)
+- **Full Guide**: [docs/README.md](docs/README.md)
+- **Testing**: [docs/TESTING.md](docs/TESTING.md)
+- **Analysis**: [ANALYSIS.md](ANALYSIS.md)
 
 ## License
 
 MIT License - Feel free to use and modify.
-
-## Author
-
-Created for personal home automation use.

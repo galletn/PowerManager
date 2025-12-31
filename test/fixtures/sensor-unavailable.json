@@ -1,0 +1,44 @@
+{
+  "name": "sensor_unavailable",
+  "description": "System should handle unavailable sensors gracefully with safe defaults",
+  "timestamp": "2024-01-15T12:00:00Z",
+  "inputs": {
+    "p1_power": "unavailable",
+    "pv_power": "unavailable",
+    "boiler_switch": "on",
+    "boiler_power": 2400,
+    "boiler_force": "off",
+    "pool_season": "off",
+    "pool_power": 0,
+    "pool_climate": "off",
+    "ev_state": 129,
+    "ev_switch": "off",
+    "ev_power": 0,
+    "ev_limit": 6,
+    "heater_right_switch": "off",
+    "heater_table_switch": "off",
+    "ac_living_state": "off",
+    "ac_mancave_state": "off",
+    "ac_office_state": "off",
+    "ac_bedroom_state": "off",
+    "ac_living_power": 0,
+    "ac_office_power": 0,
+    "temp_living": 20,
+    "temp_bedroom": 20,
+    "temp_mancave": 18,
+    "ovr_ac_living": "Auto",
+    "ovr_ac_bedroom": "Auto",
+    "ovr_ac_office": "Auto",
+    "ovr_ac_mancave": "Auto",
+    "ovr_pool": "Auto",
+    "ovr_boiler": "Auto",
+    "ovr_ev": "Auto"
+  },
+  "expectedDecisions": {
+    "ev": { "action": "none" }
+  },
+  "expectedPlanContains": [
+    "Avail: 5kW"
+  ],
+  "notes": "With p1=unavailable (defaults to 0), and off-peak limit 5kW, avail should be 5kW"
+}

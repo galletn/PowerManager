@@ -1,0 +1,1934 @@
+[
+    {
+        "id": "power_manager_tab",
+        "type": "tab",
+        "label": "Power Manager",
+        "disabled": false,
+        "info": "Power Manager v6.0 - English, improved error handling"
+    },
+    {
+        "id": "config_node",
+        "type": "function",
+        "z": "power_manager_tab",
+        "name": "CONFIG",
+        "func": "// Power Manager v6.0 Configuration\n// All settings centralized here\n\nconst config = {\n    // === UNIT CONVERSIONS ===\n    // Multiply raw sensor values by these factors\n    units: {\n        p1: 1000,      // P1 meter: kW → W\n        pv: 1,         // SolarEdge: already in W\n        boiler: 1,\n        poolHeat: 1,\n        ev: 1,\n        acLiving: 1,\n        acBureau: 1\n    },\n\n    // === GRID LIMITS ===\n    maxImport: {\n        peak: 2500,\n        offPeak: 5000,\n        superOffPeak: 8000\n    },\n\n    // === TIMING (seconds) ===\n    hysteresis: 300,        // Power buffer before switching\n    minOnTime: 300,         // Minimum on-time before allowing off\n    minOffTime: 180,        // Minimum off-time before allowing on\n    evAmpChangeThreshold: 2, // Min amp change to avoid flapping\n\n    // === EV CHARGER ===\n    ev: {\n        minAmps: 6,\n        maxAmps: 16,\n        wattsPerAmp: 692,\n        // State codes from ABB Terra AC\n        states: {\n            NO_CAR: 128,\n            READY: 129,\n            FULL: 130,\n            CHARGING: 132\n        }\n    },\n\n    // === BOILER ===\n    boiler: {\n        power: 2500,\n        idleThreshold: 50,      // Below this = fully heated\n        deadlineWinter: 6.5,    // 06:30 - must be hot by this time\n        deadlineSummer: 8.0     // 08:00\n    },\n\n    // === POOL HEAT PUMP ===\n    pool: {\n        idlePower: 100,\n        activePower: 2000\n    },\n\n    // === FROST PROTECTION ===\n    frostProtection: {\n        enabled: true,\n        tempThreshold: 5,           // Start protection below this temp (°C)\n        criticalThreshold: 2,       // Critical alert threshold (°C)\n        pumpMinPower: 100,          // Min power (W) to consider pump actually running\n        pumpOffAlertDelay: 300,     // Alert if pump off for this long (seconds)\n        notifyEntity: 'mobile_app_iphone_van_nicolas_2'\n    },\n\n    // === BMW CARS LOW BATTERY WARNING ===\n    bmwLowBattery: {\n        enabled: true,\n        batteryThreshold: 50,       // Warn if below this % at check time\n        checkHours: [20, 21, 22],   // Hours to check (20:00, 21:00, 22:00)\n        notifyEntity: 'mobile_app_iphone_van_nicolas_2'\n    },\n\n    // === HEATERS ===\n    heaters: {\n        right: { power: 2500 },\n        table: { power: 4100 }\n    },\n\n    // === AC UNITS ===\n    ac: {\n        living:   { power: 1500, winterSetpoint: 21 },\n        mancave:  { power: 1000, winterSetpoint: 17 },\n        office:   { power: 1000, winterSetpoint: 22 },\n        bedroom:  { power: 1000, winterSetpoint: 22 }\n    },\n\n    // === TEMPERATURE ===\n    summerCoolThreshold: 25,\n    summerTargetTemp: 22,\n\n    // === ENTITIES ===\n    // Centralized entity registry - change here, not in handlers\n    entities: {\n        p1: 'sensor.electricity_currently_delivered',
+        pv: 'sensor.solaredge_i1_ac_power',\n        ev: {\n            switch: 'switch.abb_terra_ac_charging',\n            power: 'sensor.abb_terra_ac_active_power',\n            limit: 'number.abb_terra_ac_current_limit',\n            state: 'sensor.abb_terra_ac_charging_state'\n        },\n        boiler: {\n            switch: 'switch.storage_boiler',\n            power: 'sensor.storage_boiler_power',\n            force: 'input_boolean.force_heat_boiler'\n        },\n        pool: {\n            climate: 'climate.98d8639f920c',\n            power: 'sensor.pool_heating_current_consumption',\n            season: 'input_boolean.pool_season',\n            pump: 'switch.poolhouse_pool_pump',\n            pumpPower: 'sensor.poolhouse_pool_pump_power',\n            ambientTemp: 'sensor.98d8639f920c_ambient_temp_t05'\n        },\n        heaters: {\n            right: 'switch.livingroom_right_heater',\n            table: 'switch.livingroom_table_heater_state'\n        },\n        ac: {\n            living: 'climate.living',\n            mancave: 'climate.mancave',\n            office: 'climate.bureau',\n            bedroom: 'climate.slaapkamer'\n        },\n        acPower: {\n            living: 'sensor.living_current_power',\n            office: 'sensor.bureau_current_power'\n        },\n        temp: {\n            living: 'sensor.livingroom_temperature_temperature',\n            bedroom: 'sensor.bedroom_temperature_temperature',\n            mancave: 'sensor.mancave_inside_temperature'\n        },\n        overrides: {\n            acLiving: 'input_select.pm_override_ac_living',\n            acBedroom: 'input_select.pm_override_ac_slaapkamer',\n            acOffice: 'input_select.pm_override_ac_bureau',\n            acMancave: 'input_select.pm_override_ac_mancave',\n            pool: 'input_select.pm_override_pool',\n            boiler: 'input_select.pm_override_boiler',\n            ev: 'input_select.pm_override_ev'\n        },\n        status: {\n            status: 'input_text.power_manager_status',\n            plan: 'input_text.power_manager_plan',\n            actions: 'input_text.power_manager_actions'\n        },\n        bmw: {\n            i5: {\n                battery: 'sensor.i5_edrive40_battery_hv_state_of_charge',\n                range: 'sensor.i5_edrive40_range_ev_remaining_range',\n                location: 'device_tracker.i5_edrive40_location'\n            },\n            ix1: {\n                battery: 'sensor.ix1_edrive20_battery_hv_state_of_charge',\n                range: 'sensor.ix1_edrive20_range_ev_remaining_range',\n                location: 'device_tracker.ix1_edrive20_location'\n            }\n        }\n    },\n\n    // === OPTIONS ===\n    enableNotifications: true,\n    locale: 'en-GB',\n    debug: false\n};\n\n// Store in flow context\nflow.set('config', config);\n\n// Initialize action log if not exists\nif (!flow.get('actionLog')) {\n    flow.set('actionLog', []);\n}\n\n// Initialize last run timestamp for throttling\nif (!flow.get('lastRun')) {\n    flow.set('lastRun', 0);\n}\n\nnode.status({ fill: 'green', shape: 'dot', text: 'Config v6.2 (BMW)' });\nreturn null;",
+        "outputs": 0,
+        "noerr": 0,
+        "initialize": "node.send({});",
+        "finalize": "",
+        "libs": [],
+        "x": 100,
+        "y": 60,
+        "wires": []
+    },
+    {
+        "id": "inject_startup",
+        "type": "inject",
+        "z": "power_manager_tab",
+        "name": "Startup",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "2",
+        "topic": "",
+        "payload": "startup",
+        "payloadType": "str",
+        "x": 100,
+        "y": 120,
+        "wires": [
+            [
+                "config_node",
+                "init_state"
+            ]
+        ]
+    },
+    {
+        "id": "init_state",
+        "type": "function",
+        "z": "power_manager_tab",
+        "name": "Init State",
+        "func": "// Initialize device state tracking\nflow.set('deviceState', {\n    ev: { on: false, lastChange: 0, amps: 0 },\n    boiler: { on: false, lastChange: 0 },\n    pool: { on: false, lastChange: 0 },\n    poolPump: { on: false, lastChange: 0 },\n    heaterRight: { on: false, lastChange: 0 },\n    heaterTable: { on: false, lastChange: 0 },\n    acLiving: { on: false, lastChange: 0 },\n    acMancave: { on: false, lastChange: 0 },\n    acOffice: { on: false, lastChange: 0 },\n    acBedroom: { on: false, lastChange: 0 }\n});\n\n// Clear action log\nflow.set('actionLog', []);\n\n// Initialize mutex for trigger gating\nflow.set('isProcessing', false);\n\nnode.status({ fill: 'green', shape: 'dot', text: 'Initialized' });\nreturn null;",
+        "outputs": 0,
+        "x": 250,
+        "y": 120,
+        "wires": []
+    },
+    {
+        "id": "trigger_interval",
+        "type": "inject",
+        "z": "power_manager_tab",
+        "name": "30s interval",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "30",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "5",
+        "topic": "interval",
+        "payload": "",
+        "payloadType": "date",
+        "x": 120,
+        "y": 200,
+        "wires": [
+            [
+                "trigger_gate"
+            ]
+        ]
+    },
+    {
+        "id": "trigger_p1",
+        "type": "server-state-changed",
+        "z": "power_manager_tab",
+        "name": "P1 Changed",
+        "server": "7a1ecefa.85d54",
+        "version": 6,
+        "outputs": 1,
+        "exposeAsEntityConfig": "",
+        "entities": {
+            "entity": [
+                "sensor.electricity_currently_delivered"
+            ],
+            "substring": [],
+            "regex": []
+        },
+        "outputInitially": false,
+        "stateType": "str",
+        "ifState": "",
+        "ifStateType": "str",
+        "outputOnlyOnStateChange": false,
+        "for": "",
+        "forType": "num",
+        "ignorePrevStateNull": false,
+        "ignorePrevStateUnknown": true,
+        "ignorePrevStateUnavailable": true,
+        "ignoreCurrentStateUnknown": true,
+        "ignoreCurrentStateUnavailable": true,
+        "outputProperties": [
+            {
+                "property": "payload",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "x": 120,
+        "y": 260,
+        "wires": [
+            [
+                "debounce_p1"
+            ]
+        ]
+    },
+    {
+        "id": "debounce_p1",
+        "type": "delay",
+        "z": "power_manager_tab",
+        "name": "5s debounce",
+        "pauseType": "rate",
+        "timeout": "5",
+        "timeoutUnits": "seconds",
+        "rate": "1",
+        "nbRateUnits": "5",
+        "rateUnits": "second",
+        "randomFirst": 1,
+        "randomLast": 5,
+        "randomUnits": "seconds",
+        "drop": true,
+        "allowrate": false,
+        "outputs": 1,
+        "x": 290,
+        "y": 260,
+        "wires": [
+            [
+                "trigger_gate"
+            ]
+        ]
+    },
+    {
+        "id": "trigger_gate",
+        "type": "function",
+        "z": "power_manager_tab",
+        "name": "Gate (mutex)",
+        "func": "// Prevent concurrent executions\nconst isProcessing = flow.get('isProcessing') || false;\nconst lastRun = flow.get('lastRun') || 0;\nconst now = Date.now();\nconst minInterval = 3000; // 3 seconds minimum between runs\n\nif (isProcessing) {\n    node.status({ fill: 'yellow', shape: 'ring', text: 'Skipped (processing)' });\n    return null;\n}\n\nif (now - lastRun < minInterval) {\n    node.status({ fill: 'yellow', shape: 'ring', text: 'Skipped (throttle)' });\n    return null;\n}\n\nflow.set('isProcessing', true);\nflow.set('lastRun', now);\n\nnode.status({ fill: 'green', shape: 'dot', text: 'Running' });\nreturn msg;",
+        "outputs": 1,
+        "x": 460,
+        "y": 230,
+        "wires": [
+            [
+                "gather_states"
+            ]
+        ]
+    },
+    {
+        "id": "gather_states",
+        "type": "api-current-state",
+        "z": "power_manager_tab",
+        "name": "P1",
+        "server": "7a1ecefa.85d54",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "entity_id": "sensor.electricity_currently_delivered",
+        "state_type": "num",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "p1_power",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "for": "",
+        "forType": "num",
+        "x": 90,
+        "y": 340,
+        "wires": [
+            [
+                "get_pv"
+            ]
+        ]
+    },
+    {
+        "id": "get_pv",
+        "type": "api-current-state",
+        "z": "power_manager_tab",
+        "name": "PV",
+        "server": "7a1ecefa.85d54",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "entity_id": "sensor.solaredge_i1_ac_power",
+        "state_type": "num",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "pv_power",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "for": "",
+        "forType": "num",
+        "x": 170,
+        "y": 340,
+        "wires": [
+            [
+                "get_boiler_switch"
+            ]
+        ]
+    },
+    {
+        "id": "get_boiler_switch",
+        "type": "api-current-state",
+        "z": "power_manager_tab",
+        "name": "Boiler SW",
+        "server": "7a1ecefa.85d54",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "entity_id": "switch.storage_boiler",
+        "state_type": "str",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "boiler_switch",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "for": "",
+        "forType": "num",
+        "x": 270,
+        "y": 340,
+        "wires": [
+            [
+                "get_boiler_power"
+            ]
+        ]
+    },
+    {
+        "id": "get_boiler_power",
+        "type": "api-current-state",
+        "z": "power_manager_tab",
+        "name": "Boiler W",
+        "server": "7a1ecefa.85d54",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "entity_id": "sensor.storage_boiler_power",
+        "state_type": "num",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "boiler_power",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "for": "",
+        "forType": "num",
+        "x": 370,
+        "y": 340,
+        "wires": [
+            [
+                "get_boiler_force"
+            ]
+        ]
+    },
+    {
+        "id": "get_boiler_force",
+        "type": "api-current-state",
+        "z": "power_manager_tab",
+        "name": "Force",
+        "server": "7a1ecefa.85d54",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "entity_id": "input_boolean.force_heat_boiler",
+        "state_type": "str",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "boiler_force",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "for": "",
+        "forType": "num",
+        "x": 470,
+        "y": 340,
+        "wires": [
+            [
+                "get_pool_season"
+            ]
+        ]
+    },
+    {
+        "id": "get_pool_season",
+        "type": "api-current-state",
+        "z": "power_manager_tab",
+        "name": "Season",
+        "server": "7a1ecefa.85d54",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "entity_id": "input_boolean.pool_season",
+        "state_type": "str",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "pool_season",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "for": "",
+        "forType": "num",
+        "x": 570,
+        "y": 340,
+        "wires": [
+            [
+                "get_pool_power"
+            ]
+        ]
+    },
+    {
+        "id": "get_pool_power",
+        "type": "api-current-state",
+        "z": "power_manager_tab",
+        "name": "Pool W",
+        "server": "7a1ecefa.85d54",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "entity_id": "sensor.pool_heating_current_consumption",
+        "state_type": "num",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "pool_power",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "for": "",
+        "forType": "num",
+        "x": 670,
+        "y": 340,
+        "wires": [
+            [
+                "get_pool_climate"
+            ]
+        ]
+    },
+    {
+        "id": "get_pool_climate",
+        "type": "api-current-state",
+        "z": "power_manager_tab",
+        "name": "Pool",
+        "server": "7a1ecefa.85d54",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "entity_id": "climate.98d8639f920c",
+        "state_type": "str",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "pool_climate",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "for": "",
+        "forType": "num",
+        "x": 770,
+        "y": 340,
+        "wires": [
+            [
+                "get_pool_pump_switch"
+            ]
+        ]
+    },
+    {
+        "id": "get_pool_pump_switch",
+        "type": "api-current-state",
+        "z": "power_manager_tab",
+        "name": "Pump SW",
+        "server": "7a1ecefa.85d54",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "entity_id": "switch.poolhouse_pool_pump",
+        "state_type": "str",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "pool_pump_switch",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "for": "",
+        "forType": "num",
+        "x": 870,
+        "y": 340,
+        "wires": [
+            [
+                "get_pool_pump_power"
+            ]
+        ]
+    },
+    {
+        "id": "get_pool_pump_power",
+        "type": "api-current-state",
+        "z": "power_manager_tab",
+        "name": "Pump W",
+        "server": "7a1ecefa.85d54",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "entity_id": "sensor.poolhouse_pool_pump_power",
+        "state_type": "num",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "pool_pump_power",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "for": "",
+        "forType": "num",
+        "x": 970,
+        "y": 340,
+        "wires": [
+            [
+                "get_pool_ambient_temp"
+            ]
+        ]
+    },
+    {
+        "id": "get_pool_ambient_temp",
+        "type": "api-current-state",
+        "z": "power_manager_tab",
+        "name": "Ambient",
+        "server": "7a1ecefa.85d54",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "entity_id": "sensor.98d8639f920c_ambient_temp_t05",
+        "state_type": "num",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "pool_ambient_temp",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "for": "",
+        "forType": "num",
+        "x": 1070,
+        "y": 340,
+        "wires": [
+            [
+                "get_ev_state"
+            ]
+        ]
+    },
+    {
+        "id": "get_ev_state",
+        "type": "api-current-state",
+        "z": "power_manager_tab",
+        "name": "EV State",
+        "server": "7a1ecefa.85d54",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "entity_id": "sensor.abb_terra_ac_charging_state",
+        "state_type": "num",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "ev_state",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "for": "",
+        "forType": "num",
+        "x": 870,
+        "y": 340,
+        "wires": [
+            [
+                "get_ev_switch"
+            ]
+        ]
+    },
+    {
+        "id": "get_ev_switch",
+        "type": "api-current-state",
+        "z": "power_manager_tab",
+        "name": "EV SW",
+        "server": "7a1ecefa.85d54",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "entity_id": "switch.abb_terra_ac_charging",
+        "state_type": "str",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "ev_switch",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "for": "",
+        "forType": "num",
+        "x": 970,
+        "y": 340,
+        "wires": [
+            [
+                "get_ev_power"
+            ]
+        ]
+    },
+    {
+        "id": "get_ev_power",
+        "type": "api-current-state",
+        "z": "power_manager_tab",
+        "name": "EV W",
+        "server": "7a1ecefa.85d54",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "entity_id": "sensor.abb_terra_ac_active_power",
+        "state_type": "num",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "ev_power",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "for": "",
+        "forType": "num",
+        "x": 1070,
+        "y": 340,
+        "wires": [
+            [
+                "get_ev_limit"
+            ]
+        ]
+    },
+    {
+        "id": "get_ev_limit",
+        "type": "api-current-state",
+        "z": "power_manager_tab",
+        "name": "EV Limit",
+        "server": "7a1ecefa.85d54",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "entity_id": "number.abb_terra_ac_current_limit",
+        "state_type": "num",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "ev_limit",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "for": "",
+        "forType": "num",
+        "x": 90,
+        "y": 400,
+        "wires": [
+            [
+                "get_bmw_i5_battery"
+            ]
+        ]
+    },
+    {
+        "id": "get_bmw_i5_battery",
+        "type": "api-current-state",
+        "z": "power_manager_tab",
+        "name": "i5 Bat",
+        "server": "7a1ecefa.85d54",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "entity_id": "sensor.i5_edrive40_battery_hv_state_of_charge",
+        "state_type": "num",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "bmw_i5_battery",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "for": "",
+        "forType": "num",
+        "x": 90,
+        "y": 460,
+        "wires": [
+            [
+                "get_bmw_i5_range"
+            ]
+        ]
+    },
+    {
+        "id": "get_bmw_i5_range",
+        "type": "api-current-state",
+        "z": "power_manager_tab",
+        "name": "i5 Range",
+        "server": "7a1ecefa.85d54",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "entity_id": "sensor.i5_edrive40_range_ev_remaining_range",
+        "state_type": "num",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "bmw_i5_range",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "for": "",
+        "forType": "num",
+        "x": 190,
+        "y": 460,
+        "wires": [
+            [
+                "get_bmw_i5_location"
+            ]
+        ]
+    },
+    {
+        "id": "get_bmw_i5_location",
+        "type": "api-current-state",
+        "z": "power_manager_tab",
+        "name": "i5 Loc",
+        "server": "7a1ecefa.85d54",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "entity_id": "device_tracker.i5_edrive40_location",
+        "state_type": "str",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "bmw_i5_location",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "for": "",
+        "forType": "num",
+        "x": 290,
+        "y": 460,
+        "wires": [
+            [
+                "get_bmw_ix1_battery"
+            ]
+        ]
+    },
+    {
+        "id": "get_bmw_ix1_battery",
+        "type": "api-current-state",
+        "z": "power_manager_tab",
+        "name": "iX1 Bat",
+        "server": "7a1ecefa.85d54",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "entity_id": "sensor.ix1_edrive20_battery_hv_state_of_charge",
+        "state_type": "num",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "bmw_ix1_battery",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "for": "",
+        "forType": "num",
+        "x": 390,
+        "y": 460,
+        "wires": [
+            [
+                "get_bmw_ix1_range"
+            ]
+        ]
+    },
+    {
+        "id": "get_bmw_ix1_range",
+        "type": "api-current-state",
+        "z": "power_manager_tab",
+        "name": "iX1 Range",
+        "server": "7a1ecefa.85d54",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "entity_id": "sensor.ix1_edrive20_range_ev_remaining_range",
+        "state_type": "num",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "bmw_ix1_range",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "for": "",
+        "forType": "num",
+        "x": 490,
+        "y": 460,
+        "wires": [
+            [
+                "get_bmw_ix1_location"
+            ]
+        ]
+    },
+    {
+        "id": "get_bmw_ix1_location",
+        "type": "api-current-state",
+        "z": "power_manager_tab",
+        "name": "iX1 Loc",
+        "server": "7a1ecefa.85d54",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "entity_id": "device_tracker.ix1_edrive20_location",
+        "state_type": "str",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "bmw_ix1_location",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "for": "",
+        "forType": "num",
+        "x": 590,
+        "y": 460,
+        "wires": [
+            [
+                "get_heater_right"
+            ]
+        ]
+    },
+    {
+        "id": "get_heater_right",
+        "type": "api-current-state",
+        "z": "power_manager_tab",
+        "name": "Heater R",
+        "server": "7a1ecefa.85d54",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "entity_id": "switch.livingroom_right_heater",
+        "state_type": "str",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "heater_right_switch",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "for": "",
+        "forType": "num",
+        "x": 190,
+        "y": 400,
+        "wires": [
+            [
+                "get_heater_table"
+            ]
+        ]
+    },
+    {
+        "id": "get_heater_table",
+        "type": "api-current-state",
+        "z": "power_manager_tab",
+        "name": "Heater T",
+        "server": "7a1ecefa.85d54",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "entity_id": "switch.livingroom_table_heater_state",
+        "state_type": "str",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "heater_table_switch",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "for": "",
+        "forType": "num",
+        "x": 290,
+        "y": 400,
+        "wires": [
+            [
+                "get_ac_living"
+            ]
+        ]
+    },
+    {
+        "id": "get_ac_living",
+        "type": "api-current-state",
+        "z": "power_manager_tab",
+        "name": "AC Living",
+        "server": "7a1ecefa.85d54",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "entity_id": "climate.living",
+        "state_type": "str",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "ac_living_state",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "for": "",
+        "forType": "num",
+        "x": 390,
+        "y": 400,
+        "wires": [
+            [
+                "get_ac_mancave"
+            ]
+        ]
+    },
+    {
+        "id": "get_ac_mancave",
+        "type": "api-current-state",
+        "z": "power_manager_tab",
+        "name": "AC Mancave",
+        "server": "7a1ecefa.85d54",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "entity_id": "climate.mancave",
+        "state_type": "str",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "ac_mancave_state",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "for": "",
+        "forType": "num",
+        "x": 490,
+        "y": 400,
+        "wires": [
+            [
+                "get_ac_office"
+            ]
+        ]
+    },
+    {
+        "id": "get_ac_office",
+        "type": "api-current-state",
+        "z": "power_manager_tab",
+        "name": "AC Office",
+        "server": "7a1ecefa.85d54",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "entity_id": "climate.bureau",
+        "state_type": "str",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "ac_office_state",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "for": "",
+        "forType": "num",
+        "x": 590,
+        "y": 400,
+        "wires": [
+            [
+                "get_ac_bedroom"
+            ]
+        ]
+    },
+    {
+        "id": "get_ac_bedroom",
+        "type": "api-current-state",
+        "z": "power_manager_tab",
+        "name": "AC Bedroom",
+        "server": "7a1ecefa.85d54",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "entity_id": "climate.slaapkamer",
+        "state_type": "str",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "ac_bedroom_state",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "for": "",
+        "forType": "num",
+        "x": 690,
+        "y": 400,
+        "wires": [
+            [
+                "get_ac_living_power"
+            ]
+        ]
+    },
+    {
+        "id": "get_ac_living_power",
+        "type": "api-current-state",
+        "z": "power_manager_tab",
+        "name": "AC Liv W",
+        "server": "7a1ecefa.85d54",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "entity_id": "sensor.living_current_power",
+        "state_type": "num",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "ac_living_power",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "for": "",
+        "forType": "num",
+        "x": 790,
+        "y": 400,
+        "wires": [
+            [
+                "get_ac_office_power"
+            ]
+        ]
+    },
+    {
+        "id": "get_ac_office_power",
+        "type": "api-current-state",
+        "z": "power_manager_tab",
+        "name": "AC Off W",
+        "server": "7a1ecefa.85d54",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "entity_id": "sensor.bureau_current_power",
+        "state_type": "num",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "ac_office_power",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "for": "",
+        "forType": "num",
+        "x": 890,
+        "y": 400,
+        "wires": [
+            [
+                "get_temp_living"
+            ]
+        ]
+    },
+    {
+        "id": "get_temp_living",
+        "type": "api-current-state",
+        "z": "power_manager_tab",
+        "name": "Temp Living",
+        "server": "7a1ecefa.85d54",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "entity_id": "sensor.livingroom_temperature_temperature",
+        "state_type": "num",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "temp_living",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "for": "",
+        "forType": "num",
+        "x": 990,
+        "y": 400,
+        "wires": [
+            [
+                "get_temp_bedroom"
+            ]
+        ]
+    },
+    {
+        "id": "get_temp_bedroom",
+        "type": "api-current-state",
+        "z": "power_manager_tab",
+        "name": "Temp Bed",
+        "server": "7a1ecefa.85d54",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "entity_id": "sensor.bedroom_temperature_temperature",
+        "state_type": "num",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "temp_bedroom",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "for": "",
+        "forType": "num",
+        "x": 1090,
+        "y": 400,
+        "wires": [
+            [
+                "get_temp_mancave"
+            ]
+        ]
+    },
+    {
+        "id": "get_temp_mancave",
+        "type": "api-current-state",
+        "z": "power_manager_tab",
+        "name": "Temp Man",
+        "server": "7a1ecefa.85d54",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "entity_id": "sensor.mancave_inside_temperature",
+        "state_type": "num",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "temp_mancave",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "for": "",
+        "forType": "num",
+        "x": 90,
+        "y": 460,
+        "wires": [
+            [
+                "get_ovr_ac_living"
+            ]
+        ]
+    },
+    {
+        "id": "get_ovr_ac_living",
+        "type": "api-current-state",
+        "z": "power_manager_tab",
+        "name": "Ovr Living",
+        "server": "7a1ecefa.85d54",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "entity_id": "input_select.pm_override_ac_living",
+        "state_type": "str",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "ovr_ac_living",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "for": "",
+        "forType": "num",
+        "x": 210,
+        "y": 460,
+        "wires": [
+            [
+                "get_ovr_ac_bedroom"
+            ]
+        ]
+    },
+    {
+        "id": "get_ovr_ac_bedroom",
+        "type": "api-current-state",
+        "z": "power_manager_tab",
+        "name": "Ovr Bedroom",
+        "server": "7a1ecefa.85d54",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "entity_id": "input_select.pm_override_ac_slaapkamer",
+        "state_type": "str",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "ovr_ac_bedroom",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "for": "",
+        "forType": "num",
+        "x": 350,
+        "y": 460,
+        "wires": [
+            [
+                "get_ovr_ac_office"
+            ]
+        ]
+    },
+    {
+        "id": "get_ovr_ac_office",
+        "type": "api-current-state",
+        "z": "power_manager_tab",
+        "name": "Ovr Office",
+        "server": "7a1ecefa.85d54",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "entity_id": "input_select.pm_override_ac_bureau",
+        "state_type": "str",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "ovr_ac_office",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "for": "",
+        "forType": "num",
+        "x": 490,
+        "y": 460,
+        "wires": [
+            [
+                "get_ovr_ac_mancave"
+            ]
+        ]
+    },
+    {
+        "id": "get_ovr_ac_mancave",
+        "type": "api-current-state",
+        "z": "power_manager_tab",
+        "name": "Ovr Mancave",
+        "server": "7a1ecefa.85d54",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "entity_id": "input_select.pm_override_ac_mancave",
+        "state_type": "str",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "ovr_ac_mancave",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "for": "",
+        "forType": "num",
+        "x": 630,
+        "y": 460,
+        "wires": [
+            [
+                "get_ovr_pool"
+            ]
+        ]
+    },
+    {
+        "id": "get_ovr_pool",
+        "type": "api-current-state",
+        "z": "power_manager_tab",
+        "name": "Ovr Pool",
+        "server": "7a1ecefa.85d54",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "entity_id": "input_select.pm_override_pool",
+        "state_type": "str",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "ovr_pool",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "for": "",
+        "forType": "num",
+        "x": 770,
+        "y": 460,
+        "wires": [
+            [
+                "get_ovr_boiler"
+            ]
+        ]
+    },
+    {
+        "id": "get_ovr_boiler",
+        "type": "api-current-state",
+        "z": "power_manager_tab",
+        "name": "Ovr Boiler",
+        "server": "7a1ecefa.85d54",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "entity_id": "input_select.pm_override_boiler",
+        "state_type": "str",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "ovr_boiler",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "for": "",
+        "forType": "num",
+        "x": 890,
+        "y": 460,
+        "wires": [
+            [
+                "get_ovr_ev"
+            ]
+        ]
+    },
+    {
+        "id": "get_ovr_ev",
+        "type": "api-current-state",
+        "z": "power_manager_tab",
+        "name": "Ovr EV",
+        "server": "7a1ecefa.85d54",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "entity_id": "input_select.pm_override_ev",
+        "state_type": "str",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "ovr_ev",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "for": "",
+        "forType": "num",
+        "x": 1010,
+        "y": 460,
+        "wires": [
+            [
+                "validate_inputs"
+            ]
+        ]
+    },
+    {
+        "id": "validate_inputs",
+        "type": "function",
+        "z": "power_manager_tab",
+        "name": "Validate Inputs",
+        "func": "// Validate and sanitize all inputs before processing\nconst config = flow.get('config') || {};\n\n// Helper to safely parse numeric values\nfunction safeNum(val, fallback = 0) {\n    if (val === null || val === undefined) return fallback;\n    if (val === 'unavailable' || val === 'unknown') return fallback;\n    const num = parseFloat(val);\n    return isNaN(num) ? fallback : num;\n}\n\n// Helper to safely parse string values\nfunction safeStr(val, fallback = '') {\n    if (val === null || val === undefined) return fallback;\n    if (val === 'unavailable' || val === 'unknown') return fallback;\n    return String(val);\n}\n\n// Validate and normalize all values\nmsg.validated = {\n    // Power readings\n    p1Power: safeNum(msg.p1_power, 0),\n    pvPower: safeNum(msg.pv_power, 0),\n    \n    // Device states (switches)\n    boilerSwitch: safeStr(msg.boiler_switch, 'unknown'),\n    boilerPower: safeNum(msg.boiler_power, 0),\n    boilerForce: safeStr(msg.boiler_force, 'off'),\n    \n    poolSeason: safeStr(msg.pool_season, 'off'),\n    poolPower: safeNum(msg.pool_power, 0),\n    poolClimate: safeStr(msg.pool_climate, 'off'),\n    \n    evState: safeNum(msg.ev_state, 128),  // 128 = no car\n    evSwitch: safeStr(msg.ev_switch, 'off'),\n    evPower: safeNum(msg.ev_power, 0),\n    evLimit: safeNum(msg.ev_limit, 6),\n    \n    heaterRightSwitch: safeStr(msg.heater_right_switch, 'off'),\n    heaterTableSwitch: safeStr(msg.heater_table_switch, 'off'),\n    \n    // AC states\n    acLivingState: safeStr(msg.ac_living_state, 'off'),\n    acMancaveState: safeStr(msg.ac_mancave_state, 'off'),\n    acOfficeState: safeStr(msg.ac_office_state, 'off'),\n    acBedroomState: safeStr(msg.ac_bedroom_state, 'off'),\n    \n    // Power readings\n    acLivingPower: safeNum(msg.ac_living_power, 0),\n    acOfficePower: safeNum(msg.ac_office_power, 0),\n    \n    // Temperatures\n    tempLiving: safeNum(msg.temp_living, 20),\n    tempBedroom: safeNum(msg.temp_bedroom, 20),\n    tempMancave: safeNum(msg.temp_mancave, 20),\n    \n    // Overrides\n    ovrAcLiving: safeStr(msg.ovr_ac_living, ''),\n    ovrAcBedroom: safeStr(msg.ovr_ac_bedroom, ''),\n    ovrAcOffice: safeStr(msg.ovr_ac_office, ''),\n    ovrAcMancave: safeStr(msg.ovr_ac_mancave, ''),\n    ovrPool: safeStr(msg.ovr_pool, ''),\n    ovrBoiler: safeStr(msg.ovr_boiler, ''),\n    ovrEv: safeStr(msg.ovr_ev, '')\n};\n\n// Check for critical unavailable entities\nconst warnings = [];\nif (msg.p1_power === 'unavailable') warnings.push('P1 meter unavailable');\nif (msg.pv_power === 'unavailable') warnings.push('PV sensor unavailable');\n\nif (warnings.length > 0) {\n    node.warn('Input validation warnings: ' + warnings.join(', '));\n}\n\nnode.status({ fill: 'green', shape: 'dot', text: 'Validated' });\nreturn msg;",
+        "outputs": 1,
+        "x": 1140,
+        "y": 460,
+        "wires": [
+            [
+                "power_manager"
+            ]
+        ]
+    },
+    {
+        "id": "power_manager",
+        "type": "function",
+        "z": "power_manager_tab",
+        "name": "Power Manager v6",
+        "func": "// Power Manager v6.0 - English version with improved error handling\nconst config = flow.get('config') || {};\nlet deviceState = flow.get('deviceState') || {};\nlet actionLog = flow.get('actionLog') || [];\nconst now = Date.now();\nconst units = config.units || {};\nconst v = msg.validated || {};\n\n// === CONSTANTS ===\nconst EV_STATES = config.ev?.states || { NO_CAR: 128, READY: 129, FULL: 130, CHARGING: 132 };\n\n// === HELPER FUNCTIONS ===\nfunction fmtW(w) {\n    return Math.abs(w) >= 1000 ? (w/1000).toFixed(1) + 'kW' : Math.round(w) + 'W';\n}\n\nfunction fmtTime(h) {\n    return String(Math.floor(h)).padStart(2,'0') + ':' + String(Math.round((h % 1) * 60)).padStart(2,'0');\n}\n\nfunction getTariffInfo(d) {\n    const time = d.getHours() + d.getMinutes() / 60;\n    const isWeekend = d.getDay() === 0 || d.getDay() === 6;\n    \n    if (isWeekend) {\n        if (time >= 1 && time < 7) return { tariff: 'super-off-peak', max: config.maxImport?.superOffPeak || 8000, end: 7, next: 'off-peak', nextTime: '07:00' };\n        if (time >= 7 && time < 11) return { tariff: 'off-peak', max: config.maxImport?.offPeak || 5000, end: 11, next: 'super-off-peak', nextTime: '11:00' };\n        if (time >= 11 && time < 17) return { tariff: 'super-off-peak', max: config.maxImport?.superOffPeak || 8000, end: 17, next: 'off-peak', nextTime: '17:00' };\n        return { tariff: 'off-peak', max: config.maxImport?.offPeak || 5000, end: 1, next: 'super-off-peak', nextTime: '01:00' };\n    } else {\n        if (time >= 1 && time < 7) return { tariff: 'super-off-peak', max: config.maxImport?.superOffPeak || 8000, end: 7, next: 'peak', nextTime: '07:00' };\n        if (time >= 7 && time < 11) return { tariff: 'peak', max: config.maxImport?.peak || 2500, end: 11, next: 'off-peak', nextTime: '11:00' };\n        if (time >= 11 && time < 17) return { tariff: 'off-peak', max: config.maxImport?.offPeak || 5000, end: 17, next: 'peak', nextTime: '17:00' };\n        if (time >= 17 && time < 22) return { tariff: 'peak', max: config.maxImport?.peak || 2500, end: 22, next: 'off-peak', nextTime: '22:00' };\n        return { tariff: 'off-peak', max: config.maxImport?.offPeak || 5000, end: 1, next: 'super-off-peak', nextTime: '01:00' };\n    }\n}\n\nfunction getNextNonPeak(d) {\n    const time = d.getHours() + d.getMinutes() / 60;\n    const isWeekend = d.getDay() === 0 || d.getDay() === 6;\n    if (isWeekend) return { time: '01:00', tariff: 'super-off-peak', max: 8000 };\n    if (time >= 7 && time < 11) return { time: '11:00', tariff: 'off-peak', max: 5000 };\n    if (time >= 17 && time < 22) return { time: '22:00', tariff: 'off-peak', max: 5000 };\n    if (time >= 22 || time < 1) return { time: '01:00', tariff: 'super-off-peak', max: 8000 };\n    return { time: '01:00', tariff: 'super-off-peak', max: 8000 };\n}\n\nfunction canSwitch(device, targetState) {\n    const state = deviceState[device];\n    if (!state) return true;\n    const elapsed = (now - state.lastChange) / 1000;\n    const minTime = targetState ? (config.minOffTime || 180) : (config.minOnTime || 300);\n    return elapsed >= minTime;\n}\n\nfunction updateState(device, on, extra = {}) {\n    if (!deviceState[device]) deviceState[device] = { on: false, lastChange: 0 };\n    if (deviceState[device].on !== on) deviceState[device].lastChange = now;\n    deviceState[device].on = on;\n    Object.assign(deviceState[device], extra);\n    flow.set('deviceState', deviceState);\n}\n\nfunction logAction(action) {\n    // Throttle logging - max 1 entry per 30 seconds per action type\n    const lastActions = flow.get('lastLoggedActions') || {};\n    const actionKey = action.substring(0, 20);\n    if (lastActions[actionKey] && (now - lastActions[actionKey]) < 30000) {\n        return; // Skip duplicate log\n    }\n    lastActions[actionKey] = now;\n    flow.set('lastLoggedActions', lastActions);\n    \n    const ts = new Date().toLocaleTimeString(config.locale || 'en-GB', {hour: '2-digit', minute: '2-digit'});\n    actionLog.unshift(`${ts} ${action}`);\n    if (actionLog.length > 15) actionLog.pop();\n    flow.set('actionLog', actionLog);\n}\n\nfunction parseOverride(val) {\n    if (!val) return 'auto';\n    const v = val.toLowerCase();\n    if (v.includes('auto')) return 'auto';\n    if (v.includes('koel') || v.includes('cool')) return 'cool';\n    if (v.includes('verwarm') || v.includes('heat') || v.includes('aan') || v.includes('on') || v.includes('lad') || v.includes('charg')) return 'heat';\n    if (v.includes('uit') || v.includes('off')) return 'off';\n    return 'auto';\n}\n\n// === MAIN DATA ===\nconst p1 = v.p1Power * (units.p1 || 1);\nconst pv = v.pvPower * (units.pv || 1);\nconst d = new Date();\nconst tariffInfo = getTariffInfo(d);\nconst tariff = tariffInfo.tariff;\nconst maxImport = tariffInfo.max;\nconst hyst = config.hysteresis || 300;\nconst nextNonPeak = getNextNonPeak(d);\n\nconst isSummer = v.poolSeason === 'on';\nconst isExporting = p1 < 0;\n\n// Parse overrides\nconst ovr = {\n    acLiving: parseOverride(v.ovrAcLiving),\n    acBedroom: parseOverride(v.ovrAcBedroom),\n    acOffice: parseOverride(v.ovrAcOffice),\n    acMancave: parseOverride(v.ovrAcMancave),\n    pool: parseOverride(v.ovrPool),\n    boiler: parseOverride(v.ovrBoiler),\n    ev: parseOverride(v.ovrEv)\n};\n\n// EV state parsing\nconst evState = v.evState;\nconst evPlugged = evState !== EV_STATES.NO_CAR;\nconst evCharging = evState === EV_STATES.CHARGING;\nconst evReady = evState === EV_STATES.READY;\nconst evDone = evState === EV_STATES.FULL;\nlet evStatusText = evState === EV_STATES.NO_CAR ? 'No car' : \n                   evState === EV_STATES.READY ? 'Ready' : \n                   evState === EV_STATES.FULL ? 'Full' : \n                   evState === EV_STATES.CHARGING ? 'Charging' : `Code ${evState}`;\n\n// Device states\nconst boilerOn = v.boilerSwitch === 'on';\nconst boilerForce = v.boilerForce === 'on';\nconst boilerW = v.boilerPower * (units.boiler || 1);\nconst boilerFull = boilerW < (config.boiler?.idleThreshold || 50);\nconst poolW = v.poolPower * (units.poolHeat || 1);\nconst poolHeating = poolW > (config.pool?.idlePower || 100);\nconst hrOn = v.heaterRightSwitch === 'on';\nconst htOn = v.heaterTableSwitch === 'on';\nconst evOn = v.evSwitch === 'on';\nconst evW = v.evPower * (units.ev || 1);\nconst evLimit = v.evLimit;\nconst acLivingOn = v.acLivingState !== 'off';\nconst acMancaveOn = v.acMancaveState !== 'off';\nconst acOfficeOn = v.acOfficeState !== 'off';\nconst acBedroomOn = v.acBedroomState !== 'off';\nconst tempLiving = v.tempLiving;\nconst tempBedroom = v.tempBedroom;\nconst tempMancave = v.tempMancave;\nconst coolThreshold = config.summerCoolThreshold || 25;\n\n// Available power = how much we can add before hitting limit\nlet avail = -p1 + maxImport;\nlet headroom = avail;\n\n// Plan output\nconst plan = [];\nconst gridIcon = isExporting ? '(exp)' : (p1 > maxImport * 0.8 ? '(!)' : '');\nconst tariffLabel = tariff.toUpperCase().replace('-', ' ');\nplan.push(`${tariffLabel} ${gridIcon} | Grid: ${fmtW(p1)} | PV: ${fmtW(pv)} | Avail: ${fmtW(avail)}`);\nplan.push(`${isSummer ? 'Summer' : 'Winter'} | EV: ${evStatusText}`);\n\n// Decision object\nlet decisions = {\n    ev: { action: 'none', amps: evLimit },\n    boiler: { action: 'none' },\n    pool: { action: 'none' },\n    heaterRight: { action: 'none' },\n    heaterTable: { action: 'none' },\n    acLiving: { action: 'none', mode: 'off', temp: 22 },\n    acMancave: { action: 'none', mode: 'off', temp: 17 },\n    acOffice: { action: 'none', mode: 'off', temp: 22 },\n    acBedroom: { action: 'none', mode: 'off', temp: 22 }\n};\n// === FROST PROTECTION ===\nfunction checkFrostProtection() {\n    const alerts = [];\n    const fp = config.frostProtection;\n    if (!fp?.enabled) return { alerts, poolPumpAction: 'none', planEntry: null };\n\n    const ambientTemp = v.poolAmbientTemp;\n    const pumpSwitchOn = v.poolPumpSwitch === 'on';\n    const pumpPower = v.poolPumpPower || 0;\n    const minPumpPower = fp.pumpMinPower ?? 100;\n    const pumpActuallyRunning = pumpSwitchOn && pumpPower >= minPumpPower;\n\n    if (ambientTemp === null) {\n        return { alerts, poolPumpAction: 'none', planEntry: 'Frost: No temp sensor' };\n    }\n\n    const tempThreshold = fp.tempThreshold ?? 5;\n    const criticalThreshold = fp.criticalThreshold ?? 2;\n    const alertDelay = (fp.pumpOffAlertDelay ?? 300) * 1000;\n\n    if (ambientTemp <= tempThreshold) {\n        const isCritical = ambientTemp <= criticalThreshold;\n\n        if (!pumpActuallyRunning) {\n            const pumpState = deviceState.poolPump || { lastChange: now };\n            const pumpOffDuration = now - pumpState.lastChange;\n\n            let reason = !pumpSwitchOn ? 'switch OFF' : `only ${pumpPower.toFixed(0)}W (min ${minPumpPower}W)`;\n\n            if (pumpOffDuration >= alertDelay) {\n                const level = isCritical ? 'critical' : 'warning';\n                const msg = isCritical\n                    ? `CRITICAL: Pool pump not running at ${ambientTemp.toFixed(1)}°C! ${reason}. Freeze risk!`\n                    : `Warning: Pool pump not running during cold weather (${ambientTemp.toFixed(1)}°C). ${reason}`;\n                alerts.push({ level, message: msg, entity: fp.notifyEntity });\n            }\n\n            return {\n                alerts,\n                poolPumpAction: 'on',\n                planEntry: `Frost: PUMP ON - ${reason} (${ambientTemp.toFixed(1)}°C)`\n            };\n        } else {\n            const status = isCritical ? 'CRITICAL' : 'OK';\n            return {\n                alerts,\n                poolPumpAction: 'none',\n                planEntry: `Frost: ${status}, pump ${pumpPower.toFixed(0)}W (${ambientTemp.toFixed(1)}°C)`\n            };\n        }\n    }\n\n    return { alerts: [], poolPumpAction: 'none', planEntry: null };\n}\n\nconst frostResult = checkFrostProtection();\nif (frostResult.planEntry) plan.push(frostResult.planEntry);\n\n// Add poolPump decision\ndecisions.poolPump = { action: frostResult.poolPumpAction };\n\n\n\n// === MANUAL OVERRIDES FIRST ===\nif (ovr.pool === 'heat' && !poolHeating) {\n    decisions.pool.action = 'heat';\n    plan.push(`Pool: MANUAL ON`);\n} else if (ovr.pool === 'off' && poolHeating) {\n    decisions.pool.action = 'off';\n    plan.push(`Pool: MANUAL OFF`);\n}\n\nif (ovr.boiler === 'heat' && !boilerOn) {\n    decisions.boiler.action = 'on';\n    plan.push(`Boiler: MANUAL ON`);\n} else if (ovr.boiler === 'off' && boilerOn) {\n    decisions.boiler.action = 'off';\n    plan.push(`Boiler: MANUAL OFF`);\n}\n\nif (ovr.ev === 'heat' && evPlugged && !evCharging && !evDone) {\n    decisions.ev = { action: 'on', amps: config.ev?.maxAmps || 16 };\n    plan.push(`EV: MANUAL CHARGE`);\n} else if (ovr.ev === 'off' && evCharging) {\n    decisions.ev = { action: 'off', amps: 0 };\n    plan.push(`EV: MANUAL OFF`);\n}\n\nconst acUnits = ['acLiving', 'acBedroom', 'acOffice', 'acMancave'];\nconst acNames = { acLiving: 'Living', acBedroom: 'Bedroom', acOffice: 'Office', acMancave: 'Mancave' };\nconst acStates = { acLiving: acLivingOn, acBedroom: acBedroomOn, acOffice: acOfficeOn, acMancave: acMancaveOn };\nconst acTemps = { acLiving: 22, acBedroom: 22, acOffice: 22, acMancave: 17 };\n\nfor (const ac of acUnits) {\n    const o = ovr[ac];\n    const isOn = acStates[ac];\n    const temp = acTemps[ac];\n    if (o === 'cool') {\n        decisions[ac] = { action: 'cool', mode: 'cool', temp: temp };\n        if (!isOn) plan.push(`AC ${acNames[ac]}: MANUAL COOL`);\n    } else if (o === 'heat') {\n        decisions[ac] = { action: 'heat', mode: 'heat', temp: temp };\n        if (!isOn) plan.push(`AC ${acNames[ac]}: MANUAL HEAT`);\n    } else if (o === 'off' && isOn) {\n        decisions[ac] = { action: 'off', mode: 'off', temp: temp };\n        plan.push(`AC ${acNames[ac]}: MANUAL OFF`);\n    }\n}\n\nif (boilerForce && !boilerFull && ovr.boiler === 'auto') {\n    decisions.boiler.action = 'on';\n    plan.push(`Boiler: FORCE ON`);\n}\n\n// === WINTER LOGIC ===\nif (!isSummer) {\n    // EV\n    if (ovr.ev === 'auto' && decisions.ev.action === 'none') {\n        if (evDone) {\n            plan.push(`EV: Full`);\n        } else if (evPlugged) {\n            const wpa = config.ev?.wattsPerAmp || 692;\n            const minA = config.ev?.minAmps || 6;\n            const maxA = config.ev?.maxAmps || 16;\n            const minEvW = minA * wpa;\n            let targetA = Math.floor(headroom / wpa);\n            targetA = Math.max(minA, Math.min(maxA, targetA));\n            \n            if (evCharging) {\n                if (headroom < minEvW - hyst && canSwitch('ev', false)) {\n                    decisions.ev = { action: 'off', amps: 0 };\n                    plan.push(`EV: Pausing (${fmtW(headroom)} < ${fmtW(minEvW)})`);\n                } else {\n                    // Check if we should adjust amps (with threshold to prevent flapping)\n                    const ampDiff = Math.abs(targetA - evLimit);\n                    if (ampDiff >= (config.evAmpChangeThreshold || 2)) {\n                        decisions.ev = { action: 'adjust', amps: targetA };\n                        plan.push(`EV: Adjusting to ${targetA}A`);\n                    } else {\n                        plan.push(`EV: Charging @ ${evLimit}A`);\n                    }\n                }\n            } else if (evReady) {\n                if (tariff === 'peak') {\n                    plan.push(`EV: Waiting for off-peak (${tariffInfo.nextTime})`);\n                } else if (headroom >= minEvW && canSwitch('ev', true)) {\n                    decisions.ev = { action: 'on', amps: targetA };\n                    plan.push(`EV: Starting @ ${targetA}A`);\n                    headroom -= targetA * wpa;\n                } else {\n                    plan.push(`EV: Waiting for ${fmtW(minEvW)} (now ${fmtW(headroom)})`);\n                }\n            }\n        }\n    }\n    \n    // Boiler\n    if (ovr.boiler === 'auto' && decisions.boiler.action === 'none') {\n        const bw = config.boiler?.power || 2500;\n        const time = d.getHours() + d.getMinutes() / 60;\n        const deadline = config.boiler?.deadlineWinter || 6.5;\n        const urgent = time < deadline && tariff === 'super-off-peak' && !boilerFull;\n        \n        if (boilerFull) {\n            plan.push(`Boiler: Full`);\n        } else if (boilerOn) {\n            plan.push(`Boiler: Heating`);\n        } else if (urgent) {\n            decisions.boiler.action = 'on';\n            plan.push(`Boiler: URGENT (deadline ${fmtTime(deadline)})`);\n            headroom -= bw;\n        } else if (tariff !== 'super-off-peak') {\n            plan.push(`Boiler: Waiting for super off-peak (01:00)`);\n        } else if (headroom >= bw - hyst && canSwitch('boiler', true)) {\n            decisions.boiler.action = 'on';\n            plan.push(`Boiler: Starting`);\n            headroom -= bw;\n        } else {\n            plan.push(`Boiler: Waiting for ${fmtW(bw)} (now ${fmtW(headroom)})`);\n        }\n    }\n    \n    // AC Living (heating)\n    if (ovr.acLiving === 'auto' && decisions.acLiving.action === 'none') {\n        if (acLivingOn) {\n            if (tariff === 'peak' && headroom < -hyst && canSwitch('acLiving', false)) {\n                decisions.acLiving = { action: 'off', mode: 'off', temp: 21 };\n                plan.push(`AC Living: Load shed (peak)`);\n            } else {\n                plan.push(`AC Living: Heating (${tempLiving.toFixed(1)}C)`);\n            }\n        } else {\n            const pw = config.ac?.living?.power || 1500;\n            if (tariff === 'peak') {\n                plan.push(`AC Living: Waiting for off-peak (${tariffInfo.nextTime})`);\n            } else if (headroom >= pw - hyst && canSwitch('acLiving', true)) {\n                decisions.acLiving = { action: 'heat', mode: 'heat', temp: 21 };\n                plan.push(`AC Living: Starting`);\n                headroom -= pw;\n            } else {\n                plan.push(`AC Living: Waiting for ${fmtW(pw)} (now ${fmtW(headroom)})`);\n            }\n        }\n    }\n    \n    // AC Mancave (heating)\n    if (ovr.acMancave === 'auto' && decisions.acMancave.action === 'none') {\n        if (acMancaveOn) {\n            plan.push(`AC Mancave: Heating (${tempMancave.toFixed(1)}C)`);\n        } else {\n            const pw = config.ac?.mancave?.power || 1000;\n            if (tariff === 'peak') {\n                plan.push(`AC Mancave: Waiting for off-peak (${tariffInfo.nextTime})`);\n            } else if (headroom >= pw - hyst && canSwitch('acMancave', true)) {\n                decisions.acMancave = { action: 'heat', mode: 'heat', temp: 17 };\n                plan.push(`AC Mancave: Starting`);\n                headroom -= pw;\n            }\n        }\n    }\n    \n    // Heater Table\n    const htW = config.heaters?.table?.power || 4100;\n    if (htOn) {\n        if (headroom < -hyst && canSwitch('heaterTable', false)) {\n            decisions.heaterTable.action = 'off';\n            plan.push(`Heater Table: Turning off (overload)`);\n        } else {\n            plan.push(`Heater Table: On (${fmtW(htW)})`);\n        }\n    } else {\n        if (tariff === 'peak') {\n            plan.push(`Heater Table: Waiting for off-peak (${tariffInfo.nextTime})`);\n        } else if (headroom < htW - hyst) {\n            plan.push(`Heater Table: Waiting for ${fmtW(htW)} (now ${fmtW(headroom)})`);\n        } else if (!canSwitch('heaterTable', true)) {\n            plan.push(`Heater Table: Waiting (min time)`);\n        } else {\n            decisions.heaterTable.action = 'on';\n            plan.push(`Heater Table: Starting`);\n            headroom -= htW;\n        }\n    }\n    \n    // Heater Right\n    const hrW = config.heaters?.right?.power || 2500;\n    if (hrOn) {\n        if (headroom < -hyst && canSwitch('heaterRight', false)) {\n            decisions.heaterRight.action = 'off';\n            plan.push(`Heater Right: Turning off (overload)`);\n        } else {\n            plan.push(`Heater Right: On (${fmtW(hrW)})`);\n        }\n    } else {\n        if (tariff === 'peak') {\n            plan.push(`Heater Right: Waiting for off-peak (${tariffInfo.nextTime})`);\n        } else if (headroom < hrW - hyst) {\n            plan.push(`Heater Right: Waiting for ${fmtW(hrW)} (now ${fmtW(headroom)})`);\n        } else if (!canSwitch('heaterRight', true)) {\n            plan.push(`Heater Right: Waiting (min time)`);\n        } else {\n            decisions.heaterRight.action = 'on';\n            plan.push(`Heater Right: Starting`);\n            headroom -= hrW;\n        }\n    }\n\n// === SUMMER LOGIC ===\n} else {\n    // Pool\n    if (ovr.pool === 'auto' && decisions.pool.action === 'none') {\n        const pw = config.pool?.activePower || 2000;\n        if (poolHeating) {\n            if (headroom < -hyst && canSwitch('pool', false)) {\n                decisions.pool.action = 'off';\n                plan.push(`Pool: Pausing`);\n            } else {\n                plan.push(`Pool: Heating`);\n            }\n        } else if (headroom >= pw - hyst && canSwitch('pool', true)) {\n            decisions.pool.action = 'heat';\n            plan.push(`Pool: Starting (low fan)`);\n            headroom -= pw;\n        } else {\n            plan.push(`Pool: Waiting for ${fmtW(pw)} (now ${fmtW(headroom)})`);\n        }\n    }\n    \n    // Boiler\n    if (ovr.boiler === 'auto' && decisions.boiler.action === 'none') {\n        const bw = config.boiler?.power || 2500;\n        if (boilerFull) {\n            plan.push(`Boiler: Full`);\n        } else if (boilerOn) {\n            plan.push(`Boiler: Heating`);\n        } else if (headroom >= bw - hyst && canSwitch('boiler', true)) {\n            decisions.boiler.action = 'on';\n            plan.push(`Boiler: Starting`);\n            headroom -= bw;\n        } else {\n            plan.push(`Boiler: Waiting for ${fmtW(bw)}`);\n        }\n    }\n    \n    // EV\n    if (ovr.ev === 'auto' && decisions.ev.action === 'none') {\n        if (evDone) {\n            plan.push(`EV: Full`);\n        } else if (evPlugged) {\n            const wpa = config.ev?.wattsPerAmp || 692;\n            const minA = config.ev?.minAmps || 6;\n            const minEvW = minA * wpa;\n            let targetA = Math.floor(headroom / wpa);\n            targetA = Math.max(minA, Math.min(config.ev?.maxAmps || 16, targetA));\n            \n            if (evCharging) {\n                plan.push(`EV: Charging @ ${evLimit}A`);\n            } else if (evReady && headroom >= minEvW && tariff !== 'peak' && canSwitch('ev', true)) {\n                decisions.ev = { action: 'on', amps: targetA };\n                plan.push(`EV: Starting @ ${targetA}A`);\n                headroom -= targetA * wpa;\n            } else if (tariff === 'peak') {\n                plan.push(`EV: Waiting for off-peak`);\n            } else {\n                plan.push(`EV: Waiting for ${fmtW(minEvW)}`);\n            }\n        }\n    }\n    \n    // Cooling (only when exporting)\n    if (isExporting) {\n        const coolOrder = ['acLiving', 'acBedroom', 'acOffice', 'acMancave'];\n        const temps = { acLiving: tempLiving, acBedroom: tempBedroom, acOffice: tempLiving, acMancave: tempMancave };\n        const powers = { acLiving: 1500, acBedroom: 1000, acOffice: 1000, acMancave: 1000 };\n        \n        for (const ac of coolOrder) {\n            if (ovr[ac] !== 'auto') continue;\n            if (decisions[ac].action !== 'none') continue;\n            const pw = config.ac?.[ac.replace('ac', '').toLowerCase()]?.power || powers[ac];\n            const temp = temps[ac];\n            const isOn = acStates[ac];\n            \n            if (temp > coolThreshold && headroom >= pw) {\n                if (!isOn && canSwitch(ac, true)) {\n                    decisions[ac] = { action: 'cool', mode: 'cool', temp: 22 };\n                    plan.push(`AC ${acNames[ac]}: Cooling (${temp.toFixed(1)}C)`);\n                    headroom -= pw;\n                } else if (isOn) {\n                    plan.push(`AC ${acNames[ac]}: Cooling (${temp.toFixed(1)}C)`);\n                }\n            } else if (isOn && headroom < -hyst && canSwitch(ac, false)) {\n                decisions[ac] = { action: 'off', mode: 'off', temp: 22 };\n            }\n        }\n    } else {\n        // Not exporting - turn off cooling\n        for (const ac of acUnits) {\n            if (ovr[ac] !== 'auto') continue;\n            if (acStates[ac] && canSwitch(ac, false)) {\n                decisions[ac] = { action: 'off', mode: 'off', temp: 22 };\n            }\n        }\n        plan.push(`Cooling: Waiting for export`);\n    }\n}\n\nplan.push(`Available: ${fmtW(headroom)}`);\n\n// === BUILD OUTPUTS ===\nconst outputs = new Array(13).fill(null);\nconst executed = [];\n\nif (decisions.ev.action === 'on') {\n    outputs[0] = { payload: { action: 'turn_on', amps: decisions.ev.amps } };\n    updateState('ev', true, { amps: decisions.ev.amps });\n    logAction(`EV ON @ ${decisions.ev.amps}A`);\n    executed.push(`EV on`);\n} else if (decisions.ev.action === 'off') {\n    outputs[0] = { payload: { action: 'turn_off' } };\n    updateState('ev', false);\n    logAction(`EV OFF`);\n    executed.push(`EV off`);\n} else if (decisions.ev.action === 'adjust') {\n    outputs[0] = { payload: { action: 'adjust', amps: decisions.ev.amps } };\n    updateState('ev', true, { amps: decisions.ev.amps });\n    logAction(`EV ${decisions.ev.amps}A`);\n}\n\nif (decisions.boiler.action === 'on' && !boilerOn) {\n    outputs[1] = { payload: 'turn_on' };\n    updateState('boiler', true);\n    logAction(`Boiler ON`);\n    executed.push(`Boiler on`);\n} else if (decisions.boiler.action === 'off' && boilerOn) {\n    outputs[1] = { payload: 'turn_off' };\n    updateState('boiler', false);\n    logAction(`Boiler OFF`);\n    executed.push(`Boiler off`);\n}\n\nif (decisions.pool.action === 'heat' && !poolHeating) {\n    outputs[2] = { payload: { mode: 'heat', fan: 'low' } };\n    updateState('pool', true);\n    logAction(`Pool ON`);\n    executed.push(`Pool on`);\n} else if (decisions.pool.action === 'off' && poolHeating) {\n    outputs[2] = { payload: { mode: 'off', fan: 'low' } };\n    updateState('pool', false);\n    logAction(`Pool OFF`);\n    executed.push(`Pool off`);\n}\n\nif (decisions.heaterRight.action === 'on' && !hrOn) {\n    outputs[3] = { payload: 'turn_on' };\n    updateState('heaterRight', true);\n    logAction(`Heater R ON`);\n    executed.push(`Heater R on`);\n} else if (decisions.heaterRight.action === 'off' && hrOn) {\n    outputs[3] = { payload: 'turn_off' };\n    updateState('heaterRight', false);\n    logAction(`Heater R OFF`);\n    executed.push(`Heater R off`);\n}\n\nif (decisions.heaterTable.action === 'on' && !htOn) {\n    outputs[4] = { payload: 'turn_on' };\n    updateState('heaterTable', true);\n    logAction(`Heater T ON`);\n    executed.push(`Heater T on`);\n} else if (decisions.heaterTable.action === 'off' && htOn) {\n    outputs[4] = { payload: 'turn_off' };\n    updateState('heaterTable', false);\n    logAction(`Heater T OFF`);\n    executed.push(`Heater T off`);\n}\n\nif (decisions.acLiving.action !== 'none') {\n    outputs[5] = { payload: decisions.acLiving };\n    updateState('acLiving', decisions.acLiving.mode !== 'off');\n    logAction(`AC Living ${decisions.acLiving.mode}`);\n}\nif (decisions.acMancave.action !== 'none') {\n    outputs[6] = { payload: decisions.acMancave };\n    updateState('acMancave', decisions.acMancave.mode !== 'off');\n    logAction(`AC Mancave ${decisions.acMancave.mode}`);\n}\nif (decisions.acOffice.action !== 'none') {\n    outputs[7] = { payload: decisions.acOffice };\n    updateState('acOffice', decisions.acOffice.mode !== 'off');\n    logAction(`AC Office ${decisions.acOffice.mode}`);\n}\nif (decisions.acBedroom.action !== 'none') {\n    outputs[8] = { payload: decisions.acBedroom };\n    updateState('acBedroom', decisions.acBedroom.mode !== 'off');\n    logAction(`AC Bedroom ${decisions.acBedroom.mode}`);\n}\n\n// Pool pump frost protection\nif (decisions.poolPump?.action === 'on' && v.poolPumpSwitch !== 'on') {\n    outputs[12] = { payload: 'turn_on' };\n    updateState('poolPump', true);\n    logAction('Pool Pump ON (frost)');\n    executed.push('Pool pump on');\n}\n\n// Send frost alerts\nif (frostResult.alerts?.length > 0) {\n    for (const alert of frostResult.alerts) {\n        const alertMsg = { payload: { title: 'Power Manager - Frost Alert', message: alert.message } };\n        outputs[11] = alertMsg;\n    }\n}\n\n// === BMW LOW BATTERY CHECK ===\nfunction checkBmwLowBattery() {\n    const alerts = [];\n    const planEntries = [];\n    const bmwConfig = config.bmwLowBattery;\n\n    if (!bmwConfig?.enabled) return { alerts, planEntries };\n\n    const currentHour = d.getHours();\n    const checkHours = bmwConfig.checkHours || [20, 21, 22];\n\n    if (!checkHours.includes(currentHour)) return { alerts, planEntries };\n\n    const threshold = bmwConfig.batteryThreshold || 50;\n    const evPluggedIn = evState === EV_STATES.READY || evState === EV_STATES.CHARGING;\n\n    // Check i5\n    const i5Battery = v.bmwI5Battery;\n    const i5Range = v.bmwI5Range;\n    const i5Location = v.bmwI5Location;\n\n    if (i5Battery !== null && i5Battery < threshold && i5Location === 'home' && !evPluggedIn) {\n        const msg = `BMW i5 at ${i5Battery}%, ${i5Range || '?'}km range - not plugged in!`;\n        alerts.push({ level: 'warning', message: msg, entity: bmwConfig.notifyEntity });\n        planEntries.push(`BMW i5: LOW ${i5Battery}% (${i5Range}km) - not charging`);\n    } else if (i5Battery !== null && i5Location === 'home') {\n        if (evPluggedIn) {\n            planEntries.push(`BMW i5: ${i5Battery}% (plugged in)`);\n        } else if (i5Battery >= threshold) {\n            planEntries.push(`BMW i5: ${i5Battery}% OK`);\n        }\n    }\n\n    // Check iX1\n    const ix1Battery = v.bmwIx1Battery;\n    const ix1Range = v.bmwIx1Range;\n    const ix1Location = v.bmwIx1Location;\n\n    if (ix1Battery !== null && ix1Battery < threshold && ix1Location === 'home' && !evPluggedIn) {\n        const msg = `BMW iX1 at ${ix1Battery}%, ${ix1Range || '?'}km range - not plugged in!`;\n        alerts.push({ level: 'warning', message: msg, entity: bmwConfig.notifyEntity });\n        planEntries.push(`BMW iX1: LOW ${ix1Battery}% (${ix1Range}km) - not charging`);\n    } else if (ix1Battery !== null && ix1Location === 'home') {\n        if (evPluggedIn) {\n            planEntries.push(`BMW iX1: ${ix1Battery}% (plugged in)`);\n        } else if (ix1Battery >= threshold) {\n            planEntries.push(`BMW iX1: ${ix1Battery}% OK`);\n        }\n    }\n\n    return { alerts, planEntries };\n}\n\nconst bmwResult = checkBmwLowBattery();\nplan.push(...bmwResult.planEntries);\n\n// Send BMW alerts\nif (bmwResult.alerts?.length > 0) {\n    for (const alert of bmwResult.alerts) {\n        outputs[11] = { payload: { title: 'Power Manager - BMW Alert', message: alert.message } };\n    }\n}\n\n\noutputs[9] = { payload: { plan, actionLog, tariff, p1, pv, avail, headroom, ovr, isSummer, isExporting } };\n\nconst statusLine = `${tariffLabel} | ${fmtW(p1)} | PV ${fmtW(pv)} | ${fmtW(avail)} avail`;\nconst planText = plan.join(' | ');\nconst actionsText = actionLog.slice(0,5).join(' | ') || '-';\noutputs[10] = { payload: { status: statusLine, plan: planText.substring(0, 250), actions: actionsText.substring(0, 250) } };\n\nif (executed.length > 0 && config.enableNotifications) {\n    outputs[11] = { payload: { title: 'Power Manager', message: executed.join(', ') } };\n}\n\n// Release mutex\nflow.set('isProcessing', false);\n\nnode.status({ fill: isExporting ? 'green' : (p1 > maxImport * 0.8 ? 'red' : 'yellow'), shape: 'dot', text: statusLine });\nreturn outputs;",
+        "outputs": 13,
+        "x": 1290,
+        "y": 460,
+        "wires": [
+            [
+                "ev_handler"
+            ],
+            [
+                "boiler_handler"
+            ],
+            [
+                "pool_handler"
+            ],
+            [
+                "heater_right_handler"
+            ],
+            [
+                "heater_table_handler"
+            ],
+            [
+                "ac_living_handler"
+            ],
+            [
+                "ac_mancave_handler"
+            ],
+            [
+                "ac_office_handler"
+            ],
+            [
+                "ac_bedroom_handler"
+            ],
+            [
+                "debug_full"
+            ],
+            [
+                "ha_status",
+                "ha_plan",
+                "ha_actions"
+            ],
+            [
+                "notify"
+            ],
+            [
+                "pool_pump_handler"
+            ]
+        ]
+    },
+    {
+        "id": "ev_handler",
+        "type": "function",
+        "z": "power_manager_tab",
+        "name": "EV Handler",
+        "func": "if (!msg.payload) return null;\n\nconst config = flow.get('config') || {};\nconst entities = config.entities?.ev || {\n    switch: 'switch.abb_terra_ac_charging',\n    limit: 'number.abb_terra_ac_current_limit'\n};\n\nconst action = msg.payload.action;\nconst amps = msg.payload.amps || 6;\n\nif (action === 'turn_on' || action === 'adjust') {\n    const msgs = [\n        { \n            payload: { \n                domain: 'number', \n                service: 'set_value', \n                data: { \n                    entity_id: entities.limit, \n                    value: amps \n                } \n            } \n        }\n    ];\n    \n    if (action === 'turn_on') {\n        msgs.push({ \n            payload: { \n                domain: 'switch', \n                service: 'turn_on', \n                data: { \n                    entity_id: entities.switch \n                } \n            } \n        });\n    }\n    \n    return [msgs];\n} else if (action === 'turn_off') {\n    return { \n        payload: { \n            domain: 'switch', \n            service: 'turn_off', \n            data: { \n                entity_id: entities.switch \n            } \n        } \n    };\n}\n\nreturn null;",
+        "outputs": 1,
+        "x": 1450,
+        "y": 280,
+        "wires": [
+            [
+                "call_ev"
+            ]
+        ]
+    },
+    {
+        "id": "call_ev",
+        "type": "api-call-service",
+        "z": "power_manager_tab",
+        "name": "Call EV",
+        "server": "7a1ecefa.85d54",
+        "version": 7,
+        "debugenabled": false,
+        "action": "{{payload.domain}}.{{payload.service}}",
+        "floorId": [],
+        "areaId": [],
+        "deviceId": [],
+        "entityId": [
+            "{{payload.data.entity_id}}"
+        ],
+        "labelId": [],
+        "data": "payload.data",
+        "dataType": "msg",
+        "mergeContext": "",
+        "mustacheAltTags": false,
+        "outputProperties": [],
+        "blockInputOverrides": false,
+        "x": 1570,
+        "y": 280,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "boiler_handler",
+        "type": "api-call-service",
+        "z": "power_manager_tab",
+        "name": "Boiler",
+        "server": "7a1ecefa.85d54",
+        "version": 7,
+        "debugenabled": false,
+        "action": "switch.{{payload}}",
+        "floorId": [],
+        "areaId": [],
+        "deviceId": [],
+        "entityId": [
+            "switch.storage_boiler"
+        ],
+        "labelId": [],
+        "data": "",
+        "dataType": "jsonata",
+        "mergeContext": "",
+        "mustacheAltTags": false,
+        "outputProperties": [],
+        "blockInputOverrides": false,
+        "x": 1440,
+        "y": 320,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "pool_handler",
+        "type": "function",
+        "z": "power_manager_tab",
+        "name": "Pool Handler",
+        "func": "if (!msg.payload) return null;\n\nconst config = flow.get('config') || {};\nconst entity = config.entities?.pool?.climate || 'climate.98d8639f920c';\n\nreturn {\n    payload: {\n        domain: 'climate',\n        service: 'set_hvac_mode',\n        data: {\n            entity_id: entity,\n            hvac_mode: msg.payload.mode\n        }\n    }\n};",
+        "outputs": 1,
+        "x": 1450,
+        "y": 360,
+        "wires": [
+            [
+                "call_pool",
+                "pool_fan"
+            ]
+        ]
+    },
+    {
+        "id": "pool_pump_handler",
+        "type": "api-call-service",
+        "z": "power_manager_tab",
+        "name": "Pool Pump",
+        "server": "7a1ecefa.85d54",
+        "version": 7,
+        "debugenabled": false,
+        "action": "switch.{{payload}}",
+        "floorId": [],
+        "areaId": [],
+        "deviceId": [],
+        "entityId": [
+            "switch.poolhouse_pool_pump"
+        ],
+        "labelId": [],
+        "data": "",
+        "dataType": "jsonata",
+        "mergeContext": "",
+        "mustacheAltTags": false,
+        "outputProperties": [],
+        "blockInputOverrides": false,
+        "x": 1440,
+        "y": 400,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "call_pool",
+        "type": "api-call-service",
+        "z": "power_manager_tab",
+        "name": "Mode",
+        "server": "7a1ecefa.85d54",
+        "version": 7,
+        "debugenabled": false,
+        "action": "{{payload.domain}}.{{payload.service}}",
+        "floorId": [],
+        "areaId": [],
+        "deviceId": [],
+        "entityId": [
+            "{{payload.data.entity_id}}"
+        ],
+        "labelId": [],
+        "data": "payload.data",
+        "dataType": "msg",
+        "mergeContext": "",
+        "mustacheAltTags": false,
+        "outputProperties": [],
+        "blockInputOverrides": false,
+        "x": 1590,
+        "y": 340,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "pool_fan",
+        "type": "api-call-service",
+        "z": "power_manager_tab",
+        "name": "Fan Low",
+        "server": "7a1ecefa.85d54",
+        "version": 7,
+        "debugenabled": false,
+        "action": "climate.set_fan_mode",
+        "floorId": [],
+        "areaId": [],
+        "deviceId": [],
+        "entityId": [
+            "climate.98d8639f920c"
+        ],
+        "labelId": [],
+        "data": "{\"fan_mode\": \"low\"}",
+        "dataType": "json",
+        "mergeContext": "",
+        "mustacheAltTags": false,
+        "outputProperties": [],
+        "blockInputOverrides": false,
+        "x": 1600,
+        "y": 380,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "heater_right_handler",
+        "type": "api-call-service",
+        "z": "power_manager_tab",
+        "name": "Heater Right",
+        "server": "7a1ecefa.85d54",
+        "version": 7,
+        "debugenabled": false,
+        "action": "switch.{{payload}}",
+        "floorId": [],
+        "areaId": [],
+        "deviceId": [],
+        "entityId": [
+            "switch.livingroom_right_heater"
+        ],
+        "labelId": [],
+        "data": "",
+        "dataType": "jsonata",
+        "mergeContext": "",
+        "mustacheAltTags": false,
+        "outputProperties": [],
+        "blockInputOverrides": false,
+        "x": 1460,
+        "y": 420,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "heater_table_handler",
+        "type": "api-call-service",
+        "z": "power_manager_tab",
+        "name": "Heater Table",
+        "server": "7a1ecefa.85d54",
+        "version": 7,
+        "debugenabled": false,
+        "action": "switch.{{payload}}",
+        "floorId": [],
+        "areaId": [],
+        "deviceId": [],
+        "entityId": [
+            "switch.livingroom_table_heater_state"
+        ],
+        "labelId": [],
+        "data": "",
+        "dataType": "jsonata",
+        "mergeContext": "",
+        "mustacheAltTags": false,
+        "outputProperties": [],
+        "blockInputOverrides": false,
+        "x": 1460,
+        "y": 460,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "ac_living_handler",
+        "type": "api-call-service",
+        "z": "power_manager_tab",
+        "name": "AC Living",
+        "server": "7a1ecefa.85d54",
+        "version": 7,
+        "debugenabled": false,
+        "action": "climate.set_hvac_mode",
+        "floorId": [],
+        "areaId": [],
+        "deviceId": [],
+        "entityId": [
+            "climate.living"
+        ],
+        "labelId": [],
+        "data": "{\"hvac_mode\": \"{{payload.mode}}\"}",
+        "dataType": "json",
+        "mergeContext": "",
+        "mustacheAltTags": false,
+        "outputProperties": [],
+        "blockInputOverrides": false,
+        "x": 1450,
+        "y": 500,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "ac_mancave_handler",
+        "type": "api-call-service",
+        "z": "power_manager_tab",
+        "name": "AC Mancave",
+        "server": "7a1ecefa.85d54",
+        "version": 7,
+        "debugenabled": false,
+        "action": "climate.set_hvac_mode",
+        "floorId": [],
+        "areaId": [],
+        "deviceId": [],
+        "entityId": [
+            "climate.mancave"
+        ],
+        "labelId": [],
+        "data": "{\"hvac_mode\": \"{{payload.mode}}\"}",
+        "dataType": "json",
+        "mergeContext": "",
+        "mustacheAltTags": false,
+        "outputProperties": [],
+        "blockInputOverrides": false,
+        "x": 1460,
+        "y": 540,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "ac_office_handler",
+        "type": "api-call-service",
+        "z": "power_manager_tab",
+        "name": "AC Office",
+        "server": "7a1ecefa.85d54",
+        "version": 7,
+        "debugenabled": false,
+        "action": "climate.set_hvac_mode",
+        "floorId": [],
+        "areaId": [],
+        "deviceId": [],
+        "entityId": [
+            "climate.bureau"
+        ],
+        "labelId": [],
+        "data": "{\"hvac_mode\": \"{{payload.mode}}\"}",
+        "dataType": "json",
+        "mergeContext": "",
+        "mustacheAltTags": false,
+        "outputProperties": [],
+        "blockInputOverrides": false,
+        "x": 1450,
+        "y": 580,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "ac_bedroom_handler",
+        "type": "api-call-service",
+        "z": "power_manager_tab",
+        "name": "AC Bedroom",
+        "server": "7a1ecefa.85d54",
+        "version": 7,
+        "debugenabled": false,
+        "action": "climate.set_hvac_mode",
+        "floorId": [],
+        "areaId": [],
+        "deviceId": [],
+        "entityId": [
+            "climate.slaapkamer"
+        ],
+        "labelId": [],
+        "data": "{\"hvac_mode\": \"{{payload.mode}}\"}",
+        "dataType": "json",
+        "mergeContext": "",
+        "mustacheAltTags": false,
+        "outputProperties": [],
+        "blockInputOverrides": false,
+        "x": 1460,
+        "y": 620,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "debug_full",
+        "type": "debug",
+        "z": "power_manager_tab",
+        "name": "Debug",
+        "active": false,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1430,
+        "y": 660,
+        "wires": []
+    },
+    {
+        "id": "ha_status",
+        "type": "api-call-service",
+        "z": "power_manager_tab",
+        "name": "HA Status",
+        "server": "7a1ecefa.85d54",
+        "version": 7,
+        "debugenabled": false,
+        "action": "input_text.set_value",
+        "floorId": [],
+        "areaId": [],
+        "deviceId": [],
+        "entityId": [
+            "input_text.power_manager_status"
+        ],
+        "labelId": [],
+        "data": "{\"value\": \"{{payload.status}}\"}",
+        "dataType": "json",
+        "mergeContext": "",
+        "mustacheAltTags": false,
+        "outputProperties": [],
+        "blockInputOverrides": false,
+        "x": 1450,
+        "y": 700,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "ha_plan",
+        "type": "api-call-service",
+        "z": "power_manager_tab",
+        "name": "HA Plan",
+        "server": "7a1ecefa.85d54",
+        "version": 7,
+        "debugenabled": false,
+        "action": "input_text.set_value",
+        "floorId": [],
+        "areaId": [],
+        "deviceId": [],
+        "entityId": [
+            "input_text.power_manager_plan"
+        ],
+        "labelId": [],
+        "data": "{\"value\": \"{{payload.plan}}\"}",
+        "dataType": "json",
+        "mergeContext": "",
+        "mustacheAltTags": false,
+        "outputProperties": [],
+        "blockInputOverrides": false,
+        "x": 1440,
+        "y": 740,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "ha_actions",
+        "type": "api-call-service",
+        "z": "power_manager_tab",
+        "name": "HA Actions",
+        "server": "7a1ecefa.85d54",
+        "version": 7,
+        "debugenabled": false,
+        "action": "input_text.set_value",
+        "floorId": [],
+        "areaId": [],
+        "deviceId": [],
+        "entityId": [
+            "input_text.power_manager_actions"
+        ],
+        "labelId": [],
+        "data": "{\"value\": \"{{payload.actions}}\"}",
+        "dataType": "json",
+        "mergeContext": "",
+        "mustacheAltTags": false,
+        "outputProperties": [],
+        "blockInputOverrides": false,
+        "x": 1450,
+        "y": 780,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "notify",
+        "type": "api-call-service",
+        "z": "power_manager_tab",
+        "name": "Notify",
+        "server": "7a1ecefa.85d54",
+        "version": 7,
+        "debugenabled": false,
+        "action": "persistent_notification.create",
+        "floorId": [],
+        "areaId": [],
+        "deviceId": [],
+        "entityId": [],
+        "labelId": [],
+        "data": "{\"title\": \"{{payload.title}}\", \"message\": \"{{payload.message}}\", \"notification_id\": \"power_manager\"}",
+        "dataType": "json",
+        "mergeContext": "",
+        "mustacheAltTags": false,
+        "outputProperties": [],
+        "blockInputOverrides": false,
+        "x": 1430,
+        "y": 820,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "comment_header",
+        "type": "comment",
+        "z": "power_manager_tab",
+        "name": "Power Manager v6.0",
+        "info": "# Power Manager v6.0\n\nEnglish version with:\n- Input validation\n- Mutex for concurrent triggers\n- EV amp change threshold\n- Improved error handling\n- Centralized entity config\n- Log throttling",
+        "x": 140,
+        "y": 20,
+        "wires": []
+    },
+    {
+        "id": "7a1ecefa.85d54",
+        "type": "server",
+        "name": "Home Assistant",
+        "addon": true
+    }
+]

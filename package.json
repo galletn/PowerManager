@@ -1,0 +1,31 @@
+{
+  "name": "power-manager",
+  "version": "6.0.0",
+  "description": "Intelligent energy manager for Home Assistant via Node-RED",
+  "main": "src/logic/index.js",
+  "scripts": {
+    "test": "jest --coverage",
+    "test:watch": "jest --watch",
+    "test:unit": "jest test/unit",
+    "test:flow": "jest test/flow",
+    "lint": "eslint src test"
+  },
+  "keywords": [
+    "node-red",
+    "home-assistant",
+    "energy-management",
+    "solar",
+    "ev-charging"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "eslint": "^8.56.0",
+    "node-red": "^3.1.0",
+    "node-red-node-test-helper": "^0.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
