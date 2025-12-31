@@ -218,6 +218,7 @@ class HAClient:
             ovr_pool=get_str(e.ovr_pool, ""),
             ovr_boiler=get_str(e.ovr_boiler, ""),
             ovr_ev=get_str(e.ovr_ev, ""),
+            ovr_table_heater=get_str(e.ovr_table_heater, ""),
 
             # BMW Cars
             bmw_i5_battery=get_num(e.bmw_i5_battery),

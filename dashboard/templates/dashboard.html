@@ -7,134 +7,240 @@
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>Power Manager</h1>
-            <div id="status-indicator" class="status-ok">Connected</div>
+    <div class="dashboard">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-left">
+                <h1>Power Manager</h1>
+                <span class="season-badge" id="season-badge">WINTER</span>
+            </div>
+            <div class="header-right">
+                <span class="tariff-badge" id="tariff-badge">PEAK</span>
+                <span class="next-tariff" id="next-tariff">Off-peak at 22:00</span>
+                <div id="status-indicator" class="status-ok"></div>
+            </div>
         </header>
 
-        <!-- Power Flow Section -->
-        <section class="power-flow">
-            <div class="power-card grid">
-                <div class="icon">&#9889;</div>
-                <div class="label">Grid</div>
-                <div class="value" id="grid-power">--</div>
-                <div class="sub" id="grid-direction">--</div>
+        <!-- Main Grid -->
+        <div class="main-grid">
+            <!-- Left Column: Power Flow + Devices -->
+            <div class="left-column">
+                <!-- Power Flow -->
+                <section class="power-section">
+                    <div class="power-flow-visual">
+                        <div class="power-node solar">
+                            <div class="node-icon">☀️</div>
+                            <div class="node-value" id="pv-power">0W</div>
+                            <div class="node-label">Solar</div>
+                        </div>
+                        <div class="power-arrows">
+                            <div class="arrow solar-to-home" id="arrow-solar">→</div>
+                            <div class="arrow grid-to-home" id="arrow-grid">←</div>
+                        </div>
+                        <div class="power-node home">
+                            <div class="node-icon">🏠</div>
+                            <div class="node-value" id="net-power">0W</div>
+                            <div class="node-label">Home</div>
+                        </div>
+                        <div class="power-node grid">
+                            <div class="node-icon">⚡</div>
+                            <div class="node-value" id="grid-power">0W</div>
+                            <div class="node-label" id="grid-direction">Import</div>
+                        </div>
+                    </div>
+                    <div class="power-bar-container">
+                        <div class="power-bar">
+                            <div class="power-bar-fill" id="power-bar-fill"></div>
+                            <div class="power-bar-limit" id="power-bar-limit"></div>
+                        </div>
+                        <div class="power-bar-labels">
+                            <span id="power-used">0W</span>
+                            <span id="power-limit">/ 2500W limit</span>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Devices Grid -->
+                <section class="devices-section">
+                    <h2>Devices</h2>
+                    <div class="devices-grid">
+                        <!-- Boiler -->
+                        <div class="device" id="device-boiler">
+                            <div class="device-icon">🔥</div>
+                            <div class="device-info">
+                                <div class="device-name">Boiler</div>
+                                <div class="device-status">
+                                    <span class="status-dot" id="boiler-dot"></span>
+                                    <span id="boiler-state">OFF</span>
+                                </div>
+                                <div class="device-power" id="boiler-power">0W</div>
+                            </div>
+                            <div class="device-controls">
+                                <button onclick="setOverride('boiler', 'auto')" class="btn auto">A</button>
+                                <button onclick="setOverride('boiler', 'on')" class="btn on">On</button>
+                                <button onclick="setOverride('boiler', 'off')" class="btn off">Off</button>
+                            </div>
+                        </div>
+
+                        <!-- EV Charger -->
+                        <div class="device" id="device-ev">
+                            <div class="device-icon">🚗</div>
+                            <div class="device-info">
+                                <div class="device-name">EV Charger</div>
+                                <div class="device-status">
+                                    <span class="status-dot" id="ev-dot"></span>
+                                    <span id="ev-state">No car</span>
+                                </div>
+                                <div class="device-power"><span id="ev-power">0W</span> <span id="ev-amps" class="small">(0A)</span></div>
+                            </div>
+                            <div class="device-controls">
+                                <button onclick="setOverride('ev', 'auto')" class="btn auto">A</button>
+                                <button onclick="setOverride('ev', 'on')" class="btn on">On</button>
+                                <button onclick="setOverride('ev', 'off')" class="btn off">Off</button>
+                            </div>
+                        </div>
+
+                        <!-- Pool Pump -->
+                        <div class="device" id="device-pool">
+                            <div class="device-icon">🌊</div>
+                            <div class="device-info">
+                                <div class="device-name">Pool Pump</div>
+                                <div class="device-status">
+                                    <span class="status-dot" id="pool-dot"></span>
+                                    <span id="pool-pump-state">OFF</span>
+                                </div>
+                                <div class="device-power"><span id="pool-pump-power">0W</span> <span id="pool-ambient-temp" class="temp"></span></div>
+                            </div>
+                        </div>
+
+                        <!-- Table Heater -->
+                        <div class="device" id="device-table-heater">
+                            <div class="device-icon">🔥</div>
+                            <div class="device-info">
+                                <div class="device-name">Table Heater</div>
+                                <div class="device-status">
+                                    <span class="status-dot" id="table-heater-dot"></span>
+                                    <span id="table-heater-state">OFF</span>
+                                </div>
+                                <div class="device-power" id="table-heater-power">0W</div>
+                            </div>
+                            <div class="device-controls">
+                                <button onclick="setOverride('table_heater', 'auto')" class="btn auto">A</button>
+                                <button onclick="setOverride('table_heater', 'on')" class="btn on">On</button>
+                                <button onclick="setOverride('table_heater', 'off')" class="btn off">Off</button>
+                            </div>
+                        </div>
+
+                        <!-- Cars -->
+                        <div class="device car" id="device-i5">
+                            <div class="device-icon">🚘</div>
+                            <div class="device-info">
+                                <div class="device-name">BMW i5</div>
+                                <div class="device-status">
+                                    <span id="bmw-i5-location">Away</span>
+                                </div>
+                                <div class="device-power">
+                                    <span id="bmw-i5-battery">--%</span>
+                                    <span class="small" id="bmw-i5-range">--km</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="device car" id="device-ix1">
+                            <div class="device-icon">🚘</div>
+                            <div class="device-info">
+                                <div class="device-name">BMW iX1</div>
+                                <div class="device-status">
+                                    <span id="bmw-ix1-location">Away</span>
+                                </div>
+                                <div class="device-power">
+                                    <span id="bmw-ix1-battery">--%</span>
+                                    <span class="small" id="bmw-ix1-range">--km</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
             </div>
-            <div class="power-card solar">
-                <div class="icon">&#9728;</div>
-                <div class="label">Solar</div>
-                <div class="value" id="pv-power">--</div>
-                <div class="sub">Production</div>
+
+            <!-- Right Column: 24-Hour Schedule -->
+            <div class="right-column">
+                <section class="schedule-section">
+                    <h2>24-Hour Schedule</h2>
+
+                    <!-- Timeline Visual -->
+                    <div class="timeline-container">
+                        <div class="timeline" id="tariff-timeline"></div>
+                        <div class="timeline-labels">
+                            <span>Now</span>
+                            <span>+6h</span>
+                            <span>+12h</span>
+                            <span>+18h</span>
+                            <span>+24h</span>
+                        </div>
+                    </div>
+
+                    <!-- Time Estimates -->
+                    <div class="estimates-section" id="estimates-section">
+                        <div class="estimate-item" id="ev-estimate">
+                            <span class="estimate-icon">⚡</span>
+                            <span class="estimate-text">EV: Loading...</span>
+                        </div>
+                        <div class="estimate-item" id="boiler-estimate">
+                            <span class="estimate-icon">🔥</span>
+                            <span class="estimate-text">Boiler: Loading...</span>
+                        </div>
+                    </div>
+
+                    <!-- Schedule Cards -->
+                    <div class="schedule-cards">
+                        <div class="schedule-card ev-schedule">
+                            <div class="card-header">
+                                <span class="card-icon">⚡</span>
+                                <span class="card-title">EV Charging Windows</span>
+                            </div>
+                            <div class="card-content" id="ev-schedule-list">
+                                <div class="schedule-item">Loading...</div>
+                            </div>
+                        </div>
+
+                        <div class="schedule-card boiler-schedule">
+                            <div class="card-header">
+                                <span class="card-icon">🔥</span>
+                                <span class="card-title">Boiler Heating Plan</span>
+                            </div>
+                            <div class="card-content" id="boiler-schedule-list">
+                                <div class="schedule-item">Loading...</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Hourly Timetable -->
+                    <div class="timetable-section" id="timetable-section">
+                        <h3>Hourly Timetable</h3>
+                        <div class="timetable-grid" id="timetable-grid">
+                            Loading...
+                        </div>
+                    </div>
+
+                    <!-- Current Status Summary -->
+                    <div class="status-summary" id="status-summary">
+                        <div class="summary-item">Loading...</div>
+                    </div>
+                </section>
+
+                <!-- Alerts -->
+                <section class="alerts-section" id="alerts-section" style="display: none;">
+                    <h2>⚠️ Alerts</h2>
+                    <div id="alerts-list" class="alerts-list"></div>
+                </section>
             </div>
-            <div class="power-card home">
-                <div class="icon">&#127968;</div>
-                <div class="label">Home</div>
-                <div class="value" id="net-power">--</div>
-                <div class="sub">Consumption</div>
-            </div>
-        </section>
+        </div>
 
-        <!-- Devices Section -->
-        <section class="devices">
-            <h2>Devices</h2>
-            <div class="device-grid">
-                <!-- Boiler -->
-                <div class="device-card" id="device-boiler">
-                    <div class="device-header">
-                        <span class="device-icon">&#128293;</span>
-                        <span class="device-name">Boiler</span>
-                        <span class="device-state" id="boiler-state">OFF</span>
-                    </div>
-                    <div class="device-info">
-                        <span id="boiler-power">0W</span>
-                        <span id="boiler-decision" class="decision"></span>
-                    </div>
-                    <div class="device-controls">
-                        <button onclick="setOverride('boiler', 'auto')" class="btn-auto">Auto</button>
-                        <button onclick="setOverride('boiler', 'on')" class="btn-on">On</button>
-                        <button onclick="setOverride('boiler', 'off')" class="btn-off">Off</button>
-                    </div>
-                </div>
-
-                <!-- EV Charger -->
-                <div class="device-card" id="device-ev">
-                    <div class="device-header">
-                        <span class="device-icon">&#128664;</span>
-                        <span class="device-name">EV Charger</span>
-                        <span class="device-state" id="ev-state">--</span>
-                    </div>
-                    <div class="device-info">
-                        <span id="ev-power">0W</span>
-                        <span id="ev-amps">0A</span>
-                        <span id="ev-decision" class="decision"></span>
-                    </div>
-                    <div class="device-controls">
-                        <button onclick="setOverride('ev', 'auto')" class="btn-auto">Auto</button>
-                        <button onclick="setOverride('ev', 'on')" class="btn-on">On</button>
-                        <button onclick="setOverride('ev', 'off')" class="btn-off">Off</button>
-                    </div>
-                </div>
-
-                <!-- Pool Pump -->
-                <div class="device-card" id="device-pool-pump">
-                    <div class="device-header">
-                        <span class="device-icon">&#127754;</span>
-                        <span class="device-name">Pool Pump</span>
-                        <span class="device-state" id="pool-pump-state">--</span>
-                    </div>
-                    <div class="device-info">
-                        <span id="pool-pump-power">0W</span>
-                        <span id="pool-ambient-temp">--</span>
-                        <span id="pool-pump-decision" class="decision"></span>
-                    </div>
-                </div>
-
-                <!-- BMW i5 -->
-                <div class="device-card" id="device-bmw-i5">
-                    <div class="device-header">
-                        <span class="device-icon">&#128663;</span>
-                        <span class="device-name">BMW i5</span>
-                        <span class="device-state" id="bmw-i5-location">--</span>
-                    </div>
-                    <div class="device-info">
-                        <span id="bmw-i5-battery">--%</span>
-                        <span id="bmw-i5-range">--km</span>
-                    </div>
-                </div>
-
-                <!-- BMW iX1 -->
-                <div class="device-card" id="device-bmw-ix1">
-                    <div class="device-header">
-                        <span class="device-icon">&#128663;</span>
-                        <span class="device-name">BMW iX1</span>
-                        <span class="device-state" id="bmw-ix1-location">--</span>
-                    </div>
-                    <div class="device-info">
-                        <span id="bmw-ix1-battery">--%</span>
-                        <span id="bmw-ix1-range">--km</span>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <!-- Plan Section -->
-        <section class="plan-section">
-            <h2>Decision Plan</h2>
-            <div id="plan-list" class="plan-list">
-                <div class="plan-item">Waiting for data...</div>
-            </div>
-        </section>
-
-        <!-- Alerts Section -->
-        <section class="alerts-section" id="alerts-section" style="display: none;">
-            <h2>Alerts</h2>
-            <div id="alerts-list" class="alerts-list"></div>
-        </section>
-
-        <footer>
+        <!-- Footer -->
+        <footer class="footer">
             <span>Last update: <span id="last-update">--</span></span>
-            <span>Power Manager v1.0</span>
+            <span>Power Manager v2.0</span>
         </footer>
     </div>
 

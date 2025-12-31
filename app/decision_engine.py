@@ -110,6 +110,7 @@ def calculate_decisions(
         'ev': parse_override(inputs.ovr_ev),
         'boiler': parse_override(inputs.ovr_boiler),
         'pool': parse_override(inputs.ovr_pool),
+        'table_heater': parse_override(inputs.ovr_table_heater),
         'ac_living': parse_override(inputs.ovr_ac_living),
         'ac_bedroom': parse_override(inputs.ovr_ac_bedroom),
         'ac_office': parse_override(inputs.ovr_ac_office),
@@ -252,6 +253,7 @@ def calculate_decisions(
         'boiler_on': boiler_on,
         'ev_charging': ev_charging,
         'ev_limit': ev_limit,
+        'ht_on': ht_on,
     })
 
     plan.append(f"Available: {fmt_w(headroom)}")
@@ -300,6 +302,14 @@ def _apply_manual_overrides(decisions: Decisions, plan: list, ovr: dict, ctx: di
     elif ovr['pool'] == 'off':
         decisions.pool.action = 'off'
         plan.append("Pool: OVERRIDE OFF")
+
+    # Table heater override
+    if ovr['table_heater'] == 'on':
+        decisions.heater_table.action = 'on'
+        plan.append("Table heater: OVERRIDE ON")
+    elif ovr['table_heater'] == 'off':
+        decisions.heater_table.action = 'off'
+        plan.append("Table heater: OVERRIDE OFF")
 
 
 def _apply_winter_logic(decisions: Decisions, plan: list, ctx: dict):
@@ -356,6 +366,38 @@ def _apply_winter_logic(decisions: Decisions, plan: list, ctx: dict):
             if hour > deadline and can_switch('boiler', False):
                 decisions.boiler.action = 'off'
                 plan.append("Boiler: OFF (peak tariff)")
+
+    # Table heater - lowest priority, use remaining capacity during off-peak
+    if ovr['table_heater'] == 'auto':
+        table_power = config.heaters.table_power
+        ht_on = ctx['ht_on']
+
+        if tariff in ('off-peak', 'super-off-peak'):
+            # Calculate remaining headroom after other devices
+            remaining = headroom
+            if decisions.boiler.action == 'on':
+                remaining -= config.boiler.power
+            if decisions.ev.action in ('on', 'adjust'):
+                remaining -= decisions.ev.amps * config.ev.watts_per_amp
+            elif ctx['ev_charging']:
+                remaining -= ctx['ev_limit'] * config.ev.watts_per_amp
+
+            enough_power = remaining > table_power + hyst
+
+            if not ht_on and enough_power:
+                if can_switch('heater_table', True):
+                    decisions.heater_table.action = 'on'
+                    plan.append("Table heater: ON (off-peak, spare capacity)")
+            elif ht_on and remaining < table_power - hyst:
+                # Not enough power, turn off to make room for priority devices
+                if can_switch('heater_table', False):
+                    decisions.heater_table.action = 'off'
+                    plan.append("Table heater: OFF (capacity needed)")
+        elif tariff == 'peak' and ht_on:
+            # Turn off during peak - save money
+            if can_switch('heater_table', False):
+                decisions.heater_table.action = 'off'
+                plan.append("Table heater: OFF (peak tariff)")
 
 
 def _apply_summer_logic(decisions: Decisions, plan: list, ctx: dict):
@@ -576,5 +618,11 @@ def _calculate_final_headroom(
         decisions.boiler.action == 'none' and current_states.get('boiler_on')
     ):
         headroom -= config.boiler.power
+
+    # Table heater
+    if decisions.heater_table.action == 'on' or (
+        decisions.heater_table.action == 'none' and current_states.get('ht_on')
+    ):
+        headroom -= config.heaters.table_power
 
     return headroom

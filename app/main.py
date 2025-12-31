@@ -21,6 +21,8 @@ from .config import Config, load_config
 from .ha_client import HAClient
 from .decision_engine import calculate_decisions
 from .models import PowerInputs, AllDeviceStates, PowerStatus, Decisions
+from .tariff import generate_24h_schedule, format_24h_plan_text
+from .scheduler import generate_schedule, format_timetable_text
 
 # Configure logging
 logging.basicConfig(
@@ -54,7 +56,27 @@ async def lifespan(app: FastAPI):
         logging.getLogger().setLevel(logging.DEBUG)
 
     ha_client = HAClient(config)
-    await ha_client.connect()
+
+    # Wait for Home Assistant to be ready (retry with backoff)
+    max_retries = 30  # 5 minutes max wait
+    retry_delay = 10  # seconds
+    for attempt in range(max_retries):
+        try:
+            await ha_client.connect()
+            # Test connection
+            await ha_client.get_all_states()
+            logger.info("Connected to Home Assistant")
+            break
+        except Exception as e:
+            if attempt < max_retries - 1:
+                logger.warning(f"HA not ready (attempt {attempt + 1}/{max_retries}): {e}")
+                logger.info(f"Retrying in {retry_delay}s...")
+                if ha_client._session:
+                    await ha_client.close()
+                await asyncio.sleep(retry_delay)
+            else:
+                logger.error("Failed to connect to Home Assistant after all retries")
+                raise
 
     running = True
     asyncio.create_task(decision_loop())
@@ -94,6 +116,9 @@ async def decision_loop():
     """Main decision loop - runs every polling_interval seconds."""
     global last_inputs, last_decisions, last_plan, last_alerts, last_update, device_state
 
+    consecutive_errors = 0
+    max_consecutive_errors = 5
+
     while running:
         try:
             # Fetch all states from HA
@@ -129,8 +154,22 @@ async def decision_loop():
             if config.debug:
                 logger.debug(f"Plan: {result.plan}")
 
+            # Reset error counter on success
+            consecutive_errors = 0
+
         except Exception as e:
-            logger.error(f"Decision loop error: {e}", exc_info=True)
+            consecutive_errors += 1
+            logger.error(f"Decision loop error ({consecutive_errors}/{max_consecutive_errors}): {e}")
+
+            if consecutive_errors >= max_consecutive_errors:
+                logger.warning("Too many consecutive errors, reconnecting to HA...")
+                try:
+                    await ha_client.close()
+                    await ha_client.connect()
+                    consecutive_errors = 0
+                    logger.info("Reconnected to Home Assistant")
+                except Exception as reconnect_error:
+                    logger.error(f"Failed to reconnect: {reconnect_error}")
 
         await asyncio.sleep(config.polling_interval)
 
@@ -174,6 +213,14 @@ async def execute_decisions(decisions: Decisions, inputs: PowerInputs):
             await ha_client.set_climate(config.entities.pool_climate, 'off')
             logger.info("Pool Heat: OFF")
 
+        # Table Heater
+        if decisions.heater_table.action == 'on':
+            await ha_client.turn_on(config.entities.heater_table)
+            logger.info("Table Heater: ON")
+        elif decisions.heater_table.action == 'off':
+            await ha_client.turn_off(config.entities.heater_table)
+            logger.info("Table Heater: OFF")
+
     except Exception as e:
         logger.error(f"Failed to execute decisions: {e}", exc_info=True)
 
@@ -194,6 +241,8 @@ def _update_device_state(inputs: PowerInputs, decisions: Decisions):
     update_state('ev', inputs.ev_state == 132, decisions.ev.action)
     update_state('boiler', inputs.boiler_switch == 'on', decisions.boiler.action)
     update_state('pool_pump', inputs.pool_pump_switch == 'on', decisions.pool_pump.action)
+    update_state('heater_table', inputs.heater_table_switch == 'on',
+                 decisions.heater_table.action)
 
 
 # === API Routes ===
@@ -249,18 +298,44 @@ async def get_status():
                 "battery": last_inputs.bmw_ix1_battery,
                 "range": last_inputs.bmw_ix1_range,
                 "location": last_inputs.bmw_ix1_location
+            },
+            "table_heater": {
+                "state": last_inputs.heater_table_switch,
+                "power": config.heaters.table_power if last_inputs.heater_table_switch == 'on' else 0,
+                "decision": last_decisions.heater_table.action if last_decisions else "none"
             }
         },
         "plan": last_plan,
         "alerts": last_alerts,
-        "last_update": last_update.isoformat() if last_update else None
+        "last_update": last_update.isoformat() if last_update else None,
+        "schedule_24h": generate_24h_schedule(datetime.now(), config, last_inputs),
+        "timetable": _get_timetable_data()
     }
+
+
+def _get_timetable_data():
+    """Generate timetable data for dashboard."""
+    if config is None or last_inputs is None:
+        return None
+    try:
+        now = datetime.now()
+        timetable = generate_schedule(now, config, last_inputs)
+        return {
+            "ev_estimate": timetable.ev_estimate,
+            "boiler_estimate": timetable.boiler_estimate,
+            "warnings": timetable.warnings,
+            "hourly": timetable.timetable
+        }
+    except Exception as e:
+        logger.error(f"Failed to generate timetable: {e}")
+        return None
 
 
 @app.post("/api/override/{device}")
 async def set_override(device: str, mode: str):
     """Set manual override for a device."""
-    valid_devices = ['ev', 'boiler', 'pool', 'ac_living', 'ac_bedroom', 'ac_office', 'ac_mancave']
+    valid_devices = ['ev', 'boiler', 'pool', 'table_heater',
+                     'ac_living', 'ac_bedroom', 'ac_office', 'ac_mancave']
     valid_modes = ['auto', 'on', 'off']
 
     if device not in valid_devices:
@@ -273,6 +348,7 @@ async def set_override(device: str, mode: str):
         'ev': config.entities.ovr_ev,
         'boiler': config.entities.ovr_boiler,
         'pool': config.entities.ovr_pool,
+        'table_heater': config.entities.ovr_table_heater,
         'ac_living': config.entities.ovr_ac_living,
         'ac_bedroom': config.entities.ovr_ac_bedroom,
         'ac_office': config.entities.ovr_ac_office,
@@ -300,6 +376,31 @@ async def health():
     }
 
 
+@app.get("/api/schedule")
+async def get_schedule():
+    """Get 24-hour schedule/plan with timetable."""
+    if config is None:
+        return JSONResponse({"error": "Not initialized"}, status_code=503)
+
+    now = datetime.now()
+    schedule = generate_24h_schedule(now, config, last_inputs)
+
+    # Generate optimized timetable with time estimates
+    timetable = generate_schedule(now, config, last_inputs)
+
+    return {
+        "schedule": schedule,
+        "text": format_24h_plan_text(schedule),
+        "timetable": {
+            "ev_estimate": timetable.ev_estimate,
+            "boiler_estimate": timetable.boiler_estimate,
+            "warnings": timetable.warnings,
+            "hourly": timetable.timetable
+        },
+        "timetable_text": format_timetable_text(timetable)
+    }
+
+
 # CLI entry point
 def main():
     """Run the server."""
@@ -307,7 +408,7 @@ def main():
     uvicorn.run(
         "app.main:app",
         host="0.0.0.0",
-        port=8080,
+        port=8081,
         reload=False
     )
 

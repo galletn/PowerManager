@@ -1,16 +1,22 @@
-/* Power Manager Dashboard Styles */
+/* Power Manager Dashboard - Home Assistant Theme */
 
 :root {
-    --bg-primary: #1a1a2e;
-    --bg-secondary: #16213e;
-    --bg-card: #0f3460;
-    --text-primary: #eee;
-    --text-secondary: #aaa;
-    --accent-green: #4ade80;
-    --accent-red: #f87171;
-    --accent-yellow: #fbbf24;
-    --accent-blue: #60a5fa;
-    --accent-orange: #fb923c;
+    /* Home Assistant Light Theme Colors */
+    --ha-background: #f5f5f5;
+    --ha-card-background: #ffffff;
+    --ha-primary-color: #03a9f4;
+    --ha-accent-color: #ff9800;
+    --ha-text-primary: #212121;
+    --ha-text-secondary: #727272;
+    --ha-divider: #e0e0e0;
+    --ha-state-on: #4caf50;
+    --ha-state-off: #bdbdbd;
+    --ha-error: #db4437;
+    --ha-warning: #ffa600;
+    --ha-success: #43a047;
+    --ha-info: #039be5;
+    --ha-card-shadow: 0 2px 2px 0 rgba(0,0,0,0.14), 0 1px 5px 0 rgba(0,0,0,0.12), 0 3px 1px -2px rgba(0,0,0,0.2);
+    --ha-border-radius: 12px;
 }
 
 * {
@@ -20,254 +26,499 @@
 }
 
 body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background: var(--bg-primary);
-    color: var(--text-primary);
+    font-family: Roboto, 'Noto Sans', 'Noto Sans JP', 'Noto Sans KR', sans-serif;
+    background: var(--ha-background);
+    color: var(--ha-text-primary);
     min-height: 100vh;
+    line-height: 1.5;
 }
 
-.container {
-    max-width: 1200px;
+.dashboard {
+    max-width: 1400px;
     margin: 0 auto;
-    padding: 1rem;
+    padding: 16px;
 }
 
-/* Header */
-header {
+/* Header - HA Style */
+.header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 1rem 0;
-    border-bottom: 1px solid var(--bg-card);
-    margin-bottom: 1.5rem;
+    padding: 8px 0 16px 0;
+    margin-bottom: 16px;
 }
 
-header h1 {
-    font-size: 1.5rem;
-    font-weight: 600;
+.header h1 {
+    font-size: 24px;
+    font-weight: 400;
+    color: var(--ha-text-primary);
+}
+
+.header-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.season-badge {
+    background: var(--ha-info);
+    color: #fff;
+    padding: 4px 12px;
+    border-radius: 16px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.tariff-badge {
+    padding: 4px 12px;
+    border-radius: 16px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.tariff-badge.peak {
+    background: var(--ha-error);
+    color: #fff;
+}
+
+.tariff-badge.off-peak {
+    background: var(--ha-warning);
+    color: #000;
+}
+
+.tariff-badge.super-off-peak {
+    background: var(--ha-success);
+    color: #fff;
+}
+
+.next-tariff {
+    color: var(--ha-text-secondary);
+    font-size: 14px;
 }
 
 .status-ok {
-    background: var(--accent-green);
-    color: #000;
-    padding: 0.25rem 0.75rem;
-    border-radius: 1rem;
-    font-size: 0.875rem;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--ha-success);
 }
 
-.status-error {
-    background: var(--accent-red);
-    color: #000;
+.status-ok.disconnected {
+    background: var(--ha-error);
 }
 
-/* Power Flow Cards */
-.power-flow {
+/* Main Grid Layout */
+.main-grid {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 1rem;
-    margin-bottom: 2rem;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
 }
 
-.power-card {
-    background: var(--bg-card);
-    border-radius: 1rem;
-    padding: 1.5rem;
+@media (max-width: 1024px) {
+    .main-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.left-column, .right-column {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+/* HA Card Style */
+.power-section, .devices-section, .schedule-section, .alerts-section {
+    background: var(--ha-card-background);
+    border-radius: var(--ha-border-radius);
+    padding: 16px;
+    box-shadow: var(--ha-card-shadow);
+}
+
+h2 {
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--ha-text-primary);
+    margin-bottom: 16px;
+}
+
+/* Power Flow Visual */
+.power-flow-visual {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    padding: 16px 0;
+}
+
+.power-node {
     text-align: center;
+    min-width: 80px;
 }
 
-.power-card .icon {
-    font-size: 2rem;
-    margin-bottom: 0.5rem;
+.node-icon {
+    font-size: 32px;
+    margin-bottom: 8px;
 }
 
-.power-card .label {
-    color: var(--text-secondary);
-    font-size: 0.875rem;
-    margin-bottom: 0.5rem;
+.node-value {
+    font-size: 24px;
+    font-weight: 500;
+    color: var(--ha-text-primary);
 }
 
-.power-card .value {
-    font-size: 1.75rem;
-    font-weight: 700;
+.node-label {
+    font-size: 12px;
+    color: var(--ha-text-secondary);
+    margin-top: 4px;
 }
 
-.power-card .sub {
-    color: var(--text-secondary);
-    font-size: 0.75rem;
-    margin-top: 0.25rem;
+.power-node.solar .node-value { color: #ffc107; }
+.power-node.grid .node-value { color: var(--ha-primary-color); }
+.power-node.grid.exporting .node-value { color: var(--ha-success); }
+.power-node.home .node-value { color: var(--ha-accent-color); }
+
+.power-arrows {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-size: 24px;
+    color: var(--ha-text-secondary);
 }
 
-.power-card.grid .value { color: var(--accent-blue); }
-.power-card.solar .value { color: var(--accent-yellow); }
-.power-card.home .value { color: var(--accent-orange); }
-
-.power-card.exporting .value { color: var(--accent-green); }
-.power-card.importing .value { color: var(--accent-red); }
-
-/* Devices Section */
-.devices h2, .plan-section h2, .alerts-section h2 {
-    font-size: 1.125rem;
-    margin-bottom: 1rem;
-    color: var(--text-secondary);
+/* Power Bar */
+.power-bar-container {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--ha-divider);
 }
 
-.device-grid {
+.power-bar {
+    height: 8px;
+    background: var(--ha-divider);
+    border-radius: 4px;
+    position: relative;
+    overflow: hidden;
+}
+
+.power-bar-fill {
+    height: 100%;
+    background: var(--ha-success);
+    border-radius: 4px;
+    transition: width 0.3s, background 0.3s;
+}
+
+.power-bar-fill.warning {
+    background: var(--ha-warning);
+}
+
+.power-bar-fill.critical {
+    background: var(--ha-error);
+}
+
+.power-bar-labels {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--ha-text-secondary);
+}
+
+/* Devices Grid */
+.devices-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 1rem;
-    margin-bottom: 2rem;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
 }
 
-.device-card {
-    background: var(--bg-secondary);
-    border-radius: 0.75rem;
-    padding: 1rem;
-    border: 1px solid var(--bg-card);
-}
-
-.device-header {
+.device {
+    background: rgba(0,0,0,0.02);
+    border-radius: 8px;
+    padding: 12px;
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    margin-bottom: 0.75rem;
+    gap: 12px;
+    transition: background 0.2s;
+}
+
+.device:hover {
+    background: rgba(0,0,0,0.05);
+}
+
+.device.active {
+    border-left: 3px solid var(--ha-success);
 }
 
 .device-icon {
-    font-size: 1.25rem;
-}
-
-.device-name {
-    flex: 1;
-    font-weight: 500;
-}
-
-.device-state {
-    padding: 0.125rem 0.5rem;
-    border-radius: 0.25rem;
-    font-size: 0.75rem;
-    text-transform: uppercase;
-}
-
-.device-state.on {
-    background: var(--accent-green);
-    color: #000;
-}
-
-.device-state.off {
-    background: var(--bg-card);
-    color: var(--text-secondary);
-}
-
-.device-state.charging {
-    background: var(--accent-blue);
-    color: #000;
-}
-
-.device-state.home {
-    background: var(--accent-green);
-    color: #000;
-}
-
-.device-state.away {
-    background: var(--bg-card);
-    color: var(--text-secondary);
+    font-size: 24px;
+    width: 40px;
+    text-align: center;
 }
 
 .device-info {
-    display: flex;
-    gap: 1rem;
-    font-size: 0.875rem;
-    color: var(--text-secondary);
-    margin-bottom: 0.75rem;
+    flex: 1;
+    min-width: 0;
 }
 
-.device-info .decision {
-    margin-left: auto;
+.device-name {
+    font-size: 14px;
     font-weight: 500;
+    color: var(--ha-text-primary);
 }
 
-.decision.on { color: var(--accent-green); }
-.decision.off { color: var(--accent-red); }
-.decision.adjust { color: var(--accent-yellow); }
+.device-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--ha-text-secondary);
+    margin-top: 2px;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--ha-state-off);
+}
+
+.status-dot.on {
+    background: var(--ha-success);
+}
+
+.status-dot.charging {
+    background: var(--ha-primary-color);
+    animation: pulse 1.5s infinite;
+}
+
+.device-power {
+    font-size: 12px;
+    color: var(--ha-text-secondary);
+    margin-top: 4px;
+}
+
+.device-power .small {
+    opacity: 0.7;
+}
+
+.device-power .temp {
+    color: var(--ha-info);
+}
 
 .device-controls {
     display: flex;
-    gap: 0.5rem;
+    gap: 4px;
 }
 
-.device-controls button {
-    flex: 1;
-    padding: 0.5rem;
+.device-controls .btn {
+    width: 28px;
+    height: 28px;
     border: none;
-    border-radius: 0.375rem;
+    border-radius: 50%;
     cursor: pointer;
-    font-size: 0.75rem;
+    font-size: 10px;
     font-weight: 500;
-    transition: opacity 0.2s;
+    transition: transform 0.1s, opacity 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
-.device-controls button:hover {
-    opacity: 0.8;
+.device-controls .btn:hover {
+    transform: scale(1.1);
 }
 
-.btn-auto {
-    background: var(--bg-card);
-    color: var(--text-primary);
+.device-controls .btn:active {
+    transform: scale(0.95);
 }
 
-.btn-on {
-    background: var(--accent-green);
-    color: #000;
+.btn.auto {
+    background: rgba(0,0,0,0.1);
+    color: var(--ha-text-primary);
 }
 
-.btn-off {
-    background: var(--accent-red);
-    color: #000;
+.btn.on {
+    background: var(--ha-success);
+    color: #fff;
 }
 
-/* Plan Section */
-.plan-section {
-    background: var(--bg-secondary);
-    border-radius: 0.75rem;
-    padding: 1rem;
-    margin-bottom: 1rem;
+.btn.off {
+    background: var(--ha-error);
+    color: #fff;
 }
 
-.plan-list {
-    font-family: 'SF Mono', Monaco, monospace;
-    font-size: 0.875rem;
+/* Schedule Section */
+.timeline-container {
+    margin-bottom: 16px;
 }
 
-.plan-item {
-    padding: 0.375rem 0;
-    border-bottom: 1px solid var(--bg-card);
+.timeline {
+    display: flex;
+    height: 24px;
+    border-radius: 4px;
+    overflow: hidden;
 }
 
-.plan-item:last-child {
+.timeline-segment {
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    color: #fff;
+    font-weight: 500;
+}
+
+.timeline-segment.peak {
+    background: var(--ha-error);
+}
+
+.timeline-segment.off-peak {
+    background: var(--ha-warning);
+}
+
+.timeline-segment.super-off-peak {
+    background: var(--ha-success);
+}
+
+.timeline-now-marker {
+    position: absolute;
+    top: -4px;
+    bottom: -4px;
+    width: 3px;
+    background: var(--ha-text-primary);
+    border-radius: 2px;
+    z-index: 10;
+    box-shadow: 0 0 4px rgba(0,0,0,0.3);
+}
+
+.timeline-now-marker::after {
+    content: "NOW";
+    position: absolute;
+    top: -18px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 9px;
+    font-weight: 600;
+    color: var(--ha-text-primary);
+    white-space: nowrap;
+}
+
+.timeline-wrapper {
+    position: relative;
+}
+
+.timeline-labels {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 4px;
+    font-size: 10px;
+    color: var(--ha-text-secondary);
+}
+
+/* Schedule Cards */
+.schedule-cards {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+@media (max-width: 600px) {
+    .schedule-cards {
+        grid-template-columns: 1fr;
+    }
+}
+
+.schedule-card {
+    background: rgba(0,0,0,0.02);
+    border-radius: 8px;
+    padding: 12px;
+}
+
+.card-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.card-icon {
+    font-size: 16px;
+}
+
+.card-title {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--ha-text-secondary);
+}
+
+.card-content {
+    font-size: 13px;
+}
+
+.schedule-item {
+    padding: 6px 0;
+    border-bottom: 1px solid var(--ha-divider);
+    display: flex;
+    justify-content: space-between;
+}
+
+.schedule-item:last-child {
     border-bottom: none;
+}
+
+.schedule-time {
+    color: var(--ha-primary-color);
+    font-weight: 500;
+}
+
+.schedule-reason {
+    color: var(--ha-text-secondary);
+    font-size: 11px;
+}
+
+/* Status Summary */
+.status-summary {
+    background: rgba(0,0,0,0.02);
+    border-radius: 8px;
+    padding: 12px;
+}
+
+.summary-item {
+    padding: 4px 0;
+    font-size: 13px;
+    color: var(--ha-text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.summary-item::before {
+    content: "•";
+    color: var(--ha-primary-color);
 }
 
 /* Alerts Section */
 .alerts-section {
-    background: var(--accent-red);
-    border-radius: 0.75rem;
-    padding: 1rem;
-    margin-bottom: 1rem;
+    background: rgba(244, 67, 54, 0.1);
+    border: 1px solid var(--ha-error);
 }
 
 .alerts-section h2 {
-    color: #000;
-}
-
-.alerts-list {
-    color: #000;
+    color: var(--ha-error);
 }
 
 .alert-item {
-    padding: 0.5rem;
-    background: rgba(0,0,0,0.1);
-    border-radius: 0.375rem;
-    margin-bottom: 0.5rem;
+    padding: 8px 12px;
+    background: rgba(244, 67, 54, 0.2);
+    border-radius: 4px;
+    margin-bottom: 8px;
+    font-size: 13px;
 }
 
 .alert-item:last-child {
@@ -275,34 +526,17 @@ header h1 {
 }
 
 .alert-item.warning {
-    background: var(--accent-yellow);
-}
-
-.alert-item.critical {
-    background: var(--accent-red);
-    font-weight: bold;
+    background: rgba(255, 152, 0, 0.2);
 }
 
 /* Footer */
-footer {
+.footer {
     display: flex;
     justify-content: space-between;
-    padding: 1rem 0;
-    color: var(--text-secondary);
-    font-size: 0.75rem;
-    border-top: 1px solid var(--bg-card);
-    margin-top: 1rem;
-}
-
-/* Responsive */
-@media (max-width: 768px) {
-    .power-flow {
-        grid-template-columns: 1fr;
-    }
-
-    .device-grid {
-        grid-template-columns: 1fr;
-    }
+    padding: 16px 0;
+    color: var(--ha-text-secondary);
+    font-size: 12px;
+    margin-top: 16px;
 }
 
 /* Animations */
@@ -311,6 +545,130 @@ footer {
     50% { opacity: 0.5; }
 }
 
+/* Estimates Section */
+.estimates-section {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 16px;
+    padding: 12px;
+    background: rgba(0,0,0,0.02);
+    border-radius: 8px;
+}
+
+.estimate-item {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--ha-card-background);
+    border-radius: 8px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
+.estimate-icon {
+    font-size: 18px;
+}
+
+.estimate-text {
+    font-size: 13px;
+    color: var(--ha-text-primary);
+}
+
+.estimate-text .needed {
+    color: var(--ha-warning);
+    font-weight: 500;
+}
+
+.estimate-text .ok {
+    color: var(--ha-success);
+}
+
+/* Timetable Section */
+.timetable-section {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--ha-divider);
+}
+
+.timetable-section h3 {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--ha-text-secondary);
+    margin-bottom: 12px;
+}
+
+.timetable-grid {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 4px;
+}
+
+.timetable-hour {
+    padding: 8px 4px;
+    text-align: center;
+    border-radius: 4px;
+    font-size: 11px;
+}
+
+.timetable-hour .hour-label {
+    font-weight: 500;
+    color: var(--ha-text-primary);
+}
+
+.timetable-hour .hour-devices {
+    font-size: 10px;
+    color: var(--ha-text-secondary);
+    margin-top: 2px;
+}
+
+.timetable-hour.peak {
+    background: rgba(219, 68, 55, 0.15);
+}
+
+.timetable-hour.off-peak {
+    background: rgba(255, 166, 0, 0.15);
+}
+
+.timetable-hour.super-off-peak {
+    background: rgba(67, 160, 71, 0.15);
+}
+
+.timetable-hour.has-devices {
+    border: 2px solid var(--ha-primary-color);
+}
+
+.timetable-warnings {
+    margin-top: 12px;
+    padding: 8px 12px;
+    background: rgba(255, 152, 0, 0.1);
+    border-left: 3px solid var(--ha-warning);
+    border-radius: 4px;
+    font-size: 12px;
+    color: var(--ha-text-secondary);
+}
+
+/* Loading State */
 .loading {
-    animation: pulse 1.5s infinite;
+    opacity: 0.5;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .dashboard {
+        padding: 8px;
+    }
+
+    .header h1 {
+        font-size: 18px;
+    }
+
+    .devices-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .power-flow-visual {
+        flex-wrap: wrap;
+        gap: 16px;
+    }
 }

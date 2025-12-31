@@ -66,6 +66,7 @@ class PowerInputs:
     ovr_pool: str = ''
     ovr_boiler: str = ''
     ovr_ev: str = ''
+    ovr_table_heater: str = ''
 
     # BMW Cars
     bmw_i5_battery: Optional[float] = None

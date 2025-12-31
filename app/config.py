@@ -144,6 +144,7 @@ class EntitiesConfig:
     ovr_pool: str = "input_select.pm_override_pool"
     ovr_boiler: str = "input_select.pm_override_boiler"
     ovr_ev: str = "input_select.pm_override_ev"
+    ovr_table_heater: str = "input_select.pm_override_table_heater"
 
     # Status helpers
     status_text: str = "input_text.power_manager_status"

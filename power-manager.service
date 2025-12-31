@@ -1,21 +1,30 @@
 [Unit]
 Description=Power Manager - Home Energy Management
-After=network.target
+After=network-online.target
 Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
 
 [Service]
 Type=simple
-User=pi
-Group=pi
-WorkingDirectory=/home/pi/PowerManager
-ExecStart=/usr/bin/python3 -m app.main
+User=nicolas
+Group=nicolas
+WorkingDirectory=/home/nicolas/PowerManager
+ExecStart=/home/nicolas/PowerManager/venv/bin/python3 -m app.main
 Restart=always
-RestartSec=10
-StandardOutput=journal
-StandardError=journal
+RestartSec=30
 
 # Environment
-Environment="PM_CONFIG=/home/pi/PowerManager/config.yaml"
+Environment="PM_CONFIG=/home/nicolas/PowerManager/config.yaml"
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=power-manager
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
 
 [Install]
 WantedBy=multi-user.target
