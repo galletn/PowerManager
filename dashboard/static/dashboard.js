@@ -38,7 +38,7 @@ function buildTimeline(schedule) {
     const totalHours = 24;
 
     // Build segments with better time display
-    let html = '<div class="timeline-wrapper" style="position:relative;display:flex;height:32px;border-radius:4px;overflow:hidden;">';
+    let html = '<div class="timeline-wrapper" style="position:relative;display:flex;width:100%;height:32px;border-radius:4px;overflow:hidden;">';
 
     periods.forEach((period, idx) => {
         const duration = period.duration_hours || 1;
