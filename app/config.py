@@ -31,6 +31,7 @@ class EVConfig:
     max_amps: int = 16
     watts_per_amp: int = 692
     amp_change_threshold: int = 2
+    max_power: int = 4000  # Max charging power in watts (single phase limit)
 
 
 @dataclass

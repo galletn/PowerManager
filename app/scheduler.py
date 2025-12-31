@@ -165,10 +165,10 @@ def generate_schedule(
                 car_capacity = 65  # BMW iX1 eDrive20
 
             if car_battery is not None:
-                # Calculate realistic charging power based on grid limits
-                # Charger max: 16A × 692W = 11kW, but grid limit is 8kW super-off-peak
-                # Use effective power considering grid limit and base load buffer
-                charger_max_kw = config.ev.max_amps * config.ev.watts_per_amp / 1000
+                # Calculate realistic charging power based on:
+                # 1. EV charger max power setting (e.g., 4kW for single phase)
+                # 2. Grid limit minus base load buffer
+                charger_max_kw = config.ev.max_power / 1000  # Use configured max power
                 grid_limit_kw = config.max_import.super_off_peak / 1000
                 base_load_buffer_kw = 0.5  # 500W for house base load
                 effective_charging_kw = min(charger_max_kw, grid_limit_kw - base_load_buffer_kw)
@@ -211,9 +211,10 @@ def generate_schedule(
             can_run_during_peak=False
         ))
 
-    # EV charging
+    # EV charging - use effective power limited by grid, not max charger power
     if ev_estimate.get('needed'):
-        ev_power = config.ev.max_amps * config.ev.watts_per_amp
+        # Use the same effective power calculation as the estimate
+        ev_power = int(ev_estimate.get('charging_power_kw', 7.5) * 1000)
         devices.append(DeviceNeed(
             name='ev',
             power=ev_power,

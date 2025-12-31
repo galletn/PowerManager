@@ -128,8 +128,11 @@ function updateSchedule(schedule) {
 function buildDeviceTimelines(timetable, limits) {
     if (!timetable || !timetable.hourly) return;
 
+    // Get EV effective power from estimate (default 7.5kW if not available)
+    const evPowerKw = timetable.ev_estimate?.charging_power_kw || 7.5;
+
     const devices = {
-        'ev': { bar: document.getElementById('ev-timeline'), label: document.getElementById('ev-power-label'), power: 11000 },
+        'ev': { bar: document.getElementById('ev-timeline'), label: document.getElementById('ev-power-label'), power: evPowerKw * 1000 },
         'boiler': { bar: document.getElementById('boiler-timeline'), label: document.getElementById('boiler-power-label'), power: 2500 },
         'table_heater': { bar: document.getElementById('heater-timeline'), label: document.getElementById('heater-power-label'), power: 4100 },
         'pool_pump': { bar: document.getElementById('pool-timeline'), label: document.getElementById('pool-power-label'), power: 500 }
@@ -137,6 +140,14 @@ function buildDeviceTimelines(timetable, limits) {
 
     const hours = timetable.hourly.slice(0, 24);
     const totalHours = 24;
+
+    // Update power labels
+    Object.keys(devices).forEach(deviceKey => {
+        const device = devices[deviceKey];
+        if (device.label) {
+            device.label.textContent = `${(device.power / 1000).toFixed(1)}kW`;
+        }
+    });
 
     // Build activity array for each device
     Object.keys(devices).forEach(deviceKey => {
