@@ -34,26 +34,25 @@ function buildTimeline(schedule) {
     // Clear existing
     timeline.innerHTML = '';
 
-    // Calculate total hours and build segments
-    let html = '<div class="timeline-wrapper" style="position:relative;display:flex;height:24px;border-radius:4px;overflow:hidden;">';
-
     const periods = schedule.tariff_periods;
     const totalHours = 24;
 
-    periods.forEach(period => {
+    // Build segments with better time display
+    let html = '<div class="timeline-wrapper" style="position:relative;display:flex;height:32px;border-radius:4px;overflow:hidden;">';
+
+    periods.forEach((period, idx) => {
         const duration = period.duration_hours || 1;
         const widthPercent = (duration / totalHours) * 100;
-        const tariffClass = period.tariff.replace('-', '-');
 
-        html += `<div class="timeline-segment ${period.tariff}" style="width:${widthPercent}%" title="${period.start}-${period.end}: ${period.tariff.toUpperCase()}">${period.start}</div>`;
+        // Only show time if segment is wide enough (>8%)
+        const showTime = widthPercent > 8;
+        const timeLabel = showTime ? period.start : '';
+
+        html += `<div class="timeline-segment ${period.tariff}" style="width:${widthPercent}%" title="${period.start} - ${period.end}: ${period.tariff.replace('-', ' ').toUpperCase()} (${duration}h)">${timeLabel}</div>`;
     });
 
-    // Add now marker - calculate position based on current time
-    const now = new Date();
-    const currentHour = now.getHours() + now.getMinutes() / 60;
-    const nowPosition = (currentHour / totalHours) * 100;
-
-    html += `<div class="timeline-now-marker" style="left:${nowPosition}%"></div>`;
+    // NOW marker at position 0 (start of timeline = now)
+    html += `<div class="timeline-now-marker" style="left:0%"></div>`;
     html += '</div>';
 
     timeline.innerHTML = html;
