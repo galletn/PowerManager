@@ -1,139 +1,184 @@
 # Power Manager
 
-Intelligent energy management system for Home Assistant using Node-RED.
-
-Automatically controls devices based on:
-- **Electricity tariff** (peak / off-peak / super off-peak)
-- **Season** (summer = cooling priority, winter = heating priority)
-- **Solar export** (cooling only when exporting to grid)
-- **EV charging** (smart charging based on available power)
-- **Manual overrides** (family members can override any device)
+Intelligent home energy management for Home Assistant. Optimizes power consumption by automatically controlling devices based on solar production, grid tariffs, and consumption patterns.
 
 ## Features
 
-- Fully testable logic with 90%+ test coverage
-- Deterministic decision engine
-- Mock Home Assistant adapter for local testing
-- Scenario-based regression testing
-- CI/CD with GitHub Actions
-
-## Repository Structure
-
-```
-Power Manager/
-├── node-red/
-│   └── flows.json              # Main Node-RED flow
-│
-├── src/
-│   ├── logic/                  # Pure business logic (testable)
-│   │   ├── tariff.js           # Tariff calculation
-│   │   ├── decisions.js        # Device decision engine
-│   │   ├── timing.js           # Timing/hysteresis
-│   │   ├── validation.js       # Input sanitization
-│   │   └── formatting.js       # Output formatting
-│   │
-│   ├── adapters/
-│   │   └── mock-adapter.js     # HA mock for testing
-│   │
-│   └── config/
-│       └── default-config.js   # Default configuration
-│
-├── test/
-│   ├── unit/                   # Unit tests
-│   ├── flow/                   # Flow integration tests
-│   └── fixtures/               # Test scenarios (JSON)
-│
-├── homeassistant/
-│   ├── helpers/                # HA input helpers
-│   └── dashboard/              # Lovelace cards
-│
-├── docs/
-│   ├── README.md               # Full documentation
-│   └── TESTING.md              # Testing guide
-│
-├── archive/
-│   └── v5/                     # Archived Dutch version
-│
-├── package.json
-├── jest.config.js
-└── .github/workflows/test.yml  # CI pipeline
-```
+- **Smart EV Charging**: Charges during off-peak hours in winter, uses solar surplus in summer
+- **Boiler Control**: Heats water during off-peak/solar surplus, ensures hot water by deadline
+- **Pool Heat Pump**: Manages pool heating based on season and available power
+- **Frost Protection**: Monitors pool pump during freezing temperatures with alerts
+- **BMW Low Battery Warnings**: Evening alerts if car battery is low and not plugged in
+- **Belgian Tariff Support**: Peak, off-peak, and super-off-peak rate optimization
+- **Manual Overrides**: Force devices on/off via Home Assistant
+- **Web Dashboard**: Embeddable in Home Assistant via iframe
 
 ## Quick Start
 
-### Development Setup
+### Option 1: Run Directly on Linux (Recommended)
 
 ```bash
-# Install dependencies
-npm install
+# Clone and install
+git clone https://github.com/galletn/PowerManager.git
+cd PowerManager
+pip install -r requirements.txt
 
-# Run tests
-npm test
+# Configure
+cp config.yaml.example config.yaml
+nano config.yaml  # Add your HA token
 
-# Run tests in watch mode
-npm run test:watch
+# Run
+python -m app.main
 ```
 
-### Home Assistant Setup
+### Option 2: Systemd Service
 
-1. **Add Helpers**: Copy `homeassistant/helpers/helpers.yaml` to your HA config
-2. **Import Flow**: Import `node-red/flows.json` into Node-RED
-3. **Add Dashboard**: Copy cards from `homeassistant/dashboard/dashboard.yaml`
+Create `/etc/systemd/system/power-manager.service`:
+
+```ini
+[Unit]
+Description=Power Manager
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/PowerManager
+ExecStart=/usr/bin/python3 -m app.main
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Then:
+```bash
+sudo systemctl enable power-manager
+sudo systemctl start power-manager
+```
+
+### Option 3: Docker
+
+```bash
+docker build -t power-manager .
+docker run -d -p 8080:8080 -v ./config.yaml:/app/config.yaml power-manager
+```
+
+## Configuration
+
+Edit `config.yaml`:
+
+```yaml
+home_assistant:
+  url: "https://your-ha-instance:8123"
+  token: "your-long-lived-access-token"
+  verify_ssl: false
+
+polling_interval: 30  # seconds
+
+max_import:
+  peak: 2500       # Watts
+  off_peak: 5000
+  super_off_peak: 8000
+
+frost_protection:
+  enabled: true
+  temp_threshold: 5      # Start protection below this temp
+  notify_entity: "mobile_app_your_phone"
+
+bmw_low_battery:
+  enabled: true
+  battery_threshold: 50  # Warn below this %
+  check_hours: [20, 21, 22]
+```
+
+## Home Assistant Setup
+
+### 1. Create Override Helpers
+
+Add to `configuration.yaml` or create via UI:
+
+```yaml
+input_select:
+  pm_override_boiler:
+    name: "PM Boiler Override"
+    options: ["Auto", "On", "Off"]
+    initial: "Auto"
+  pm_override_ev:
+    name: "PM EV Override"
+    options: ["Auto", "On", "Off"]
+    initial: "Auto"
+  pm_override_pool:
+    name: "PM Pool Override"
+    options: ["Auto", "On", "Off"]
+    initial: "Auto"
+```
+
+See [homeassistant/helpers/helpers.yaml](homeassistant/helpers/helpers.yaml) for full list.
+
+### 2. Embed Dashboard
+
+Add to `configuration.yaml`:
+
+```yaml
+panel_iframe:
+  power_manager:
+    title: "Power Manager"
+    icon: mdi:flash
+    url: "http://your-linux-server:8080"
+```
+
+## API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/` | GET | Dashboard |
+| `/api/status` | GET | Current power status (JSON) |
+| `/api/override/{device}` | POST | Set manual override |
+| `/api/health` | GET | Health check |
+
+## Project Structure
+
+```
+PowerManager/
+├── app/
+│   ├── main.py              # FastAPI application
+│   ├── config.py            # Configuration
+│   ├── models.py            # Data models
+│   ├── ha_client.py         # HA REST API client
+│   ├── decision_engine.py   # Core decision logic
+│   └── tariff.py            # Belgian tariff calculations
+├── dashboard/
+│   ├── templates/dashboard.html
+│   └── static/{style.css, dashboard.js}
+├── tests/                   # 56 pytest tests
+├── homeassistant/
+│   └── helpers/helpers.yaml # HA override entities
+├── config.yaml
+├── requirements.txt
+└── Dockerfile
+```
 
 ## Testing
 
 ```bash
-# Run all tests with coverage
-npm test
+# Run all tests
+pytest tests/ -v
 
-# Run unit tests only
-npm run test:unit
-
-# Run specific test file
-npx jest test/unit/tariff.test.js
+# Run with coverage
+pytest tests/ --cov=app --cov-report=html
 ```
-
-See [docs/TESTING.md](docs/TESTING.md) for detailed testing documentation.
 
 ## Controlled Devices
 
-| Device | Power | Season |
-|--------|-------|--------|
-| EV Charger (ABB Terra AC) | 4-11 kW | Both |
-| Water Heater (Boiler) | 2.5 kW | Both |
-| Pool Heat Pump | 2 kW | Summer |
-| AC Living Room | 1.5 kW | Both |
-| AC Mancave | 1 kW | Both |
-| AC Office | 1 kW | Summer |
-| AC Bedroom | 1 kW | Summer |
-| Electric Heater (Table) | 4.1 kW | Winter |
-| Electric Heater (Right) | 2.5 kW | Winter |
-
-## Architecture
-
-The system uses a clean separation between:
-
-1. **Pure Logic** (`src/logic/`) - Testable functions with no I/O
-2. **Adapters** (`src/adapters/`) - Interface to Home Assistant
-3. **Flow** (`node-red/flows.json`) - Orchestration and wiring
-
-This allows testing the decision engine without Node-RED or Home Assistant.
-
-## Version History
-
-| Version | Changes |
-|---------|---------|
-| v6.1 | Testable architecture, extracted logic modules, CI/CD |
-| v6.0 | English translation, input validation, mutex, EV amp threshold |
-| v5.1 | Forward-looking plan display, heater timing info |
-| v5.0 | Manual overrides, seasonal logic, 4 AC units |
-
-## Documentation
-
-- **Full Guide**: [docs/README.md](docs/README.md)
-- **Testing**: [docs/TESTING.md](docs/TESTING.md)
-- **Analysis**: [ANALYSIS.md](ANALYSIS.md)
+| Device | Power | Control |
+|--------|-------|---------|
+| EV Charger (ABB Terra AC) | 4-11 kW | On/Off + Amps |
+| Water Heater (Boiler) | 2.5 kW | On/Off |
+| Pool Heat Pump | 2 kW | Climate mode |
+| Pool Pump | 0.5 kW | On/Off (frost) |
 
 ## License
 
-MIT License - Feel free to use and modify.
+MIT

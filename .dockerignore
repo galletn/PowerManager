@@ -1,0 +1,40 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.coverage
+htmlcov
+.mypy_cache
+.ruff_cache
+
+# Node.js (legacy)
+node_modules
+node-red
+src
+test
+*.js
+package*.json
+jest.config.js
+
+# IDE
+.vscode
+.idea
+*.swp
+
+# Docs
+*.md
+docs/
+archive/
+
+# Test files
+tests/
+coverage/
+
+# Local config
+config.yaml.local
+*.log

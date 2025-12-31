@@ -1,0 +1,316 @@
+/* Power Manager Dashboard Styles */
+
+:root {
+    --bg-primary: #1a1a2e;
+    --bg-secondary: #16213e;
+    --bg-card: #0f3460;
+    --text-primary: #eee;
+    --text-secondary: #aaa;
+    --accent-green: #4ade80;
+    --accent-red: #f87171;
+    --accent-yellow: #fbbf24;
+    --accent-blue: #60a5fa;
+    --accent-orange: #fb923c;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    min-height: 100vh;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 1rem;
+}
+
+/* Header */
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 0;
+    border-bottom: 1px solid var(--bg-card);
+    margin-bottom: 1.5rem;
+}
+
+header h1 {
+    font-size: 1.5rem;
+    font-weight: 600;
+}
+
+.status-ok {
+    background: var(--accent-green);
+    color: #000;
+    padding: 0.25rem 0.75rem;
+    border-radius: 1rem;
+    font-size: 0.875rem;
+}
+
+.status-error {
+    background: var(--accent-red);
+    color: #000;
+}
+
+/* Power Flow Cards */
+.power-flow {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.power-card {
+    background: var(--bg-card);
+    border-radius: 1rem;
+    padding: 1.5rem;
+    text-align: center;
+}
+
+.power-card .icon {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+}
+
+.power-card .label {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    margin-bottom: 0.5rem;
+}
+
+.power-card .value {
+    font-size: 1.75rem;
+    font-weight: 700;
+}
+
+.power-card .sub {
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    margin-top: 0.25rem;
+}
+
+.power-card.grid .value { color: var(--accent-blue); }
+.power-card.solar .value { color: var(--accent-yellow); }
+.power-card.home .value { color: var(--accent-orange); }
+
+.power-card.exporting .value { color: var(--accent-green); }
+.power-card.importing .value { color: var(--accent-red); }
+
+/* Devices Section */
+.devices h2, .plan-section h2, .alerts-section h2 {
+    font-size: 1.125rem;
+    margin-bottom: 1rem;
+    color: var(--text-secondary);
+}
+
+.device-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.device-card {
+    background: var(--bg-secondary);
+    border-radius: 0.75rem;
+    padding: 1rem;
+    border: 1px solid var(--bg-card);
+}
+
+.device-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.device-icon {
+    font-size: 1.25rem;
+}
+
+.device-name {
+    flex: 1;
+    font-weight: 500;
+}
+
+.device-state {
+    padding: 0.125rem 0.5rem;
+    border-radius: 0.25rem;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+}
+
+.device-state.on {
+    background: var(--accent-green);
+    color: #000;
+}
+
+.device-state.off {
+    background: var(--bg-card);
+    color: var(--text-secondary);
+}
+
+.device-state.charging {
+    background: var(--accent-blue);
+    color: #000;
+}
+
+.device-state.home {
+    background: var(--accent-green);
+    color: #000;
+}
+
+.device-state.away {
+    background: var(--bg-card);
+    color: var(--text-secondary);
+}
+
+.device-info {
+    display: flex;
+    gap: 1rem;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.75rem;
+}
+
+.device-info .decision {
+    margin-left: auto;
+    font-weight: 500;
+}
+
+.decision.on { color: var(--accent-green); }
+.decision.off { color: var(--accent-red); }
+.decision.adjust { color: var(--accent-yellow); }
+
+.device-controls {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.device-controls button {
+    flex: 1;
+    padding: 0.5rem;
+    border: none;
+    border-radius: 0.375rem;
+    cursor: pointer;
+    font-size: 0.75rem;
+    font-weight: 500;
+    transition: opacity 0.2s;
+}
+
+.device-controls button:hover {
+    opacity: 0.8;
+}
+
+.btn-auto {
+    background: var(--bg-card);
+    color: var(--text-primary);
+}
+
+.btn-on {
+    background: var(--accent-green);
+    color: #000;
+}
+
+.btn-off {
+    background: var(--accent-red);
+    color: #000;
+}
+
+/* Plan Section */
+.plan-section {
+    background: var(--bg-secondary);
+    border-radius: 0.75rem;
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+
+.plan-list {
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 0.875rem;
+}
+
+.plan-item {
+    padding: 0.375rem 0;
+    border-bottom: 1px solid var(--bg-card);
+}
+
+.plan-item:last-child {
+    border-bottom: none;
+}
+
+/* Alerts Section */
+.alerts-section {
+    background: var(--accent-red);
+    border-radius: 0.75rem;
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+
+.alerts-section h2 {
+    color: #000;
+}
+
+.alerts-list {
+    color: #000;
+}
+
+.alert-item {
+    padding: 0.5rem;
+    background: rgba(0,0,0,0.1);
+    border-radius: 0.375rem;
+    margin-bottom: 0.5rem;
+}
+
+.alert-item:last-child {
+    margin-bottom: 0;
+}
+
+.alert-item.warning {
+    background: var(--accent-yellow);
+}
+
+.alert-item.critical {
+    background: var(--accent-red);
+    font-weight: bold;
+}
+
+/* Footer */
+footer {
+    display: flex;
+    justify-content: space-between;
+    padding: 1rem 0;
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    border-top: 1px solid var(--bg-card);
+    margin-top: 1rem;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .power-flow {
+        grid-template-columns: 1fr;
+    }
+
+    .device-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Animations */
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.loading {
+    animation: pulse 1.5s infinite;
+}

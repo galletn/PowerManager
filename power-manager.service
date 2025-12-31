@@ -1,0 +1,21 @@
+[Unit]
+Description=Power Manager - Home Energy Management
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/PowerManager
+ExecStart=/usr/bin/python3 -m app.main
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Environment
+Environment="PM_CONFIG=/home/pi/PowerManager/config.yaml"
+
+[Install]
+WantedBy=multi-user.target

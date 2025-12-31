@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Power Manager</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Power Manager</h1>
+            <div id="status-indicator" class="status-ok">Connected</div>
+        </header>
+
+        <!-- Power Flow Section -->
+        <section class="power-flow">
+            <div class="power-card grid">
+                <div class="icon">&#9889;</div>
+                <div class="label">Grid</div>
+                <div class="value" id="grid-power">--</div>
+                <div class="sub" id="grid-direction">--</div>
+            </div>
+            <div class="power-card solar">
+                <div class="icon">&#9728;</div>
+                <div class="label">Solar</div>
+                <div class="value" id="pv-power">--</div>
+                <div class="sub">Production</div>
+            </div>
+            <div class="power-card home">
+                <div class="icon">&#127968;</div>
+                <div class="label">Home</div>
+                <div class="value" id="net-power">--</div>
+                <div class="sub">Consumption</div>
+            </div>
+        </section>
+
+        <!-- Devices Section -->
+        <section class="devices">
+            <h2>Devices</h2>
+            <div class="device-grid">
+                <!-- Boiler -->
+                <div class="device-card" id="device-boiler">
+                    <div class="device-header">
+                        <span class="device-icon">&#128293;</span>
+                        <span class="device-name">Boiler</span>
+                        <span class="device-state" id="boiler-state">OFF</span>
+                    </div>
+                    <div class="device-info">
+                        <span id="boiler-power">0W</span>
+                        <span id="boiler-decision" class="decision"></span>
+                    </div>
+                    <div class="device-controls">
+                        <button onclick="setOverride('boiler', 'auto')" class="btn-auto">Auto</button>
+                        <button onclick="setOverride('boiler', 'on')" class="btn-on">On</button>
+                        <button onclick="setOverride('boiler', 'off')" class="btn-off">Off</button>
+                    </div>
+                </div>
+
+                <!-- EV Charger -->
+                <div class="device-card" id="device-ev">
+                    <div class="device-header">
+                        <span class="device-icon">&#128664;</span>
+                        <span class="device-name">EV Charger</span>
+                        <span class="device-state" id="ev-state">--</span>
+                    </div>
+                    <div class="device-info">
+                        <span id="ev-power">0W</span>
+                        <span id="ev-amps">0A</span>
+                        <span id="ev-decision" class="decision"></span>
+                    </div>
+                    <div class="device-controls">
+                        <button onclick="setOverride('ev', 'auto')" class="btn-auto">Auto</button>
+                        <button onclick="setOverride('ev', 'on')" class="btn-on">On</button>
+                        <button onclick="setOverride('ev', 'off')" class="btn-off">Off</button>
+                    </div>
+                </div>
+
+                <!-- Pool Pump -->
+                <div class="device-card" id="device-pool-pump">
+                    <div class="device-header">
+                        <span class="device-icon">&#127754;</span>
+                        <span class="device-name">Pool Pump</span>
+                        <span class="device-state" id="pool-pump-state">--</span>
+                    </div>
+                    <div class="device-info">
+                        <span id="pool-pump-power">0W</span>
+                        <span id="pool-ambient-temp">--</span>
+                        <span id="pool-pump-decision" class="decision"></span>
+                    </div>
+                </div>
+
+                <!-- BMW i5 -->
+                <div class="device-card" id="device-bmw-i5">
+                    <div class="device-header">
+                        <span class="device-icon">&#128663;</span>
+                        <span class="device-name">BMW i5</span>
+                        <span class="device-state" id="bmw-i5-location">--</span>
+                    </div>
+                    <div class="device-info">
+                        <span id="bmw-i5-battery">--%</span>
+                        <span id="bmw-i5-range">--km</span>
+                    </div>
+                </div>
+
+                <!-- BMW iX1 -->
+                <div class="device-card" id="device-bmw-ix1">
+                    <div class="device-header">
+                        <span class="device-icon">&#128663;</span>
+                        <span class="device-name">BMW iX1</span>
+                        <span class="device-state" id="bmw-ix1-location">--</span>
+                    </div>
+                    <div class="device-info">
+                        <span id="bmw-ix1-battery">--%</span>
+                        <span id="bmw-ix1-range">--km</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Plan Section -->
+        <section class="plan-section">
+            <h2>Decision Plan</h2>
+            <div id="plan-list" class="plan-list">
+                <div class="plan-item">Waiting for data...</div>
+            </div>
+        </section>
+
+        <!-- Alerts Section -->
+        <section class="alerts-section" id="alerts-section" style="display: none;">
+            <h2>Alerts</h2>
+            <div id="alerts-list" class="alerts-list"></div>
+        </section>
+
+        <footer>
+            <span>Last update: <span id="last-update">--</span></span>
+            <span>Power Manager v1.0</span>
+        </footer>
+    </div>
+
+    <script src="/static/dashboard.js"></script>
+</body>
+</html>

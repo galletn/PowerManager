@@ -1,0 +1,169 @@
+"""Pydantic models for Power Manager."""
+
+from dataclasses import dataclass, field
+from datetime import datetime
+from enum import IntEnum
+from typing import Optional
+
+
+class EVState(IntEnum):
+    """ABB Terra AC charger states."""
+    NO_CAR = 128
+    READY = 129
+    FULL = 130
+    CHARGING = 132
+
+
+@dataclass
+class PowerInputs:
+    """Validated sensor readings from Home Assistant."""
+    # Power readings (Watts)
+    p1_power: float = 0.0       # Grid import
+    p1_return: float = 0.0      # Grid export (for calculating true consumption)
+    pv_power: float = 0.0       # Solar production
+
+    # Boiler
+    boiler_switch: str = 'off'
+    boiler_power: float = 0.0
+    boiler_force: str = 'off'
+
+    # Pool
+    pool_season: str = 'off'
+    pool_power: float = 0.0
+    pool_climate: str = 'off'
+    pool_pump_switch: str = 'on'
+    pool_pump_power: float = 0.0
+    pool_ambient_temp: Optional[float] = None
+
+    # EV Charger
+    ev_state: int = EVState.NO_CAR
+    ev_switch: str = 'off'
+    ev_power: float = 0.0
+    ev_limit: int = 6
+
+    # Heaters
+    heater_right_switch: str = 'off'
+    heater_table_switch: str = 'off'
+
+    # AC Units
+    ac_living_state: str = 'off'
+    ac_mancave_state: str = 'off'
+    ac_office_state: str = 'off'
+    ac_bedroom_state: str = 'off'
+    ac_living_power: float = 0.0
+    ac_office_power: float = 0.0
+
+    # Temperatures
+    temp_living: float = 20.0
+    temp_bedroom: float = 20.0
+    temp_mancave: float = 20.0
+
+    # Overrides
+    ovr_ac_living: str = ''
+    ovr_ac_bedroom: str = ''
+    ovr_ac_office: str = ''
+    ovr_ac_mancave: str = ''
+    ovr_pool: str = ''
+    ovr_boiler: str = ''
+    ovr_ev: str = ''
+
+    # BMW Cars
+    bmw_i5_battery: Optional[float] = None
+    bmw_i5_range: Optional[float] = None
+    bmw_i5_location: str = 'unknown'
+    bmw_ix1_battery: Optional[float] = None
+    bmw_ix1_range: Optional[float] = None
+    bmw_ix1_location: str = 'unknown'
+
+
+@dataclass
+class DeviceDecision:
+    """Decision for a single device."""
+    action: str = 'none'  # 'none', 'on', 'off', 'adjust'
+    reason: str = ''
+
+
+@dataclass
+class EVDecision(DeviceDecision):
+    """Decision for EV charger with amp setting."""
+    amps: int = 6
+
+
+@dataclass
+class ACDecision(DeviceDecision):
+    """Decision for AC unit with mode and temperature."""
+    mode: str = 'off'  # 'off', 'heat', 'cool', 'auto'
+    temp: int = 22
+
+
+@dataclass
+class Decisions:
+    """All device decisions."""
+    ev: EVDecision = field(default_factory=lambda: EVDecision())
+    boiler: DeviceDecision = field(default_factory=lambda: DeviceDecision())
+    pool: DeviceDecision = field(default_factory=lambda: DeviceDecision())
+    pool_pump: DeviceDecision = field(default_factory=lambda: DeviceDecision())
+    heater_right: DeviceDecision = field(default_factory=lambda: DeviceDecision())
+    heater_table: DeviceDecision = field(default_factory=lambda: DeviceDecision())
+    ac_living: ACDecision = field(default_factory=lambda: ACDecision())
+    ac_mancave: ACDecision = field(default_factory=lambda: ACDecision(temp=17))
+    ac_office: ACDecision = field(default_factory=lambda: ACDecision())
+    ac_bedroom: ACDecision = field(default_factory=lambda: ACDecision())
+
+
+@dataclass
+class DeviceState:
+    """State of a single device with timing info."""
+    on: bool = False
+    last_change: float = 0.0  # timestamp
+
+
+@dataclass
+class AllDeviceStates:
+    """All device states for timing/hysteresis."""
+    ev: DeviceState = field(default_factory=lambda: DeviceState())
+    boiler: DeviceState = field(default_factory=lambda: DeviceState())
+    pool: DeviceState = field(default_factory=lambda: DeviceState())
+    pool_pump: DeviceState = field(default_factory=lambda: DeviceState(on=True))
+    heater_right: DeviceState = field(default_factory=lambda: DeviceState())
+    heater_table: DeviceState = field(default_factory=lambda: DeviceState())
+    ac_living: DeviceState = field(default_factory=lambda: DeviceState())
+    ac_mancave: DeviceState = field(default_factory=lambda: DeviceState())
+    ac_office: DeviceState = field(default_factory=lambda: DeviceState())
+    ac_bedroom: DeviceState = field(default_factory=lambda: DeviceState())
+
+
+@dataclass
+class Alert:
+    """Alert/notification to send."""
+    level: str  # 'warning', 'critical'
+    message: str
+    notify_entity: Optional[str] = None
+    car_name: Optional[str] = None
+    battery: Optional[float] = None
+    range_km: Optional[float] = None
+
+
+@dataclass
+class DecisionResult:
+    """Result from decision engine."""
+    decisions: Decisions
+    plan: list[str]
+    headroom: float
+    alerts: list[Alert]
+    meta: dict
+
+
+@dataclass
+class PowerStatus:
+    """Current power status for dashboard."""
+    grid_import: float
+    grid_export: float
+    pv_production: float
+    net_power: float
+    is_exporting: bool
+    tariff: str
+    devices: dict
+    plan: list[str]
+    alerts: list[dict]
+    last_update: datetime
