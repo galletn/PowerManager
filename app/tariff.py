@@ -80,15 +80,14 @@ def get_tariff(dt: datetime) -> Tuple[str, dict]:
         11:00 - 17:00: Super off-peak
         17:00 - 00:00: Off-peak
     """
-    current_date = dt.date()
-    holidays = get_belgian_holidays(dt.year)
     weekday = dt.weekday()  # 0=Monday, 6=Sunday
     hour = dt.hour
 
     is_weekend = weekday >= 5
-    is_holiday = current_date in holidays
+    # Note: Belgian electricity tariffs typically do NOT treat holidays as weekends
+    # Only actual weekends (Saturday/Sunday) get the weekend schedule
 
-    if is_weekend or is_holiday:
+    if is_weekend:
         # Weekend/holiday schedule
         if hour < 1:
             # 00:00-01:00: off-peak
