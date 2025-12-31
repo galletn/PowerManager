@@ -168,6 +168,25 @@ class HAClient:
             val = get_num(entity_id, float(default))
             return int(val) if val is not None else default
 
+        def get_ev_state(entity_id: str, default: int = 128) -> int:
+            """Get EV charger state from state_code attribute (ABB Terra returns string in state)."""
+            state = states.get(entity_id, {})
+            attrs = state.get("attributes", {})
+            # ABB Terra AC returns numeric code in state_code attribute
+            if "state_code" in attrs:
+                try:
+                    return int(attrs["state_code"])
+                except (ValueError, TypeError):
+                    pass
+            # Fallback to parsing state value
+            val = state.get("state")
+            if val in (None, "unavailable", "unknown", ""):
+                return default
+            try:
+                return int(val)
+            except (ValueError, TypeError):
+                return default
+
         return PowerInputs(
             # Power readings
             p1_power=get_num(e.p1, 0.0, self.units_p1),
@@ -188,7 +207,7 @@ class HAClient:
             pool_ambient_temp=get_num(e.pool_ambient_temp),
 
             # EV Charger
-            ev_state=get_int(e.ev_state, EVState.NO_CAR),
+            ev_state=get_ev_state(e.ev_state, EVState.NO_CAR),
             ev_switch=get_str(e.ev_switch, "off"),
             ev_power=get_num(e.ev_power, 0.0),
             ev_limit=get_int(e.ev_limit, 6),
