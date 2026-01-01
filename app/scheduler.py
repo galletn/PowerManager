@@ -307,46 +307,17 @@ def generate_schedule(
         can_run_during_peak=False
     ))
 
-    # Dishwasher - if running or waiting, show in schedule
-    if inputs:
-        dw_power = inputs.dishwasher_power
-        dw_switch_on = inputs.dishwasher_switch == 'on'
-        dw_running = dw_power > 50
-        dw_waiting = dw_switch_on and dw_power < 50
-
-        # Check current tariff - if already cheap, dishwasher should run now
-        current_tariff, _ = get_tariff(now)
-        is_cheap_now = current_tariff in ('off-peak', 'super-off-peak')
-
-        if dw_running:
-            # Actually running - show from NOW for remaining duration
-            devices.append(DeviceNeed(
-                name='dishwasher',
-                power=1900,
-                hours_needed=2,
-                priority=5,
-                can_run_during_peak=True,
-                start_now=True  # Show from current time
-            ))
-        elif dw_waiting and is_cheap_now:
-            # Waiting but approved to run now - show from NOW
-            devices.append(DeviceNeed(
-                name='dishwasher',
-                power=1900,
-                hours_needed=2,
-                priority=5,
-                can_run_during_peak=True,
-                start_now=True
-            ))
-        elif dw_waiting:
-            # Waiting during peak - schedule for next cheap tariff
-            devices.append(DeviceNeed(
-                name='dishwasher',
-                power=1900,
-                hours_needed=2,
-                priority=5,
-                can_run_during_peak=False
-            ))
+    # Dishwasher - only show when CURRENTLY running (power > 50W)
+    # Don't try to predict "waiting" state - switch may stay on after cycle finishes
+    if inputs and inputs.dishwasher_power > 50:
+        devices.append(DeviceNeed(
+            name='dishwasher',
+            power=1900,
+            hours_needed=2,
+            priority=5,
+            can_run_during_peak=True,
+            start_now=True  # Show from current time when running
+        ))
 
     # Washing machine - only show when CURRENTLY running (informational only)
     if inputs and inputs.washing_machine_power > 50:
