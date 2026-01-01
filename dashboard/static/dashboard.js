@@ -308,7 +308,7 @@ function updateConsumers(consumers) {
 
     if (trackedEl) trackedEl.textContent = formatWatts(consumers.total_tracked);
     if (untrackedEl) untrackedEl.textContent = formatWatts(consumers.untracked);
-    if (importEl) importEl.textContent = formatWatts(consumers.total_import);
+    if (importEl) importEl.textContent = formatWatts(consumers.total_home);
 
     // Update grid with individual consumers
     const grid = document.getElementById('consumers-grid');

@@ -411,14 +411,15 @@ async def _get_consumers_data():
         ]
 
         # Calculate totals
+        # Home consumption = grid import + solar production
         total_tracked = sum(c["power"] for c in consumers)
-        total_import = last_inputs.p1_power if last_inputs else 0
-        untracked = max(0, total_import - total_tracked)
+        total_home = (last_inputs.p1_power + last_inputs.pv_power) if last_inputs else 0
+        untracked = max(0, total_home - total_tracked)
 
         return {
             "items": consumers,
             "total_tracked": total_tracked,
-            "total_import": total_import,
+            "total_home": total_home,
             "untracked": untracked
         }
     except Exception as e:

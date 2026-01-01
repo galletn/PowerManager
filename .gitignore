@@ -3,3 +3,12 @@
 node_modules
 coverage/
 states.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Config
+config.yaml

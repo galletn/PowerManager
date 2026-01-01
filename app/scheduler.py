@@ -187,18 +187,31 @@ def generate_schedule(
     # Define device scheduling priorities
     devices = []
 
-    # Always add pool pump if cold (frost protection)
-    # Use actual current pump power if available (user adjusts speed)
-    if inputs and inputs.pool_ambient_temp and inputs.pool_ambient_temp <= config.frost_protection.temp_threshold:
-        # Use current pump power, fallback to config minimum
+    # Pool pump scheduling
+    # In winter (non-solar season), pool pump runs 24/7 for circulation/frost protection
+    # In summer, only add if running (user controlled via pool_season)
+    if inputs:
+        pool_pump_running = inputs.pool_pump_switch == 'on'
         pump_power = int(inputs.pool_pump_power) if inputs.pool_pump_power > 0 else config.frost_protection.pump_min_power
-        devices.append(DeviceNeed(
-            name='pool_pump',
-            power=pump_power,
-            hours_needed=24,  # Run continuously when cold
-            priority=1,
-            can_run_during_peak=True  # Frost protection overrides cost
-        ))
+
+        if not summer and pool_pump_running:
+            # Winter: pool pump runs 24/7 for maintenance/frost protection
+            devices.append(DeviceNeed(
+                name='pool_pump',
+                power=pump_power,
+                hours_needed=24,
+                priority=1,
+                can_run_during_peak=True
+            ))
+        elif inputs.pool_ambient_temp and inputs.pool_ambient_temp <= config.frost_protection.temp_threshold:
+            # Cold weather: force frost protection even in summer
+            devices.append(DeviceNeed(
+                name='pool_pump',
+                power=pump_power,
+                hours_needed=24,
+                priority=1,
+                can_run_during_peak=True
+            ))
 
     # Boiler - HIGHEST priority after frost protection (no hot water = no shower!)
     if boiler_estimate.get('needed'):
