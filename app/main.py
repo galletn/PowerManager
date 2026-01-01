@@ -967,10 +967,10 @@ def main():
     startup_config = load_config()
     port = startup_config.port
 
-    # SSL certificate paths
-    cert_dir = Path(__file__).parent.parent / "certs"
-    ssl_keyfile = cert_dir / "key.pem"
-    ssl_certfile = cert_dir / "cert.pem"
+    # SSL certificate paths (Let's Encrypt format)
+    ssl_dir = Path(__file__).parent.parent / "ssl"
+    ssl_keyfile = ssl_dir / "privkey.pem"
+    ssl_certfile = ssl_dir / "fullchain.pem"
 
     # Use HTTPS if certificates exist, otherwise fall back to HTTP
     ssl_config = {}
@@ -979,7 +979,7 @@ def main():
             "ssl_keyfile": str(ssl_keyfile),
             "ssl_certfile": str(ssl_certfile),
         }
-        logger.info(f"Starting with HTTPS (certificates from {cert_dir})")
+        logger.info(f"Starting with HTTPS (certificates from {ssl_dir})")
     else:
         logger.warning("SSL certificates not found, starting with HTTP")
 

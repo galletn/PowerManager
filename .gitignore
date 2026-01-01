@@ -12,3 +12,10 @@ __pycache__/
 
 # Config
 config.yaml
+
+# SSL certificates (never commit these!)
+ssl/
+certs/
+*.pem
+*.key
+*.crt
