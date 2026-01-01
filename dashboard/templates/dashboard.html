@@ -78,6 +78,7 @@
                                     <span id="boiler-state">OFF</span>
                                 </div>
                                 <div class="device-power" id="boiler-power" aria-live="polite">0W</div>
+                                <div class="device-last-activity" id="boiler-last-heated"></div>
                             </div>
                             <div class="device-controls" role="group" aria-label="Boiler override controls">
                                 <button onclick="setOverride('boiler', 'auto')" class="btn auto" aria-label="Set boiler to auto mode" data-device="boiler" data-mode="auto">A</button>
@@ -96,6 +97,7 @@
                                     <span id="ev-state">No car</span>
                                 </div>
                                 <div class="device-power"><span id="ev-power" aria-live="polite">0W</span> <span id="ev-amps" class="small">(0A)</span></div>
+                                <div class="device-last-activity" id="ev-last-charged"></div>
                             </div>
                             <div class="device-controls" role="group" aria-label="EV charger override controls">
                                 <button onclick="setOverride('ev', 'auto')" class="btn auto" aria-label="Set EV charger to auto mode" data-device="ev" data-mode="auto">A</button>

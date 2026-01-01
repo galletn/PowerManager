@@ -313,6 +313,14 @@ h2 {
     color: var(--ha-info);
 }
 
+.device-last-activity {
+    font-size: 10px;
+    color: var(--ha-text-secondary);
+    opacity: 0.8;
+    margin-top: 2px;
+    font-style: italic;
+}
+
 .device-controls {
     display: flex;
     gap: 4px;

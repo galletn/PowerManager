@@ -501,6 +501,21 @@ async def get_status():
     p1_return = last_inputs.p1_return if last_inputs.p1_return is not None else 0
     pv_power = last_inputs.pv_power if last_inputs.pv_power is not None else 0
 
+    # Get last_changed timestamps from raw HA states
+    ha_states = app_state.last_ha_states or {}
+    ev_state_data = ha_states.get(config.entities.ev_state, {})
+    boiler_state_data = ha_states.get(config.entities.boiler_switch, {})
+
+    # EV: last_charged is when it reached state 130 (Full)
+    ev_last_charged = None
+    if last_inputs.ev_state == 130:  # Currently full
+        ev_last_charged = ev_state_data.get("last_changed")
+
+    # Boiler: last_heated is when it was turned off (after being on)
+    boiler_last_heated = None
+    if last_inputs.boiler_switch == "off":
+        boiler_last_heated = boiler_state_data.get("last_changed")
+
     return {
         "grid_import": p1_power,
         "grid_export": p1_return,
@@ -513,7 +528,8 @@ async def get_status():
                 "power": last_inputs.boiler_power,
                 "decision": (
                     last_decisions.boiler.action if last_decisions else "none"
-                )
+                ),
+                "last_heated": boiler_last_heated
             },
             "ev": {
                 "state": last_inputs.ev_state,
@@ -521,7 +537,8 @@ async def get_status():
                 "amps": last_inputs.ev_limit,
                 "decision": (
                     last_decisions.ev.action if last_decisions else "none"
-                )
+                ),
+                "last_charged": ev_last_charged
             },
             "pool_pump": {
                 "state": last_inputs.pool_pump_switch,

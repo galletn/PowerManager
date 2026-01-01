@@ -57,6 +57,28 @@ function formatWatts(watts) {
     return `${Math.round(watts)}W`;
 }
 
+// Format ISO timestamp to relative time (e.g., "2h ago", "yesterday at 15:47")
+function formatRelativeTime(isoString) {
+    if (!isoString) return null;
+
+    const date = new Date(isoString);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    if (diffMins < 1) return 'just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays === 1) return `yesterday ${timeStr}`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+
+    return date.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ` ${timeStr}`;
+}
+
 // Get EV state text
 function getEvStateText(state) {
     const states = {
@@ -500,6 +522,10 @@ function updateDashboard(data) {
             if (boilerDot) boilerDot.className = 'status-dot' + (isOn ? ' on' : '');
             setTextIfExists('boiler-power', formatWatts(data.devices.boiler.power));
 
+            // Show last heated time
+            const lastHeated = formatRelativeTime(data.devices.boiler.last_heated);
+            setTextIfExists('boiler-last-heated', lastHeated ? `Heated ${lastHeated}` : '');
+
             const boilerDevice = document.getElementById('device-boiler');
             if (boilerDevice) boilerDevice.classList.toggle('active', isOn);
         }
@@ -514,6 +540,10 @@ function updateDashboard(data) {
             if (evDot) evDot.className = 'status-dot' + (isCharging ? ' charging' : (data.devices.ev.state === 129 ? ' on' : ''));
             setTextIfExists('ev-power', formatWatts(data.devices.ev.power));
             setTextIfExists('ev-amps', `(${data.devices.ev.amps}A)`);
+
+            // Show last charged time (only when EV is full)
+            const lastCharged = formatRelativeTime(data.devices.ev.last_charged);
+            setTextIfExists('ev-last-charged', lastCharged ? `Charged ${lastCharged}` : '');
 
             const evDevice = document.getElementById('device-ev');
             if (evDevice) evDevice.classList.toggle('active', isCharging);
