@@ -167,18 +167,20 @@ app = FastAPI(
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:8080",
-        "http://localhost:8081",
-        "http://127.0.0.1:8080",
-        "http://127.0.0.1:8081",
-        "http://192.168.68.78:8080",
-        "https://gallet.duckdns.org:8123",  # Home Assistant
-    ],
+    allow_origins=["*"],  # Allow all origins for iframe embedding in HA app
     allow_credentials=True,
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
+
+# Middleware to allow iframe embedding (for HA companion app)
+@app.middleware("http")
+async def add_iframe_headers(request: Request, call_next):
+    response = await call_next(request)
+    # Allow embedding in iframes from any origin
+    response.headers["X-Frame-Options"] = "ALLOWALL"
+    response.headers["Content-Security-Policy"] = "frame-ancestors *"
+    return response
 
 # Setup templates
 templates_dir = Path(__file__).parent.parent / "dashboard" / "templates"
