@@ -211,6 +211,7 @@ def calculate_decisions(
             'ev_limit': ev_limit,
             'boiler_on': boiler_on,
             'boiler_full': boiler_full,
+            'boiler_force': boiler_force,
             'hr_on': hr_on,
             'ht_on': ht_on,
             'ac_states': ac_states,
@@ -224,6 +225,8 @@ def calculate_decisions(
             'can_switch': can_switch,
             'device_state': device_state,
             'now': now_ts,
+            'is_exporting': is_exporting,
+            'pv': pv,
         })
     else:
         _apply_summer_logic(decisions, plan, {
@@ -328,30 +331,62 @@ def _apply_winter_logic(decisions: Decisions, plan: list, ctx: dict):
     boiler_will_use = 0
     hour = ctx['date'].hour + ctx['date'].minute / 60
     deadline = config.boiler.deadline_winter
+    boiler_force = ctx.get('boiler_force', False)
+    is_exporting = ctx.get('is_exporting', False)
+    pv = ctx.get('pv', 0)
 
     if ovr['boiler'] == 'auto':
-        if tariff == 'peak' and ctx['boiler_on']:
-            # Turn off during peak (even if full) - save electricity
+        # Force heat overrides everything - heat anytime
+        if boiler_force and not ctx['boiler_full']:
+            if not ctx['boiler_on']:
+                if can_switch('boiler', True):
+                    decisions.boiler.action = 'on'
+                    boiler_will_use = config.boiler.power
+                    effective_headroom -= boiler_will_use
+                    plan.append("Boiler: ON (force heat)")
+            else:
+                boiler_will_use = config.boiler.power
+                effective_headroom -= boiler_will_use
+
+        elif tariff == 'peak' and ctx['boiler_on'] and not boiler_force:
+            # Turn off during peak (unless force heat)
             if hour > deadline and can_switch('boiler', False):
                 decisions.boiler.action = 'off'
                 plan.append("Boiler: OFF (peak tariff)")
-        elif not ctx['boiler_full']:
-            # Only consider turning on if not already full
-            if tariff in ('off-peak', 'super-off-peak'):
-                approaching_deadline = hour >= (deadline - 2) and hour < deadline
-                enough_power = effective_headroom > config.boiler.power + hyst
 
-                if not ctx['boiler_on'] and (enough_power or approaching_deadline):
-                    if can_switch('boiler', True):
-                        decisions.boiler.action = 'on'
-                        boiler_will_use = config.boiler.power
-                        effective_headroom -= boiler_will_use
-                        reason = "approaching deadline" if approaching_deadline else "off-peak"
-                        plan.append(f"Boiler: ON ({reason})")
-                elif ctx['boiler_on']:
-                    # Boiler already on, reserve its power
+        elif not ctx['boiler_full']:
+            # Determine if we should heat
+            approaching_deadline = hour >= (deadline - 2) and hour < deadline
+            enough_power = effective_headroom > config.boiler.power + hyst
+            has_solar_surplus = is_exporting and pv > config.boiler.power
+
+            # Only heat during:
+            # 1. Super off-peak (cheapest rate, 01:00-07:00)
+            # 2. Solar surplus (free energy)
+            # 3. Approaching deadline (need hot water by morning)
+            should_heat = False
+            reason = ""
+
+            if tariff == 'super-off-peak' and enough_power:
+                should_heat = True
+                reason = "super-off-peak"
+            elif has_solar_surplus:
+                should_heat = True
+                reason = "solar surplus"
+            elif approaching_deadline and tariff in ('off-peak', 'super-off-peak'):
+                should_heat = True
+                reason = "approaching deadline"
+
+            if should_heat and not ctx['boiler_on']:
+                if can_switch('boiler', True):
+                    decisions.boiler.action = 'on'
                     boiler_will_use = config.boiler.power
                     effective_headroom -= boiler_will_use
+                    plan.append(f"Boiler: ON ({reason})")
+            elif ctx['boiler_on']:
+                # Boiler already on, reserve its power
+                boiler_will_use = config.boiler.power
+                effective_headroom -= boiler_will_use
 
     # === EV CHARGING (Priority 3 - use remaining capacity) ===
     if ovr['ev'] == 'auto' and ctx['ev_plugged'] and not ctx['ev_done']:
