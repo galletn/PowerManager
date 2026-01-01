@@ -6,11 +6,13 @@
     <title>Timeline & Plan</title>
     <link rel="stylesheet" href="/static/style.css">
     <style>
-        /* Compact styles for small display */
+        /* Compact styles for small display - with fallback colors for older browsers */
         body {
             margin: 0;
             padding: 0;
-            background: var(--ha-background);
+            background: #f5f5f5;
+            background: var(--ha-background, #f5f5f5);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         }
         .dashboard-compact {
             padding: 8px;
@@ -25,7 +27,8 @@
             justify-content: space-between;
             align-items: center;
             padding: 4px 8px;
-            background: var(--ha-card-bg);
+            background: #ffffff;
+            background: var(--ha-card-bg, #ffffff);
             border-radius: 8px;
             margin-bottom: 8px;
             flex-shrink: 0;
@@ -33,7 +36,8 @@
         .compact-header h1 {
             font-size: 14px;
             margin: 0;
-            color: var(--ha-text);
+            color: #212121;
+            color: var(--ha-text, #212121);
         }
         .compact-header .badges {
             display: flex;
@@ -44,7 +48,8 @@
             flex: 1;
             display: flex;
             flex-direction: column;
-            background: var(--ha-card-bg);
+            background: #ffffff;
+            background: var(--ha-card-bg, #ffffff);
             border-radius: 12px;
             padding: 12px;
             overflow-y: auto;
@@ -77,10 +82,12 @@
         .plan-section h3 {
             font-size: 12px;
             margin: 0 0 6px 0;
-            color: var(--ha-text);
+            color: #212121;
+            color: var(--ha-text, #212121);
         }
         .status-summary {
-            background: var(--ha-secondary-bg);
+            background: rgba(0,0,0,0.04);
+            background: var(--ha-secondary-bg, rgba(0,0,0,0.04));
             border-radius: 6px;
             padding: 8px;
             max-height: 120px;
@@ -102,7 +109,8 @@
         }
         .estimate-item {
             font-size: 11px;
-            background: var(--ha-secondary-bg);
+            background: rgba(0,0,0,0.04);
+            background: var(--ha-secondary-bg, rgba(0,0,0,0.04));
             padding: 4px 8px;
             border-radius: 4px;
         }
@@ -112,7 +120,8 @@
             align-items: center;
             padding: 4px 8px;
             font-size: 10px;
-            color: var(--ha-text-secondary);
+            color: #727272;
+            color: var(--ha-text-secondary, #727272);
             margin-top: 8px;
             flex-shrink: 0;
         }

@@ -129,7 +129,7 @@ function buildDeviceTimelines(timetable, limits) {
     if (!timetable || !timetable.hourly) return;
 
     // Get device powers from API (with fallbacks)
-    const evPowerKw = timetable.ev_estimate?.charging_power_kw || 7.5;
+    const evPowerKw = (timetable.ev_estimate && timetable.ev_estimate.charging_power_kw) || 7.5;
     const devicePowers = timetable.device_powers || {};
     const scheduledHours = timetable.scheduled_hours || {};
 
@@ -393,7 +393,7 @@ function updateDashboard(data) {
 
     // Power bar - use current tariff's limit
     let maxImport = 2500; // Default peak limit
-    if (data.limits && data.schedule_24h?.summary?.[0]) {
+    if (data.limits && data.schedule_24h && data.schedule_24h.summary && data.schedule_24h.summary[0]) {
         const tariffNow = data.schedule_24h.summary[0].toLowerCase();
         if (tariffNow.includes('super')) {
             maxImport = data.limits.super_off_peak || 8000;
