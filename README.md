@@ -58,13 +58,6 @@ sudo systemctl enable power-manager
 sudo systemctl start power-manager
 ```
 
-### Option 3: Docker
-
-```bash
-docker build -t power-manager .
-docker run -d -p 8080:8080 -v ./config.yaml:/app/config.yaml power-manager
-```
-
 ## Configuration
 
 Edit `config.yaml`:
@@ -156,8 +149,7 @@ PowerManager/
 ├── homeassistant/
 │   └── helpers/helpers.yaml # HA override entities
 ├── config.yaml
-├── requirements.txt
-└── Dockerfile
+└── requirements.txt
 ```
 
 ## Testing

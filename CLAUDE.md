@@ -104,11 +104,20 @@ curl -s -k -H "Authorization: Bearer $TOKEN" \
 
 ## Power Limits (Belgian Tariffs)
 
-| Tariff | Hours | Max Import |
-|--------|-------|------------|
-| Peak | 07:00-22:00 (weekdays) | 2500W |
-| Off-Peak | 22:00-07:00 + weekends | 5000W |
-| Super Off-Peak | 01:00-05:00 | 8000W |
+**Weekday Schedule**:
+
+| Tariff         | Hours                                  | Max Import |
+|----------------|----------------------------------------|------------|
+| Peak           | 07:00-11:00, 17:00-22:00               | 2500W      |
+| Off-Peak       | 00:00-01:00, 11:00-17:00, 22:00-24:00  | 5000W      |
+| Super Off-Peak | 01:00-07:00                            | 8000W      |
+
+**Weekend Schedule**:
+
+| Tariff         | Hours                                  | Max Import |
+|----------------|----------------------------------------|------------|
+| Off-Peak       | 00:00-01:00, 07:00-11:00, 17:00-24:00  | 5000W      |
+| Super Off-Peak | 01:00-07:00, 11:00-17:00               | 8000W      |
 
 ## Project Structure
 
