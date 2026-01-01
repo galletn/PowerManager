@@ -450,30 +450,46 @@ def _apply_winter_logic(decisions: Decisions, plan: list, ctx: dict):
                 plan.append("EV: STOP (peak tariff)")
 
     # === TABLE HEATER (Priority 4 - lowest, use remaining capacity) ===
+    # Prefer super-off-peak (cheapest) but use off-peak if EV needs the super-off-peak capacity
     if ovr['table_heater'] == 'auto':
         table_power = config.heaters.table_power
         ht_on = ctx['ht_on']
 
-        if tariff in ('off-peak', 'super-off-peak'):
-            # Use effective_headroom which already accounts for boiler and EV
-            # But also account for EV if it was already charging
-            remaining = effective_headroom
-            if ctx['ev_charging'] and decisions.ev.action == 'none':
-                remaining -= ctx['ev_limit'] * config.ev.watts_per_amp
+        # Calculate remaining capacity
+        remaining = effective_headroom
+        if ctx['ev_charging'] and decisions.ev.action == 'none':
+            remaining -= ctx['ev_limit'] * config.ev.watts_per_amp
+        enough_power = remaining > table_power + hyst
 
-            enough_power = remaining > table_power + hyst
+        # Check if EV will use most of super-off-peak capacity
+        # Super-off-peak: 6h × 8kW = 48kWh
+        # If EV needs significant charging, use off-peak for heater
+        ev_needs_capacity = ctx['ev_plugged'] and not ctx['ev_done']
 
+        if tariff == 'super-off-peak':
             if not ht_on and enough_power:
                 if can_switch('heater_table', True):
                     decisions.heater_table.action = 'on'
-                    plan.append("Table heater: ON (off-peak, spare capacity)")
+                    plan.append("Table heater: ON (super-off-peak)")
             elif ht_on and remaining < table_power - hyst:
-                # Not enough power, turn off to make room for priority devices
                 if can_switch('heater_table', False):
                     decisions.heater_table.action = 'off'
                     plan.append("Table heater: OFF (capacity needed)")
+
+        elif tariff == 'off-peak':
+            # Use off-peak if EV will need the super-off-peak capacity
+            if ev_needs_capacity and enough_power:
+                if not ht_on:
+                    if can_switch('heater_table', True):
+                        decisions.heater_table.action = 'on'
+                        plan.append("Table heater: ON (off-peak, EV needs super-off-peak)")
+            elif ht_on and not ev_needs_capacity:
+                # No EV charging needed, save for super-off-peak
+                if can_switch('heater_table', False):
+                    decisions.heater_table.action = 'off'
+                    plan.append("Table heater: OFF (save for super-off-peak)")
+
         elif tariff == 'peak' and ht_on:
-            # Turn off during peak - save money
             if can_switch('heater_table', False):
                 decisions.heater_table.action = 'off'
                 plan.append("Table heater: OFF (peak tariff)")

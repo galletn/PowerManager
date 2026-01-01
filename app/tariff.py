@@ -243,18 +243,10 @@ def generate_24h_schedule(now: datetime, config, inputs=None) -> dict:
     deadline_str = f"{int(deadline)}:{int((deadline % 1) * 60):02d}"
 
     if not summer:
-        # Winter: heat during off-peak/super-off-peak before deadline
+        # Winter: heat during super-off-peak (cheapest) before deadline
         heating_windows = []
 
-        # Evening off-peak: 22:00-01:00
-        heating_windows.append({
-            'action': 'heat',
-            'window': '22:00-01:00',
-            'priority': 'normal',
-            'reason': 'Off-peak night'
-        })
-
-        # Night super-off-peak: 01:00-07:00
+        # Night super-off-peak: 01:00-07:00 (primary window)
         heating_windows.append({
             'action': 'heat',
             'window': '01:00-07:00',

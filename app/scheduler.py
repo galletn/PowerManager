@@ -243,14 +243,16 @@ def generate_schedule(
     scheduled_hours: Dict[str, float] = {}
 
     # Schedule devices into slots
+    # Tariff preference order: super-off-peak (cheapest) > off-peak > peak (most expensive)
+    TARIFF_PREFERENCE = {'super-off-peak': 0, 'off-peak': 1, 'peak': 2}
+
     for device in devices:
         hours_scheduled = 0
 
-        # Find suitable slots
+        # Sort slots by tariff preference (cheapest first), then by time
+        # This ensures we fill super-off-peak slots before off-peak
+        suitable_slots = []
         for slot in slots:
-            if hours_scheduled >= device.hours_needed:
-                break
-
             # Check if device can run in this tariff
             if not device.can_run_during_peak and slot.tariff == 'peak':
                 continue
@@ -259,10 +261,19 @@ def generate_schedule(
             if device.deadline and slot.start >= device.deadline:
                 continue
 
-            # Try to add device
+            # Check capacity
             if slot.can_add(device.name, device.power):
-                slot.add_device(device.name, device.power)
-                hours_scheduled += 0.5
+                suitable_slots.append(slot)
+
+        # Sort by tariff preference (cheapest first), then by time
+        suitable_slots.sort(key=lambda s: (TARIFF_PREFERENCE.get(s.tariff, 2), s.start))
+
+        # Fill cheapest slots first
+        for slot in suitable_slots:
+            if hours_scheduled >= device.hours_needed:
+                break
+            slot.add_device(device.name, device.power)
+            hours_scheduled += 0.5
 
         # Store scheduled hours
         scheduled_hours[device.name] = hours_scheduled

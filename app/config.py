@@ -25,6 +25,14 @@ class GridConfig:
 
 
 @dataclass
+class TariffPricesConfig:
+    """Electricity prices per kWh (EUR). Update monthly based on supplier rates."""
+    peak: float = 0.17
+    off_peak: float = 0.13
+    super_off_peak: float = 0.10
+
+
+@dataclass
 class EVConfig:
     """EV charger settings."""
     min_amps: int = 6
@@ -181,6 +189,7 @@ class Config:
     home_assistant: HAConfig = field(default_factory=HAConfig)
     polling_interval: int = 30
     max_import: GridConfig = field(default_factory=GridConfig)
+    tariff_prices: TariffPricesConfig = field(default_factory=TariffPricesConfig)
     ev: EVConfig = field(default_factory=EVConfig)
     boiler: BoilerConfig = field(default_factory=BoilerConfig)
     pool: PoolConfig = field(default_factory=PoolConfig)
@@ -244,6 +253,15 @@ def _apply_config(config: Config, data: dict) -> None:
             config.max_import.off_peak = mi["off_peak"]
         if "super_off_peak" in mi:
             config.max_import.super_off_peak = mi["super_off_peak"]
+
+    if "tariff_prices" in data:
+        tp = data["tariff_prices"]
+        if "peak" in tp:
+            config.tariff_prices.peak = tp["peak"]
+        if "off_peak" in tp:
+            config.tariff_prices.off_peak = tp["off_peak"]
+        if "super_off_peak" in tp:
+            config.tariff_prices.super_off_peak = tp["super_off_peak"]
 
     if "frost_protection" in data:
         fp = data["frost_protection"]
