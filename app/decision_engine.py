@@ -227,6 +227,7 @@ def calculate_decisions(
             'now': now_ts,
             'is_exporting': is_exporting,
             'pv': pv,
+            'p1': p1,
         })
     else:
         _apply_summer_logic(decisions, plan, {
@@ -333,7 +334,6 @@ def _apply_winter_logic(decisions: Decisions, plan: list, ctx: dict):
     deadline = config.boiler.deadline_winter
     boiler_force = ctx.get('boiler_force', False)
     is_exporting = ctx.get('is_exporting', False)
-    pv = ctx.get('pv', 0)
 
     if ovr['boiler'] == 'auto':
         # Force heat overrides everything - heat anytime
@@ -358,11 +358,19 @@ def _apply_winter_logic(decisions: Decisions, plan: list, ctx: dict):
             # Determine if we should heat
             approaching_deadline = hour >= (deadline - 2) and hour < deadline
             enough_power = effective_headroom > config.boiler.power + hyst
-            has_solar_surplus = is_exporting and pv > config.boiler.power
+
+            # Solar surplus logic: if exporting significant power, use boiler
+            # Even if we need to import some, it's better than wasting solar
+            # Example: exporting 1500W, boiler uses 2500W -> import 1000W
+            # This is better than selling 1500W at low feed-in tariff
+            p1 = ctx.get('p1', 0)
+            export_power = abs(p1) if is_exporting else 0
+            min_export_for_boiler = 500  # Minimum export to justify turning on boiler
+            has_solar_surplus = is_exporting and export_power > min_export_for_boiler
 
             # Only heat during:
             # 1. Super off-peak (cheapest rate, 01:00-07:00)
-            # 2. Solar surplus (free energy)
+            # 2. Solar surplus (better to use than sell)
             # 3. Approaching deadline (need hot water by morning)
             should_heat = False
             reason = ""
@@ -372,7 +380,7 @@ def _apply_winter_logic(decisions: Decisions, plan: list, ctx: dict):
                 reason = "super-off-peak"
             elif has_solar_surplus:
                 should_heat = True
-                reason = "solar surplus"
+                reason = f"solar ({int(export_power)}W export)"
             elif approaching_deadline and tariff in ('off-peak', 'super-off-peak'):
                 should_heat = True
                 reason = "approaching deadline"
