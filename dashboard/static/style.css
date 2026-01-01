@@ -1146,3 +1146,46 @@ h2 {
 .device-controls {
     position: relative;
 }
+
+/* Energy flow animations for arrows */
+.arrow {
+    transition: color 0.3s ease;
+}
+
+.arrow.flow-right {
+    animation: flow-right 1s ease-in-out infinite;
+    color: var(--ha-success, #43a047);
+}
+
+.arrow.flow-left {
+    animation: flow-left 1s ease-in-out infinite;
+    color: var(--ha-error, #db4437);
+}
+
+@keyframes flow-right {
+    0%, 100% {
+        opacity: 0.5;
+        transform: translateX(-3px);
+    }
+    50% {
+        opacity: 1;
+        transform: translateX(3px);
+    }
+}
+
+@keyframes flow-left {
+    0%, 100% {
+        opacity: 0.5;
+        transform: translateX(3px);
+    }
+    50% {
+        opacity: 1;
+        transform: translateX(-3px);
+    }
+}
+
+/* Grid node styling when exporting */
+.power-node.grid.exporting .node-value,
+.power-node-large.grid.exporting .node-value {
+    color: var(--ha-success, #43a047) !important;
+}

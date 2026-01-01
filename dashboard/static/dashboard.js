@@ -381,13 +381,42 @@ function updateDashboard(data) {
     // Grid direction and styling - support both full and compact dashboard class names
     const gridNode = document.querySelector('.power-node.grid') || document.querySelector('.power-node-large.grid');
     const gridLabel = document.getElementById('grid-direction');
+    const gridArrow = document.getElementById('arrow-grid');
+    const solarArrow = document.getElementById('arrow-solar');
+    const isExporting = gridPower < 0 || data.is_exporting;
+
     if (gridLabel) {
-        if (gridPower < 0 || data.is_exporting) {
+        if (isExporting) {
             gridLabel.textContent = 'Export';
             if (gridNode) gridNode.classList.add('exporting');
         } else {
             gridLabel.textContent = 'Import';
             if (gridNode) gridNode.classList.remove('exporting');
+        }
+    }
+
+    // Update grid arrow direction and animation
+    if (gridArrow) {
+        if (isExporting) {
+            gridArrow.textContent = '→';
+            gridArrow.classList.add('flow-right');
+            gridArrow.classList.remove('flow-left');
+        } else if (gridPower > 50) {
+            gridArrow.textContent = '←';
+            gridArrow.classList.add('flow-left');
+            gridArrow.classList.remove('flow-right');
+        } else {
+            gridArrow.textContent = '↔';
+            gridArrow.classList.remove('flow-left', 'flow-right');
+        }
+    }
+
+    // Update solar arrow animation (flows when producing)
+    if (solarArrow) {
+        if (pvPower > 50) {
+            solarArrow.classList.add('flow-right');
+        } else {
+            solarArrow.classList.remove('flow-right');
         }
     }
 
