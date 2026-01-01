@@ -380,14 +380,30 @@ async def set_override(device: str, mode: str):
         'ac_mancave': config.entities.ovr_ac_mancave,
     }
 
+    # Map API mode to HA input_select option (capitalized, device-specific)
+    # HA helpers use: "Auto", "On"/"Charge"/"Heat", "Off"
+    mode_map = {
+        'ev': {'auto': 'Auto', 'on': 'Charge', 'off': 'Off'},
+        'boiler': {'auto': 'Auto', 'on': 'On', 'off': 'Off'},
+        'pool': {'auto': 'Auto', 'on': 'Heat', 'off': 'Off'},
+        'table_heater': {'auto': 'Auto', 'on': 'On', 'off': 'Off'},
+        'ac_living': {'auto': 'Auto', 'on': 'Heat', 'off': 'Off'},
+        'ac_bedroom': {'auto': 'Auto', 'on': 'Heat', 'off': 'Off'},
+        'ac_office': {'auto': 'Auto', 'on': 'Heat', 'off': 'Off'},
+        'ac_mancave': {'auto': 'Auto', 'on': 'Heat', 'off': 'Off'},
+    }
+
+    ha_mode = mode_map.get(device, {}).get(mode, mode.capitalize())
+
     try:
         await ha_client.call_service(
             "input_select", "select_option",
             entity_map[device],
-            option=mode
+            option=ha_mode
         )
-        return {"status": "ok", "device": device, "mode": mode}
+        return {"status": "ok", "device": device, "mode": mode, "ha_mode": ha_mode}
     except Exception as e:
+        logger.error(f"Failed to set override {device}={mode}: {e}")
         raise HTTPException(500, str(e))
 
 

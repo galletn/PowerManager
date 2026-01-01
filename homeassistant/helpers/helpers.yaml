@@ -90,3 +90,12 @@ input_select:
       - "Off"
     initial: "Auto"
     icon: mdi:ev-station
+
+  pm_override_table_heater:
+    name: Table Heater
+    options:
+      - "Auto"
+      - "On"
+      - "Off"
+    initial: "Auto"
+    icon: mdi:radiator
