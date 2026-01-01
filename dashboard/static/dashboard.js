@@ -361,6 +361,12 @@ function updateConsumers(consumers) {
     grid.innerHTML = html;
 }
 
+// Safely set text content on element if it exists
+function setTextIfExists(id, text) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+}
+
 // Update the dashboard with new data
 function updateDashboard(data) {
     // Power flow
@@ -368,19 +374,21 @@ function updateDashboard(data) {
     const pvPower = data.pv_production || 0;
     const netPower = gridPower + pvPower;
 
-    document.getElementById('grid-power').textContent = formatWatts(Math.abs(gridPower));
-    document.getElementById('pv-power').textContent = formatWatts(pvPower);
-    document.getElementById('net-power').textContent = formatWatts(netPower);
+    setTextIfExists('grid-power', formatWatts(Math.abs(gridPower)));
+    setTextIfExists('pv-power', formatWatts(pvPower));
+    setTextIfExists('net-power', formatWatts(netPower));
 
-    // Grid direction and styling
-    const gridNode = document.querySelector('.power-node.grid');
+    // Grid direction and styling - support both full and compact dashboard class names
+    const gridNode = document.querySelector('.power-node.grid') || document.querySelector('.power-node-large.grid');
     const gridLabel = document.getElementById('grid-direction');
-    if (gridPower < 0 || data.is_exporting) {
-        gridLabel.textContent = 'Export';
-        gridNode.classList.add('exporting');
-    } else {
-        gridLabel.textContent = 'Import';
-        gridNode.classList.remove('exporting');
+    if (gridLabel) {
+        if (gridPower < 0 || data.is_exporting) {
+            gridLabel.textContent = 'Export';
+            if (gridNode) gridNode.classList.add('exporting');
+        } else {
+            gridLabel.textContent = 'Import';
+            if (gridNode) gridNode.classList.remove('exporting');
+        }
     }
 
     // Power bar - use current tariff's limit
@@ -407,22 +415,22 @@ function updateDashboard(data) {
             powerBarFill.classList.add('warning');
         }
     }
-    document.getElementById('power-used').textContent = formatWatts(usage);
-    document.getElementById('power-limit').textContent = `/ ${formatWatts(maxImport)} limit`;
+    setTextIfExists('power-used', formatWatts(usage));
+    setTextIfExists('power-limit', `/ ${formatWatts(maxImport)} limit`);
 
-    // Devices
+    // Devices - handle missing elements gracefully for compact dashboards
     if (data.devices) {
         // Boiler
         if (data.devices.boiler) {
             const boilerState = document.getElementById('boiler-state');
             const boilerDot = document.getElementById('boiler-dot');
             const isOn = data.devices.boiler.state === 'on';
-            boilerState.textContent = isOn ? 'ON' : 'OFF';
-            boilerDot.className = 'status-dot' + (isOn ? ' on' : '');
-            document.getElementById('boiler-power').textContent = formatWatts(data.devices.boiler.power);
+            if (boilerState) boilerState.textContent = isOn ? 'ON' : 'OFF';
+            if (boilerDot) boilerDot.className = 'status-dot' + (isOn ? ' on' : '');
+            setTextIfExists('boiler-power', formatWatts(data.devices.boiler.power));
 
             const boilerDevice = document.getElementById('device-boiler');
-            boilerDevice.classList.toggle('active', isOn);
+            if (boilerDevice) boilerDevice.classList.toggle('active', isOn);
         }
 
         // EV Charger
@@ -431,13 +439,13 @@ function updateDashboard(data) {
             const evDot = document.getElementById('ev-dot');
             const stateText = getEvStateText(data.devices.ev.state);
             const isCharging = data.devices.ev.state === 132;
-            evState.textContent = stateText;
-            evDot.className = 'status-dot' + (isCharging ? ' charging' : (data.devices.ev.state === 129 ? ' on' : ''));
-            document.getElementById('ev-power').textContent = formatWatts(data.devices.ev.power);
-            document.getElementById('ev-amps').textContent = `(${data.devices.ev.amps}A)`;
+            if (evState) evState.textContent = stateText;
+            if (evDot) evDot.className = 'status-dot' + (isCharging ? ' charging' : (data.devices.ev.state === 129 ? ' on' : ''));
+            setTextIfExists('ev-power', formatWatts(data.devices.ev.power));
+            setTextIfExists('ev-amps', `(${data.devices.ev.amps}A)`);
 
             const evDevice = document.getElementById('device-ev');
-            evDevice.classList.toggle('active', isCharging);
+            if (evDevice) evDevice.classList.toggle('active', isCharging);
         }
 
         // Pool Pump
@@ -445,19 +453,19 @@ function updateDashboard(data) {
             const poolState = document.getElementById('pool-pump-state');
             const poolDot = document.getElementById('pool-dot');
             const isOn = data.devices.pool_pump.state === 'on';
-            poolState.textContent = isOn ? 'ON' : 'OFF';
-            poolDot.className = 'status-dot' + (isOn ? ' on' : '');
-            document.getElementById('pool-pump-power').textContent = formatWatts(data.devices.pool_pump.power);
+            if (poolState) poolState.textContent = isOn ? 'ON' : 'OFF';
+            if (poolDot) poolDot.className = 'status-dot' + (isOn ? ' on' : '');
+            setTextIfExists('pool-pump-power', formatWatts(data.devices.pool_pump.power));
 
             const temp = data.devices.pool_pump.ambient_temp;
             const tempEl = document.getElementById('pool-ambient-temp');
-            if (temp !== null) {
+            if (tempEl && temp !== null) {
                 tempEl.textContent = `${temp.toFixed(1)}°C`;
                 tempEl.className = 'temp' + (temp <= 5 ? ' warning' : '');
             }
 
             const poolDevice = document.getElementById('device-pool');
-            poolDevice.classList.toggle('active', isOn);
+            if (poolDevice) poolDevice.classList.toggle('active', isOn);
         }
 
         // Table Heater
@@ -465,28 +473,28 @@ function updateDashboard(data) {
             const tableHeaterState = document.getElementById('table-heater-state');
             const tableHeaterDot = document.getElementById('table-heater-dot');
             const isOn = data.devices.table_heater.state === 'on';
-            tableHeaterState.textContent = isOn ? 'ON' : 'OFF';
-            tableHeaterDot.className = 'status-dot' + (isOn ? ' on' : '');
-            document.getElementById('table-heater-power').textContent = formatWatts(data.devices.table_heater.power);
+            if (tableHeaterState) tableHeaterState.textContent = isOn ? 'ON' : 'OFF';
+            if (tableHeaterDot) tableHeaterDot.className = 'status-dot' + (isOn ? ' on' : '');
+            setTextIfExists('table-heater-power', formatWatts(data.devices.table_heater.power));
 
             const tableHeaterDevice = document.getElementById('device-table-heater');
-            tableHeaterDevice.classList.toggle('active', isOn);
+            if (tableHeaterDevice) tableHeaterDevice.classList.toggle('active', isOn);
         }
 
         // BMW i5
         if (data.devices.bmw_i5) {
             const i5Location = document.getElementById('bmw-i5-location');
-            i5Location.textContent = data.devices.bmw_i5.location === 'home' ? 'Home' : 'Away';
-            document.getElementById('bmw-i5-battery').textContent = data.devices.bmw_i5.battery !== null ? `${Math.round(data.devices.bmw_i5.battery)}%` : '--%';
-            document.getElementById('bmw-i5-range').textContent = data.devices.bmw_i5.range !== null ? `${Math.round(data.devices.bmw_i5.range)}km` : '--km';
+            if (i5Location) i5Location.textContent = data.devices.bmw_i5.location === 'home' ? 'Home' : 'Away';
+            setTextIfExists('bmw-i5-battery', data.devices.bmw_i5.battery !== null ? `${Math.round(data.devices.bmw_i5.battery)}%` : '--%');
+            setTextIfExists('bmw-i5-range', data.devices.bmw_i5.range !== null ? `${Math.round(data.devices.bmw_i5.range)}km` : '--km');
         }
 
         // BMW iX1
         if (data.devices.bmw_ix1) {
             const ix1Location = document.getElementById('bmw-ix1-location');
-            ix1Location.textContent = data.devices.bmw_ix1.location === 'home' ? 'Home' : 'Away';
-            document.getElementById('bmw-ix1-battery').textContent = data.devices.bmw_ix1.battery !== null ? `${Math.round(data.devices.bmw_ix1.battery)}%` : '--%';
-            document.getElementById('bmw-ix1-range').textContent = data.devices.bmw_ix1.range !== null ? `${Math.round(data.devices.bmw_ix1.range)}km` : '--km';
+            if (ix1Location) ix1Location.textContent = data.devices.bmw_ix1.location === 'home' ? 'Home' : 'Away';
+            setTextIfExists('bmw-ix1-battery', data.devices.bmw_ix1.battery !== null ? `${Math.round(data.devices.bmw_ix1.battery)}%` : '--%');
+            setTextIfExists('bmw-ix1-range', data.devices.bmw_ix1.range !== null ? `${Math.round(data.devices.bmw_ix1.range)}km` : '--km');
         }
     }
 
@@ -508,35 +516,37 @@ function updateDashboard(data) {
     // Alerts - always clear first, then build list
     const alertsSection = document.getElementById('alerts-section');
     const alertsList = document.getElementById('alerts-list');
-    let alertsHtml = '';
+    if (alertsList) {
+        let alertsHtml = '';
 
-    // Add decision engine alerts
-    if (data.alerts && data.alerts.length > 0) {
-        alertsHtml += data.alerts.map(alert =>
-            `<div class="alert-item ${alert.level}">${alert.message}</div>`
-        ).join('');
+        // Add decision engine alerts
+        if (data.alerts && data.alerts.length > 0) {
+            alertsHtml += data.alerts.map(alert =>
+                `<div class="alert-item ${alert.level}">${alert.message}</div>`
+            ).join('');
+        }
+
+        // Add active schedule alerts (deduplicated)
+        if (data.schedule_24h && data.schedule_24h.alerts_schedule && data.schedule_24h.alerts_schedule.length > 0) {
+            alertsHtml += data.schedule_24h.alerts_schedule.map(alert =>
+                `<div class="alert-item warning">${alert.message}</div>`
+            ).join('');
+        }
+
+        // Update DOM
+        alertsList.innerHTML = alertsHtml;
+        if (alertsSection) alertsSection.style.display = alertsHtml ? 'block' : 'none';
     }
-
-    // Add active schedule alerts (deduplicated)
-    if (data.schedule_24h && data.schedule_24h.alerts_schedule && data.schedule_24h.alerts_schedule.length > 0) {
-        alertsHtml += data.schedule_24h.alerts_schedule.map(alert =>
-            `<div class="alert-item warning">${alert.message}</div>`
-        ).join('');
-    }
-
-    // Update DOM
-    alertsList.innerHTML = alertsHtml;
-    alertsSection.style.display = alertsHtml ? 'block' : 'none';
 
     // Last update
     if (data.last_update) {
         const date = new Date(data.last_update);
-        document.getElementById('last-update').textContent = date.toLocaleTimeString();
+        setTextIfExists('last-update', date.toLocaleTimeString());
     }
 
     // Status indicator
     const statusIndicator = document.getElementById('status-indicator');
-    statusIndicator.classList.remove('disconnected');
+    if (statusIndicator) statusIndicator.classList.remove('disconnected');
 
     // Update power limits in settings
     if (data.limits) {
@@ -556,7 +566,7 @@ async function fetchStatus() {
     } catch (error) {
         console.error('Failed to fetch status:', error);
         const statusIndicator = document.getElementById('status-indicator');
-        statusIndicator.classList.add('disconnected');
+        if (statusIndicator) statusIndicator.classList.add('disconnected');
     }
 }
 
