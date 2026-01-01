@@ -498,26 +498,28 @@ function updateDashboard(data) {
         updateConsumers(data.consumers);
     }
 
-    // Alerts
+    // Alerts - always clear first, then build list
     const alertsSection = document.getElementById('alerts-section');
     const alertsList = document.getElementById('alerts-list');
+    let alertsHtml = '';
+
+    // Add decision engine alerts
     if (data.alerts && data.alerts.length > 0) {
-        alertsSection.style.display = 'block';
-        alertsList.innerHTML = data.alerts.map(alert =>
+        alertsHtml += data.alerts.map(alert =>
             `<div class="alert-item ${alert.level}">${alert.message}</div>`
         ).join('');
-    } else {
-        alertsSection.style.display = 'none';
     }
 
-    // Active schedule alerts
+    // Add active schedule alerts (deduplicated)
     if (data.schedule_24h && data.schedule_24h.alerts_schedule && data.schedule_24h.alerts_schedule.length > 0) {
-        alertsSection.style.display = 'block';
-        const scheduleAlerts = data.schedule_24h.alerts_schedule.map(alert =>
+        alertsHtml += data.schedule_24h.alerts_schedule.map(alert =>
             `<div class="alert-item warning">${alert.message}</div>`
         ).join('');
-        alertsList.innerHTML += scheduleAlerts;
     }
+
+    // Update DOM
+    alertsList.innerHTML = alertsHtml;
+    alertsSection.style.display = alertsHtml ? 'block' : 'none';
 
     // Last update
     if (data.last_update) {
