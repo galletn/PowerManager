@@ -128,15 +128,16 @@ function updateSchedule(schedule) {
 function buildDeviceTimelines(timetable, limits) {
     if (!timetable || !timetable.hourly) return;
 
-    // Get EV effective power from estimate (default 7.5kW if not available)
+    // Get device powers from API (with fallbacks)
     const evPowerKw = timetable.ev_estimate?.charging_power_kw || 7.5;
+    const devicePowers = timetable.device_powers || {};
     const scheduledHours = timetable.scheduled_hours || {};
 
     const devices = {
         'ev': { bar: document.getElementById('ev-timeline'), label: document.getElementById('ev-power-label'), power: evPowerKw * 1000 },
-        'boiler': { bar: document.getElementById('boiler-timeline'), label: document.getElementById('boiler-power-label'), power: 2500 },
-        'table_heater': { bar: document.getElementById('heater-timeline'), label: document.getElementById('heater-power-label'), power: 4100 },
-        'pool_pump': { bar: document.getElementById('pool-timeline'), label: document.getElementById('pool-power-label'), power: 500 }
+        'boiler': { bar: document.getElementById('boiler-timeline'), label: document.getElementById('boiler-power-label'), power: devicePowers.boiler || 2500 },
+        'table_heater': { bar: document.getElementById('heater-timeline'), label: document.getElementById('heater-power-label'), power: devicePowers.table_heater || 4100 },
+        'pool_pump': { bar: document.getElementById('pool-timeline'), label: document.getElementById('pool-power-label'), power: devicePowers.pool_pump || 100 }
     };
 
     const hours = timetable.hourly.slice(0, 24);

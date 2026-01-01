@@ -434,12 +434,19 @@ def _get_timetable_data():
     try:
         now = datetime.now()
         timetable = generate_schedule(now, config, last_inputs)
+        # Use actual device powers where available
+        pool_pump_power = int(last_inputs.pool_pump_power) if last_inputs.pool_pump_power > 0 else config.frost_protection.pump_min_power
         return {
             "ev_estimate": timetable.ev_estimate,
             "boiler_estimate": timetable.boiler_estimate,
             "warnings": timetable.warnings,
             "hourly": timetable.timetable,
-            "scheduled_hours": timetable.scheduled_hours or {}
+            "scheduled_hours": timetable.scheduled_hours or {},
+            "device_powers": {
+                "boiler": config.boiler.power,
+                "table_heater": config.heaters.table_power,
+                "pool_pump": pool_pump_power
+            }
         }
     except Exception as e:
         logger.error(f"Failed to generate timetable: {e}")
