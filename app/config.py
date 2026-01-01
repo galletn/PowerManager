@@ -180,13 +180,13 @@ class EntitiesConfig:
     bmw_ix1_location: str = "device_tracker.ix1_edrive20_location"
 
     # Additional consumers for power tracking
-    media_power: str = "sensor.media_power"
-    server_power: str = "sensor.server_power"
-    desk_power: str = "sensor.desk_power"
+    media_power: str = "sensor.livingroom_media_power_power"
+    server_power: str = "sensor.serverroom_server_power"
+    desk_power: str = "sensor.livingroom_desk_power_power"
     storage_fridge_power: str = "sensor.storage_fridge_power"
     kitchen_fridge_power: str = "sensor.kitchen_fridge_power"
-    washing_machine_power: str = "sensor.washing_machine_power"
-    tumble_dryer_power: str = "sensor.tumble_dryer_power"
+    washing_machine_power: str = "sensor.garage_washing_machine_power"
+    tumble_dryer_power: str = "sensor.garage_tumble_dryer_power"
     serverroom_storage_power: str = "sensor.serverroom_storage_power"
     pool_heater_power: str = "sensor.pool_heating_current_consumption"
     table_heater_power: str = "sensor.livingroom_table_heater_power"
