@@ -741,7 +741,31 @@ async function saveLimits() {
 }
 
 // Initialize
-document.addEventListener('DOMContentLoaded', () => {
+let refreshInterval = null;
+
+function startPolling() {
+    // Clear any existing interval
+    if (refreshInterval) {
+        clearInterval(refreshInterval);
+    }
+    // Fetch immediately and start polling
     fetchStatus();
-    setInterval(fetchStatus, REFRESH_INTERVAL);
+    refreshInterval = setInterval(fetchStatus, REFRESH_INTERVAL);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    startPolling();
+
+    // Handle visibility change (for iOS/mobile apps that suspend JS in background)
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            // Page became visible again - restart polling
+            startPolling();
+        }
+    });
+
+    // Also handle focus for iframe scenarios
+    window.addEventListener('focus', () => {
+        startPolling();
+    });
 });
