@@ -188,10 +188,11 @@ def generate_schedule(
     devices = []
 
     # Always add pool pump if cold (frost protection)
+    # Frost protection only circulates water (~100-150W), not full pump power
     if inputs and inputs.pool_ambient_temp and inputs.pool_ambient_temp <= config.frost_protection.temp_threshold:
         devices.append(DeviceNeed(
             name='pool_pump',
-            power=500,  # Typical pool pump
+            power=config.frost_protection.pump_min_power,  # ~100W circulation
             hours_needed=24,  # Run continuously when cold
             priority=1,
             can_run_during_peak=True  # Frost protection overrides cost
