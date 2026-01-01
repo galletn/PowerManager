@@ -496,12 +496,17 @@ async def get_status():
     if last_inputs.heater_table_switch == 'on' and config:
         table_heater_power = config.heaters.table_power
 
+    # Handle None values during HA startup
+    p1_power = last_inputs.p1_power if last_inputs.p1_power is not None else 0
+    p1_return = last_inputs.p1_return if last_inputs.p1_return is not None else 0
+    pv_power = last_inputs.pv_power if last_inputs.pv_power is not None else 0
+
     return {
-        "grid_import": last_inputs.p1_power,
-        "grid_export": last_inputs.p1_return,
-        "pv_production": last_inputs.pv_power,
-        "net_power": last_inputs.p1_power - last_inputs.p1_return,
-        "is_exporting": last_inputs.p1_power < 0,
+        "grid_import": p1_power,
+        "grid_export": p1_return,
+        "pv_production": pv_power,
+        "net_power": p1_power - p1_return,
+        "is_exporting": p1_power < 0,
         "devices": {
             "boiler": {
                 "state": last_inputs.boiler_switch,

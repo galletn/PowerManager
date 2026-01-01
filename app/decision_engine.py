@@ -211,9 +211,9 @@ def calculate_decisions(
     max_import = get_max_import(tariff, config)
     summer = is_summer(now)
 
-    # Calculate power values
-    p1 = inputs.p1_power      # Grid import (W)
-    pv = inputs.pv_power      # Solar production (W)
+    # Calculate power values (default to 0 if None during HA startup)
+    p1 = inputs.p1_power if inputs.p1_power is not None else 0  # Grid import (W)
+    pv = inputs.pv_power if inputs.pv_power is not None else 0  # Solar production (W)
 
     # Available power = max_import - current_import + solar
     # But we calculate based on actual consumption
