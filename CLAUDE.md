@@ -24,7 +24,7 @@ Power Manager is an intelligent home energy management system for Home Assistant
 
 ### SSH Authentication
 
-The server uses SSH key authentication:
+The server uses SSH key authentication with passwordless sudo for service management:
 
 ```bash
 # SSH key location (Windows)
@@ -33,17 +33,28 @@ C:\Users\galletn\.ssh\id_ed25519
 # Connect to server
 ssh nicolas@192.168.68.78
 
-# Deploy latest changes
-ssh nicolas@192.168.68.78 "cd /opt/PowerManager && git pull"
-
-# Restart service (requires sudo password)
-ssh nicolas@192.168.68.78 "sudo systemctl restart power-manager"
+# Deploy latest changes and restart (passwordless)
+ssh nicolas@192.168.68.78 "cd /opt/PowerManager && git pull && sudo systemctl restart power-manager"
 
 # Check service status
 ssh nicolas@192.168.68.78 "systemctl status power-manager"
 
 # View logs
 ssh nicolas@192.168.68.78 "journalctl -u power-manager -f"
+```
+
+### Sudoers Configuration
+
+Passwordless sudo is configured for power-manager service commands in `/etc/sudoers.d/power-manager`:
+
+```text
+nicolas ALL=(ALL) NOPASSWD: /bin/systemctl restart power-manager, /bin/systemctl stop power-manager, /bin/systemctl start power-manager, /bin/systemctl status power-manager
+```
+
+To set this up on a new server:
+
+```bash
+sudo bash -c 'echo "nicolas ALL=(ALL) NOPASSWD: /bin/systemctl restart power-manager, /bin/systemctl stop power-manager, /bin/systemctl start power-manager, /bin/systemctl status power-manager" > /etc/sudoers.d/power-manager && chmod 440 /etc/sudoers.d/power-manager'
 ```
 
 ## Home Assistant Integration
