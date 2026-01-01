@@ -5,6 +5,48 @@
 
 const REFRESH_INTERVAL = 10000; // 10 seconds - matches well with 30s decision loop
 
+// Moon phase emojis (8 phases)
+const MOON_PHASES = ['🌑', '🌒', '🌓', '🌔', '🌕', '🌖', '🌗', '🌘'];
+
+// Get solar icon based on environment data
+function getSolarIcon(env) {
+    if (!env) return '☀️';
+
+    // Night time - show moon with correct phase
+    if (!env.sun_is_up) {
+        return MOON_PHASES[env.moon_phase] || '🌙';
+    }
+
+    // Day time - show sun with weather conditions
+    const condition = (env.weather_condition || '').toLowerCase();
+    const clouds = env.cloud_coverage || 0;
+
+    // Rain conditions
+    if (condition.includes('rain') || condition.includes('shower')) {
+        return '🌧️';
+    }
+    if (condition.includes('thunder') || condition.includes('storm')) {
+        return '⛈️';
+    }
+    if (condition.includes('snow')) {
+        return '🌨️';
+    }
+
+    // Cloud conditions
+    if (clouds > 80 || condition.includes('cloudy') || condition.includes('overcast')) {
+        return '☁️';
+    }
+    if (clouds > 50 || condition.includes('partly')) {
+        return '⛅';
+    }
+    if (clouds > 20) {
+        return '🌤️';
+    }
+
+    // Clear/sunny
+    return '☀️';
+}
+
 // Format watts for display
 function formatWatts(watts) {
     if (watts === null || watts === undefined) return '--';
@@ -565,6 +607,29 @@ function updateDashboard(data) {
         // Update DOM
         alertsList.innerHTML = alertsHtml;
         if (alertsSection) alertsSection.style.display = alertsHtml ? 'block' : 'none';
+    }
+
+    // Update environment-based icons (sun/moon, weather)
+    if (data.environment) {
+        const env = data.environment;
+        const solarIcon = getSolarIcon(env);
+
+        // Update solar node icons (both dashboard versions)
+        const solarNodes = document.querySelectorAll('.power-node.solar .node-icon, .power-node-large.solar .node-icon');
+        solarNodes.forEach(node => {
+            node.textContent = solarIcon;
+        });
+
+        // Update solar label with forecast if night or low production
+        const solarLabel = document.querySelector('.power-node.solar .node-label, .power-node-large.solar .node-label');
+        if (solarLabel && env.solar_forecast_kwh > 0) {
+            const pvPower = data.pv_production || 0;
+            if (!env.sun_is_up || pvPower < 100) {
+                solarLabel.textContent = `Solar (${env.solar_forecast_kwh.toFixed(1)}kWh left)`;
+            } else {
+                solarLabel.textContent = 'Solar';
+            }
+        }
     }
 
     // Last update

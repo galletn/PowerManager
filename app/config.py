@@ -183,6 +183,11 @@ class EntitiesConfig:
     bmw_ix1_range: str = "sensor.ix1_edrive20_range_ev_remaining_range"
     bmw_ix1_location: str = "device_tracker.ix1_edrive20_location"
 
+    # Sun and weather for dashboard icons
+    sun: str = "sun.sun"
+    weather: str = "weather.huis"
+    solar_forecast: str = "sensor.estimated_solar_power_left_today"
+
     # Additional consumers for power tracking
     media_power: str = "sensor.livingroom_media_power_power"
     server_power: str = "sensor.serverroom_server_power"

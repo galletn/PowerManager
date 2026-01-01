@@ -569,8 +569,60 @@ async def get_status():
             "peak": config.max_import.peak,
             "off_peak": config.max_import.off_peak,
             "super_off_peak": config.max_import.super_off_peak
-        }
+        },
+        "environment": _get_environment_data()
     }
+
+
+def _get_environment_data():
+    """Get sun, weather, and solar forecast data for dashboard icons."""
+    config = app_state.config
+    ha_states = app_state.last_ha_states
+
+    if config is None or ha_states is None:
+        return None
+
+    try:
+        entities = config.entities
+
+        # Sun state
+        sun_state = ha_states.get(entities.sun, {})
+        sun_is_up = sun_state.get("state") == "above_horizon"
+        sun_elevation = sun_state.get("attributes", {}).get("elevation", 0)
+
+        # Weather state
+        weather_state = ha_states.get(entities.weather, {})
+        weather_condition = weather_state.get("state", "unknown")
+        cloud_coverage = weather_state.get("attributes", {}).get("cloud_coverage", 0)
+
+        # Solar forecast
+        forecast_state = ha_states.get(entities.solar_forecast, {})
+        forecast_val = forecast_state.get("state")
+        try:
+            solar_forecast_kwh = float(forecast_val) if forecast_val else 0
+        except (ValueError, TypeError):
+            solar_forecast_kwh = 0
+
+        # Calculate moon phase (0-29 day cycle)
+        from datetime import date
+        today = date.today()
+        # Known new moon: Jan 6, 2000
+        reference = date(2000, 1, 6)
+        days_since = (today - reference).days
+        moon_age = days_since % 29.53  # Synodic month
+        moon_phase = int((moon_age / 29.53) * 8)  # 0-7 phases
+
+        return {
+            "sun_is_up": sun_is_up,
+            "sun_elevation": sun_elevation,
+            "weather_condition": weather_condition,
+            "cloud_coverage": cloud_coverage,
+            "solar_forecast_kwh": solar_forecast_kwh,
+            "moon_phase": moon_phase  # 0=new, 2=first quarter, 4=full, 6=last quarter
+        }
+    except Exception as e:
+        logger.error(f"Failed to get environment data: {e}", exc_info=True)
+        return None
 
 
 async def _get_consumers_data():
