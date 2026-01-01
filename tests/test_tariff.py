@@ -61,10 +61,25 @@ class TestGetTariff:
     """Test tariff determination."""
 
     def test_weekday_peak(self):
-        """Weekday 14:00 is peak."""
-        dt = datetime(2024, 1, 15, 14, 0)  # Monday
+        """Weekday 09:00 is peak (morning peak 07:00-11:00)."""
+        dt = datetime(2024, 1, 15, 9, 0)  # Monday
         tariff, info = get_tariff(dt)
         assert tariff == 'peak'
+        assert info['reason'] == 'morning peak'
+
+    def test_weekday_evening_peak(self):
+        """Weekday 18:00 is peak (evening peak 17:00-22:00)."""
+        dt = datetime(2024, 1, 15, 18, 0)  # Monday
+        tariff, info = get_tariff(dt)
+        assert tariff == 'peak'
+        assert info['reason'] == 'evening peak'
+
+    def test_weekday_offpeak_midday(self):
+        """Weekday 14:00 is off-peak (midday 11:00-17:00)."""
+        dt = datetime(2024, 1, 15, 14, 0)  # Monday
+        tariff, info = get_tariff(dt)
+        assert tariff == 'off-peak'
+        assert info['reason'] == 'midday'
 
     def test_weekday_offpeak_evening(self):
         """Weekday 22:30 is off-peak."""
@@ -78,18 +93,25 @@ class TestGetTariff:
         tariff, info = get_tariff(dt)
         assert tariff == 'super-off-peak'
 
-    def test_weekday_offpeak_early_morning(self):
-        """Weekday 06:30 is off-peak (transition)."""
+    def test_weekday_super_offpeak_early_morning(self):
+        """Weekday 06:30 is super-off-peak (01:00-07:00)."""
         dt = datetime(2024, 1, 15, 6, 30)  # Monday
         tariff, info = get_tariff(dt)
-        assert tariff == 'off-peak'
+        assert tariff == 'super-off-peak'
 
-    def test_saturday_is_offpeak(self):
-        """Saturday any time is off-peak."""
+    def test_saturday_midday_super_offpeak(self):
+        """Saturday 14:00 is super-off-peak (weekend midday 11:00-17:00)."""
         dt = datetime(2024, 1, 13, 14, 0)  # Saturday
         tariff, info = get_tariff(dt)
+        assert tariff == 'super-off-peak'
+        assert info['reason'] == 'weekend midday'
+
+    def test_saturday_morning_offpeak(self):
+        """Saturday 09:00 is off-peak (weekend morning 07:00-11:00)."""
+        dt = datetime(2024, 1, 13, 9, 0)  # Saturday
+        tariff, info = get_tariff(dt)
         assert tariff == 'off-peak'
-        assert info['reason'] == 'weekend'
+        assert info['reason'] == 'weekend morning'
 
     def test_sunday_is_offpeak(self):
         """Sunday any time is off-peak."""
@@ -97,9 +119,10 @@ class TestGetTariff:
         tariff, info = get_tariff(dt)
         assert tariff == 'off-peak'
 
-    def test_holiday_is_offpeak(self):
-        """Holiday is off-peak."""
-        dt = datetime(2024, 12, 25, 14, 0)  # Christmas (Wednesday)
+    def test_holiday_follows_weekday_schedule(self):
+        """Holidays follow weekday schedule (Belgian electricity tariffs don't treat holidays as weekends)."""
+        dt = datetime(2024, 12, 25, 14, 0)  # Christmas (Wednesday) at 14:00
         tariff, info = get_tariff(dt)
+        # 14:00 on a Wednesday is midday off-peak (11:00-17:00)
         assert tariff == 'off-peak'
-        assert info['reason'] == 'holiday'
+        assert info['reason'] == 'midday'
