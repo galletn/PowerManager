@@ -3,7 +3,7 @@
  * Home Assistant themed dashboard with 24-hour schedule
  */
 
-const REFRESH_INTERVAL = 5000;
+const REFRESH_INTERVAL = 10000; // 10 seconds - matches well with 30s decision loop
 
 // Format watts for display
 function formatWatts(watts) {
