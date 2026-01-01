@@ -86,5 +86,5 @@ def winter_offpeak():
 
 @pytest.fixture
 def winter_peak():
-    """Winter peak time (14:00)."""
-    return datetime(2024, 1, 15, 14, 0, 0)
+    """Winter peak time (09:00 - morning peak)."""
+    return datetime(2024, 1, 15, 9, 0, 0)

@@ -49,6 +49,10 @@ class PowerInputs:
     dishwasher_switch: str = 'off'
     dishwasher_power: float = 0.0
 
+    # Laundry
+    washing_machine_power: float = 0.0
+    tumble_dryer_power: float = 0.0
+
     # AC Units
     ac_living_state: str = 'off'
     ac_mancave_state: str = 'off'
@@ -139,6 +143,9 @@ class AllDeviceStates:
     ac_mancave: DeviceState = field(default_factory=lambda: DeviceState())
     ac_office: DeviceState = field(default_factory=lambda: DeviceState())
     ac_bedroom: DeviceState = field(default_factory=lambda: DeviceState())
+    # Boiler "full" detection: timestamp when power first dropped below threshold
+    # 0.0 means power is above threshold (not low)
+    boiler_low_power_since: float = 0.0
 
 
 @dataclass

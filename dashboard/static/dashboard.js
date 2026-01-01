@@ -137,7 +137,10 @@ function buildDeviceTimelines(timetable, limits) {
         'ev': { bar: document.getElementById('ev-timeline'), label: document.getElementById('ev-power-label'), power: evPowerKw * 1000 },
         'boiler': { bar: document.getElementById('boiler-timeline'), label: document.getElementById('boiler-power-label'), power: devicePowers.boiler || 2500 },
         'table_heater': { bar: document.getElementById('heater-timeline'), label: document.getElementById('heater-power-label'), power: devicePowers.table_heater || 4100 },
-        'pool_pump': { bar: document.getElementById('pool-timeline'), label: document.getElementById('pool-power-label'), power: devicePowers.pool_pump || 100 }
+        'pool_pump': { bar: document.getElementById('pool-timeline'), label: document.getElementById('pool-power-label'), power: devicePowers.pool_pump || 100 },
+        'dishwasher': { bar: document.getElementById('dishwasher-timeline'), label: document.getElementById('dishwasher-power-label'), power: devicePowers.dishwasher || 1900 },
+        'washing_machine': { bar: document.getElementById('washing-machine-timeline'), label: document.getElementById('washing-machine-power-label'), power: 2000 },
+        'tumble_dryer': { bar: document.getElementById('tumble-dryer-timeline'), label: document.getElementById('tumble-dryer-power-label'), power: 2500 }
     };
 
     const hours = timetable.hourly.slice(0, 24);
@@ -271,6 +274,9 @@ function updateTimetable(timetable) {
                 if (entry.devices.boiler) deviceIcons.push('🔥');
                 if (entry.devices.table_heater) deviceIcons.push('🪑');
                 if (entry.devices.pool_pump) deviceIcons.push('🌊');
+                if (entry.devices.dishwasher) deviceIcons.push('🍽️');
+                if (entry.devices.washing_machine) deviceIcons.push('🧺');
+                if (entry.devices.tumble_dryer) deviceIcons.push('👕');
             }
 
             html += `<div class="timetable-hour ${entry.tariff}${hasDevices ? ' has-devices' : ''}">

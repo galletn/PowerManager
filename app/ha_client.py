@@ -1,5 +1,6 @@
 """Home Assistant API client."""
 
+import asyncio
 import logging
 from typing import Any, Optional
 
@@ -10,9 +11,18 @@ from .models import PowerInputs, EVState
 
 logger = logging.getLogger(__name__)
 
+# Connection retry settings
+MAX_RETRIES = 3
+RETRY_DELAY_SECONDS = 2
+
+
+class HAConnectionError(Exception):
+    """Raised when Home Assistant connection fails after retries."""
+    pass
+
 
 class HAClient:
-    """Async Home Assistant REST API client."""
+    """Async Home Assistant REST API client with connection management."""
 
     def __init__(self, config: Config):
         self.url = config.home_assistant.url.rstrip("/")
@@ -22,6 +32,7 @@ class HAClient:
         self.units_p1 = config.units_p1
         self.units_pv = config.units_pv
         self._session: Optional[aiohttp.ClientSession] = None
+        self._connected = False
 
     async def __aenter__(self):
         await self.connect()
@@ -32,6 +43,10 @@ class HAClient:
 
     async def connect(self):
         """Create HTTP session."""
+        # Close existing session if any
+        if self._session and not self._session.closed:
+            await self._session.close()
+
         connector = aiohttp.TCPConnector(ssl=self.verify_ssl)
         self._session = aiohttp.ClientSession(
             connector=connector,
@@ -40,38 +55,187 @@ class HAClient:
                 "Content-Type": "application/json"
             }
         )
+        self._connected = True
 
     async def close(self):
         """Close HTTP session."""
+        self._connected = False
         if self._session:
             await self._session.close()
             self._session = None
+
+    def is_connected(self) -> bool:
+        """Check if session exists and is not closed."""
+        return (
+            self._session is not None
+            and not self._session.closed
+            and self._connected
+        )
+
+    async def ensure_connected(self) -> bool:
+        """
+        Ensure connection to Home Assistant is healthy.
+
+        Checks if session is valid and performs a health check.
+        Reconnects if necessary.
+
+        Returns:
+            True if connected successfully, False otherwise.
+        """
+        # Check if session is valid
+        if not self.is_connected():
+            logger.warning("HA session is not connected, reconnecting...")
+            try:
+                await self.connect()
+            except Exception as e:
+                logger.error(f"Failed to reconnect to HA: {e}")
+                return False
+
+        # Perform a lightweight health check
+        try:
+            async with self._session.get(
+                f"{self.url}/api/",
+                timeout=aiohttp.ClientTimeout(total=5)
+            ) as resp:
+                if resp.status == 200:
+                    return True
+                elif resp.status == 401:
+                    logger.error("HA authentication failed - check token")
+                    return False
+                else:
+                    logger.warning(f"HA health check returned status {resp.status}")
+                    return False
+        except aiohttp.ClientError as e:
+            logger.warning(f"HA health check failed: {e}")
+            self._connected = False
+            return False
+        except asyncio.TimeoutError:
+            logger.warning("HA health check timed out")
+            self._connected = False
+            return False
+
+    async def _request_with_retry(
+        self,
+        method: str,
+        url: str,
+        max_retries: int = MAX_RETRIES,
+        **kwargs
+    ) -> aiohttp.ClientResponse:
+        """
+        Execute HTTP request with retry logic and automatic reconnection.
+
+        Args:
+            method: HTTP method ('get', 'post', etc.)
+            url: Full URL to request
+            max_retries: Maximum number of retry attempts
+            **kwargs: Additional arguments for the request
+
+        Returns:
+            aiohttp.ClientResponse on success
+
+        Raises:
+            RuntimeError: If client was never connected (no session)
+            HAConnectionError: If all retries fail after connection was established
+        """
+        # If we never had a session, raise RuntimeError (backwards compatible)
+        if self._session is None and not self._connected:
+            raise RuntimeError("Client not connected")
+
+        last_error = None
+
+        for attempt in range(max_retries + 1):
+            try:
+                # Ensure we have a valid connection
+                if not self.is_connected():
+                    await self.connect()
+
+                # Set default timeout if not provided
+                if 'timeout' not in kwargs:
+                    kwargs['timeout'] = aiohttp.ClientTimeout(total=10)
+
+                # Execute request
+                request_method = getattr(self._session, method.lower())
+                response = await request_method(url, **kwargs)
+
+                # Check for auth errors (don't retry these)
+                if response.status == 401:
+                    raise HAConnectionError(
+                        "Authentication failed - check HA token"
+                    )
+
+                return response
+
+            except aiohttp.ServerDisconnectedError as e:
+                last_error = e
+                logger.warning(
+                    f"HA server disconnected (attempt {attempt + 1}/{max_retries + 1}): {e}"
+                )
+                self._connected = False
+
+            except aiohttp.ClientConnectorError as e:
+                last_error = e
+                logger.warning(
+                    f"HA connection error (attempt {attempt + 1}/{max_retries + 1}): {e}"
+                )
+                self._connected = False
+
+            except asyncio.TimeoutError as e:
+                last_error = e
+                logger.warning(
+                    f"HA request timeout (attempt {attempt + 1}/{max_retries + 1})"
+                )
+
+            except aiohttp.ClientError as e:
+                last_error = e
+                logger.warning(
+                    f"HA client error (attempt {attempt + 1}/{max_retries + 1}): {e}"
+                )
+                self._connected = False
+
+            # Wait before retrying (except on last attempt)
+            if attempt < max_retries:
+                await asyncio.sleep(RETRY_DELAY_SECONDS)
+                # Try to reconnect
+                try:
+                    await self.connect()
+                    logger.info("Reconnected to Home Assistant")
+                except Exception as reconnect_error:
+                    logger.error(f"Reconnection failed: {reconnect_error}")
+
+        # All retries exhausted
+        raise HAConnectionError(
+            f"Failed to connect to HA after {max_retries + 1} attempts: {last_error}"
+        )
 
     async def get_all_states(self) -> dict[str, dict]:
         """
         Fetch all entity states in one call.
         Returns dict mapping entity_id to state object.
-        """
-        if not self._session:
-            raise RuntimeError("Client not connected")
 
-        async with self._session.get(
-            f"{self.url}/api/states",
+        Uses retry logic to handle temporary connection issues.
+        """
+        url = f"{self.url}/api/states"
+        resp = await self._request_with_retry(
+            'get', url,
             timeout=aiohttp.ClientTimeout(total=10)
-        ) as resp:
+        )
+        async with resp:
             resp.raise_for_status()
             states = await resp.json()
             return {s["entity_id"]: s for s in states}
 
     async def get_state(self, entity_id: str) -> Optional[dict]:
-        """Fetch single entity state."""
-        if not self._session:
-            raise RuntimeError("Client not connected")
+        """
+        Fetch single entity state.
 
-        async with self._session.get(
-            f"{self.url}/api/states/{entity_id}",
+        Uses retry logic to handle temporary connection issues.
+        """
+        url = f"{self.url}/api/states/{entity_id}"
+        resp = await self._request_with_retry(
+            'get', url,
             timeout=aiohttp.ClientTimeout(total=5)
-        ) as resp:
+        )
+        async with resp:
             if resp.status == 404:
                 return None
             resp.raise_for_status()
@@ -84,18 +248,21 @@ class HAClient:
         entity_id: str,
         **kwargs
     ) -> bool:
-        """Call a Home Assistant service."""
-        if not self._session:
-            raise RuntimeError("Client not connected")
+        """
+        Call a Home Assistant service.
 
+        Uses retry logic to handle temporary connection issues.
+        """
         data = {"entity_id": entity_id, **kwargs}
         logger.info(f"Calling {domain}.{service} on {entity_id}")
 
-        async with self._session.post(
-            f"{self.url}/api/services/{domain}/{service}",
+        url = f"{self.url}/api/services/{domain}/{service}"
+        resp = await self._request_with_retry(
+            'post', url,
             json=data,
             timeout=aiohttp.ClientTimeout(total=10)
-        ) as resp:
+        )
+        async with resp:
             resp.raise_for_status()
             return True
 
@@ -130,14 +297,73 @@ class HAClient:
         return await self.call_service("climate", "set_hvac_mode", entity_id, **kwargs)
 
     async def send_notification(self, entity_id: str, title: str, message: str) -> bool:
-        """Send a mobile notification."""
-        return await self.call_service(
-            "notify",
-            entity_id.replace("mobile_app_", ""),
-            entity_id,
-            title=title,
-            message=message
-        )
+        """
+        Send a mobile notification.
+
+        The entity_id can be in various formats:
+        - "mobile_app_<device_name>" - standard Home Assistant mobile app format
+        - "notify.<service_name>" - direct notify service format
+        - "<service_name>" - plain service name
+
+        This method extracts the appropriate service name from any format.
+        """
+        # Extract the service name from the entity_id
+        service_name = self._extract_notify_service_name(entity_id)
+
+        if not service_name:
+            logger.warning(f"Could not extract notification service name from: {entity_id}")
+            return False
+
+        try:
+            return await self.call_service(
+                "notify",
+                service_name,
+                entity_id,
+                title=title,
+                message=message
+            )
+        except Exception as e:
+            logger.error(f"Failed to send notification via {service_name}: {e}")
+            return False
+
+    def _extract_notify_service_name(self, entity_id: str) -> str:
+        """
+        Extract the notification service name from various entity ID formats.
+
+        Handles:
+        - "mobile_app_<name>" -> "<name>" (standard mobile app)
+        - "notify.<name>" -> "<name>" (notify domain)
+        - "mobile_app.<name>" -> "<name>" (alternate format)
+        - "<name>" -> "<name>" (plain name, returned as-is)
+
+        Returns empty string if entity_id is empty/None.
+        """
+        if not entity_id:
+            return ""
+
+        entity_id = entity_id.strip()
+
+        # Handle "mobile_app_<name>" format (most common)
+        if entity_id.startswith("mobile_app_"):
+            return entity_id[11:]  # len("mobile_app_") = 11
+
+        # Handle "notify.<name>" format
+        if entity_id.startswith("notify."):
+            return entity_id[7:]  # len("notify.") = 7
+
+        # Handle "mobile_app.<name>" format (alternate)
+        if entity_id.startswith("mobile_app."):
+            return entity_id[11:]  # len("mobile_app.") = 11
+
+        # If no recognized prefix, assume it's already a service name
+        # but validate it doesn't contain invalid characters
+        if "." in entity_id:
+            # Contains a dot but not a recognized prefix - use part after last dot
+            parts = entity_id.split(".")
+            return parts[-1]
+
+        # Plain name, return as-is
+        return entity_id
 
     async def set_input_text(self, entity_id: str, value: str) -> bool:
         """Set an input_text helper value."""
@@ -220,6 +446,10 @@ class HAClient:
             dishwasher_switch=get_str(e.dishwasher_switch, "off"),
             dishwasher_power=get_num(e.dishwasher_power, 0.0),
 
+            # Laundry
+            washing_machine_power=get_num(e.washing_machine_power, 0.0),
+            tumble_dryer_power=get_num(e.tumble_dryer_power, 0.0),
+
             # AC Units
             ac_living_state=get_str(e.ac_living, "off"),
             ac_mancave_state=get_str(e.ac_mancave, "off"),
@@ -242,6 +472,7 @@ class HAClient:
             ovr_boiler=get_str(e.ovr_boiler, ""),
             ovr_ev=get_str(e.ovr_ev, ""),
             ovr_table_heater=get_str(e.ovr_table_heater, ""),
+            ovr_dishwasher=get_str(e.ovr_dishwasher, ""),
 
             # BMW Cars
             bmw_i5_battery=get_num(e.bmw_i5_battery),

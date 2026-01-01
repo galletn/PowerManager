@@ -50,6 +50,7 @@ class DeviceNeed:
     priority: int  # 1=highest
     deadline: Optional[datetime] = None
     can_run_during_peak: bool = False
+    start_now: bool = False  # If True, schedule from current time (not cheapest)
 
 
 @dataclass
@@ -112,14 +113,68 @@ def generate_schedule(
     config,
     inputs=None
 ) -> ScheduleResult:
-    """
-    Generate optimized 24-hour schedule.
+    """Generate an optimized 24-hour power schedule for all controllable devices.
 
-    Priority order:
-    1. Pool pump (frost protection) - must run if cold
-    2. EV charging - must reach 80% by morning
-    3. Boiler - must be hot by deadline
-    4. Table heater - comfort, use remaining capacity
+    Creates a forward-looking schedule that allocates power capacity across
+    tariff periods to minimize electricity costs while meeting device needs.
+    The schedule respects Belgian electricity tariff limits and prioritizes
+    essential devices over comfort devices.
+
+    The algorithm works by:
+    1. Creating 30-minute slots for the next 24 hours with tariff/limit info
+    2. Calculating each device's power needs (hours required, deadlines)
+    3. Sorting devices by priority
+    4. For each device, finding suitable slots (respecting tariffs/deadlines)
+    5. Filling slots cheapest-first (super-off-peak before off-peak)
+    6. Generating warnings if devices cannot meet their deadlines
+
+    Args:
+        now: Current datetime, used as the schedule start time.
+        config: Config object containing:
+            - max_import: Power limits per tariff (peak, off_peak, super_off_peak)
+            - ev: EV settings (max_amps, watts_per_amp)
+            - boiler: Boiler power and deadline hours
+            - heaters: Heater power ratings
+            - frost_protection: Pool pump settings
+        inputs: Optional PowerInputs with current device states:
+            - ev_state: Whether EV is connected/charging
+            - bmw_i5_battery, bmw_ix1_battery: Current battery levels
+            - boiler_switch, boiler_power: Boiler state
+            - pool_pump_switch, pool_ambient_temp: Pool/frost info
+            - dishwasher_switch, dishwasher_power: Dishwasher state
+            If None, schedule uses default assumptions.
+
+    Returns:
+        ScheduleResult containing:
+            - slots: List of ScheduleSlot objects (48 slots, 30 min each)
+            - ev_estimate: Dict with EV charging needs (kwh_needed, hours_needed)
+            - boiler_estimate: Dict with boiler heating needs
+            - warnings: List of strings for devices that may not complete
+            - timetable: Simplified hourly view for dashboard display
+            - scheduled_hours: Dict mapping device name to hours allocated
+
+    Priority Order:
+        1. Pool pump - Frost protection, must run 24/7 if cold
+        2. Boiler - Hot water essential, deadline before morning
+        3. EV charging - Must reach 80% by 07:00
+        4. Table heater - Comfort device, 4 hours target
+        5. Dishwasher - Smart scheduled, 2 hour cycles
+        6. Washing machine - Informational only (user-controlled)
+        7. Tumble dryer - Informational only (user-controlled)
+
+    Slot Allocation Strategy:
+        - Devices with start_now=True are scheduled from current time
+        - Other devices are scheduled cheapest-tariff-first:
+          super-off-peak (01:00-07:00) > off-peak > peak
+        - Peak slots only used for devices with can_run_during_peak=True
+        - Deadline-constrained devices may use more expensive slots if needed
+
+    Example:
+        >>> from datetime import datetime
+        >>> schedule = generate_schedule(datetime.now(), config, inputs)
+        >>> print(f"EV needs {schedule.ev_estimate['hours_needed']}h charging")
+        >>> for warning in schedule.warnings:
+        ...     print(f"WARNING: {warning}")
     """
     warnings = []
     summer = is_summer(now)
@@ -252,6 +307,69 @@ def generate_schedule(
         can_run_during_peak=False
     ))
 
+    # Dishwasher - if running or waiting, show in schedule
+    if inputs:
+        dw_power = inputs.dishwasher_power
+        dw_switch_on = inputs.dishwasher_switch == 'on'
+        dw_running = dw_power > 50
+        dw_waiting = dw_switch_on and dw_power < 50
+
+        # Check current tariff - if already cheap, dishwasher should run now
+        current_tariff, _ = get_tariff(now)
+        is_cheap_now = current_tariff in ('off-peak', 'super-off-peak')
+
+        if dw_running:
+            # Actually running - show from NOW for remaining duration
+            devices.append(DeviceNeed(
+                name='dishwasher',
+                power=1900,
+                hours_needed=2,
+                priority=5,
+                can_run_during_peak=True,
+                start_now=True  # Show from current time
+            ))
+        elif dw_waiting and is_cheap_now:
+            # Waiting but approved to run now - show from NOW
+            devices.append(DeviceNeed(
+                name='dishwasher',
+                power=1900,
+                hours_needed=2,
+                priority=5,
+                can_run_during_peak=True,
+                start_now=True
+            ))
+        elif dw_waiting:
+            # Waiting during peak - schedule for next cheap tariff
+            devices.append(DeviceNeed(
+                name='dishwasher',
+                power=1900,
+                hours_needed=2,
+                priority=5,
+                can_run_during_peak=False
+            ))
+
+    # Washing machine - only show when CURRENTLY running (informational only)
+    if inputs and inputs.washing_machine_power > 50:
+        devices.append(DeviceNeed(
+            name='washing_machine',
+            power=2000,
+            hours_needed=1.5,
+            priority=6,
+            can_run_during_peak=True,
+            start_now=True  # Only show from current time when running
+        ))
+
+    # Tumble dryer - only show when CURRENTLY running (informational only)
+    if inputs and inputs.tumble_dryer_power > 50:
+        devices.append(DeviceNeed(
+            name='tumble_dryer',
+            power=2500,
+            hours_needed=1.5,
+            priority=7,
+            can_run_during_peak=True,
+            start_now=True  # Only show from current time when running
+        ))
+
     # Sort by priority
     devices.sort(key=lambda d: d.priority)
 
@@ -281,10 +399,15 @@ def generate_schedule(
             if slot.can_add(device.name, device.power):
                 suitable_slots.append(slot)
 
-        # Sort by tariff preference (cheapest first), then by time
-        suitable_slots.sort(key=lambda s: (TARIFF_PREFERENCE.get(s.tariff, 2), s.start))
+        # Sort slots:
+        # - If start_now: sort by time (run NOW, regardless of tariff)
+        # - Otherwise: sort by tariff preference (cheapest first), then by time
+        if device.start_now:
+            suitable_slots.sort(key=lambda s: s.start)
+        else:
+            suitable_slots.sort(key=lambda s: (TARIFF_PREFERENCE.get(s.tariff, 2), s.start))
 
-        # Fill cheapest slots first
+        # Fill slots
         for slot in suitable_slots:
             if hours_scheduled >= device.hours_needed:
                 break
@@ -316,7 +439,45 @@ def generate_schedule(
 
 
 def generate_timetable(slots: List[ScheduleSlot]) -> List[Dict]:
-    """Generate a simplified timetable showing hourly device status."""
+    """Generate a simplified hourly timetable from 30-minute schedule slots.
+
+    Converts the detailed 30-minute scheduling slots into an hourly summary
+    suitable for dashboard display. Each hour shows which devices are scheduled
+    to run, the applicable tariff, and power utilization.
+
+    Args:
+        slots: List of ScheduleSlot objects representing 30-minute time periods,
+            each containing:
+            - start/end: Datetime boundaries of the slot
+            - tariff: 'peak', 'off-peak', or 'super-off-peak'
+            - power_limit: Maximum allowed import in watts for this tariff
+            - devices: Dict mapping device names to their power consumption
+
+    Returns:
+        List of hourly summary dictionaries, each containing:
+            - hour: String formatted as "HH:00" (e.g., "03:00")
+            - tariff: Tariff period name for this hour
+            - limit: Power limit in watts for this tariff period
+            - devices: Dict of device names to power consumption (merged from
+              both 30-min slots within the hour)
+            - total_power: Sum of all device power consumption in watts
+            - utilization: Percentage of power limit used (0-100+)
+
+    Example:
+        >>> slots = [
+        ...     ScheduleSlot(start=datetime(2024,1,1,3,0), ..., devices={'ev': 7500}),
+        ...     ScheduleSlot(start=datetime(2024,1,1,3,30), ..., devices={'ev': 7500}),
+        ... ]
+        >>> timetable = generate_timetable(slots)
+        >>> timetable[0]
+        {'hour': '03:00', 'tariff': 'super-off-peak', 'limit': 8000,
+         'devices': {'ev': 7500}, 'total_power': 7500, 'utilization': 94}
+
+    Note:
+        Devices scheduled in either half of an hour appear in that hour's
+        summary. The power value shown is from the first slot where the
+        device appears (assumes consistent power within the hour).
+    """
     timetable = []
 
     # Group slots by hour and device activity

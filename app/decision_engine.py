@@ -16,6 +16,13 @@ from .models import (
 )
 from .tariff import get_tariff, get_max_import, is_summer, get_ev_status_text
 
+# Power thresholds (Watts)
+MIN_EXPORT_FOR_BOILER = 500
+DW_EXPECTED_POWER = 1900
+MIN_SOLAR_SURPLUS = 500
+MAX_GRID_IMPORT_FOR_EV = 1000
+DW_RUNNING_THRESHOLD = 50
+
 
 def fmt_w(watts: float) -> str:
     """Format watts for display."""
@@ -73,16 +80,126 @@ def parse_override(value: str) -> str:
     return 'auto'
 
 
+def calculate_available_amps(total_watts: float, watts_per_amp: int) -> int:
+    """Calculate available amps from watts, with division by zero guard.
+
+    Args:
+        total_watts: Total power available in watts.
+        watts_per_amp: Power consumption per amp (must be > 0 for valid result).
+
+    Returns:
+        Available amps as integer. Returns 0 if watts_per_amp is 0 or negative.
+    """
+    if watts_per_amp <= 0:
+        return 0
+    return int(total_watts / watts_per_amp)
+
+
+def is_boiler_full(
+    boiler_on: bool,
+    boiler_power: float,
+    idle_threshold: int,
+    device_state: AllDeviceStates,
+    now_ts: float,
+    confirm_seconds: int
+) -> bool:
+    """
+    Determine if boiler is "full" (reached temperature and stopped heating).
+
+    Uses time-based confirmation to avoid false positives from sensor glitches.
+    Power must be below idle_threshold for confirm_seconds to be considered "full".
+
+    Args:
+        boiler_on: Whether boiler switch is on
+        boiler_power: Current power draw in watts
+        idle_threshold: Power threshold below which boiler is considered idle
+        device_state: All device states for tracking timing
+        now_ts: Current timestamp in milliseconds
+        confirm_seconds: Seconds power must be low to confirm "full"
+
+    Returns:
+        True if boiler is confirmed full, False otherwise
+    """
+    if not boiler_on:
+        # Boiler is off, reset tracking and return not full
+        device_state.boiler_low_power_since = 0.0
+        return False
+
+    power_is_low = boiler_power < idle_threshold
+
+    if power_is_low:
+        # Power is low - check if we've been tracking this
+        if device_state.boiler_low_power_since == 0.0:
+            # Just dropped below threshold, start tracking
+            device_state.boiler_low_power_since = now_ts
+            return False
+        else:
+            # Already tracking - check if confirmation time has passed
+            elapsed_ms = now_ts - device_state.boiler_low_power_since
+            elapsed_seconds = elapsed_ms / 1000
+            if elapsed_seconds >= confirm_seconds:
+                return True
+            else:
+                # Still waiting for confirmation
+                return False
+    else:
+        # Power is above threshold - reset tracking
+        device_state.boiler_low_power_since = 0.0
+        return False
+
+
 def calculate_decisions(
     inputs: PowerInputs,
     config: Config,
     device_state: AllDeviceStates,
     now: Optional[datetime] = None
 ) -> DecisionResult:
-    """
-    Calculate device decisions based on current state.
+    """Calculate optimal device states based on current power conditions.
 
-    Main entry point for the decision engine.
+    This is the main entry point for the Power Manager decision engine. It
+    analyzes current power consumption, solar production, tariff period, and
+    device states to determine the optimal action for each controllable device.
+
+    The function orchestrates the entire decision-making flow:
+    1. Gather current state (tariff, power, device states, overrides)
+    2. Apply manual overrides (force on/off from Home Assistant helpers)
+    3. Check frost protection for pool pump
+    4. Check BMW battery levels for evening alerts
+    5. Apply seasonal logic (winter heating vs summer solar optimization)
+    6. Calculate final power headroom
+
+    Args:
+        inputs: PowerInputs containing all sensor readings from Home Assistant:
+            - p1_power: Grid import/export from P1 meter (W, negative = export)
+            - pv_power: Solar PV production (W)
+            - Device states (boiler, EV, heaters, etc.)
+            - Override helper states (ovr_boiler, ovr_ev, etc.)
+            - Temperature sensors and BMW car data
+        config: Config object with power limits, device ratings, and timing:
+            - max_import: Power limits per tariff period
+            - ev: EV charger settings (amps, watts_per_amp)
+            - boiler: Boiler power and deadlines
+            - timing: Hysteresis and min on/off times
+        device_state: AllDeviceStates tracking when each device last changed,
+            used to enforce minimum on/off times and prevent rapid cycling.
+        now: Optional datetime for testing. Defaults to current time.
+
+    Returns:
+        DecisionResult containing:
+            - decisions: Decisions object with action for each device
+              ('on', 'off', 'adjust', 'none')
+            - plan: List of human-readable strings explaining each decision
+            - headroom: Remaining power capacity in watts after decisions
+            - alerts: List of Alert objects for notifications (frost, low battery)
+            - meta: Dict with tariff info, power readings, season, etc.
+
+    Example:
+        >>> inputs = PowerInputs(p1_power=500, pv_power=2000, ...)
+        >>> config = load_config()
+        >>> device_state = AllDeviceStates()
+        >>> result = calculate_decisions(inputs, config, device_state)
+        >>> if result.decisions.boiler.action == 'on':
+        ...     ha_client.turn_on('switch.storage_boiler')
     """
     if now is None:
         now = datetime.now()
@@ -124,7 +241,15 @@ def calculate_decisions(
     boiler_on = inputs.boiler_switch == 'on'
     boiler_power = inputs.boiler_power
     boiler_force = inputs.boiler_force == 'on'
-    boiler_full = boiler_on and boiler_power < config.boiler.idle_threshold
+    # Use time-based confirmation to avoid false "full" detection from sensor glitches
+    boiler_full = is_boiler_full(
+        boiler_on=boiler_on,
+        boiler_power=boiler_power,
+        idle_threshold=config.boiler.idle_threshold,
+        device_state=device_state,
+        now_ts=now_ts,
+        confirm_seconds=config.boiler.full_confirm_seconds
+    )
 
     # EV states
     ev_plugged = ev_state in (EVState.READY, EVState.CHARGING, EVState.FULL)
@@ -140,8 +265,8 @@ def calculate_decisions(
     # Dishwasher
     dw_switch_on = inputs.dishwasher_switch == 'on'
     dw_power = inputs.dishwasher_power
-    dw_running = dw_power > 50  # Actually running a cycle (drawing power)
-    dw_waiting = dw_switch_on and dw_power < 50  # Switch on but not running yet
+    dw_running = dw_power > DW_RUNNING_THRESHOLD  # Actually running a cycle (drawing power)
+    dw_waiting = dw_switch_on and dw_power < DW_RUNNING_THRESHOLD  # Switch on but not running yet
 
     ac_states = {
         'living': inputs.ac_living_state,
@@ -341,98 +466,164 @@ def _apply_manual_overrides(decisions: Decisions, plan: list, ovr: dict, ctx: di
         plan.append("Dishwasher: OVERRIDE OFF")
 
 
-def _apply_winter_logic(decisions: Decisions, plan: list, ctx: dict):
-    """Apply winter heating/charging logic."""
+def _handle_boiler_winter(
+    decisions: Decisions,
+    plan: list,
+    ctx: dict,
+    effective_headroom: float
+) -> tuple[float, float]:
+    """Handle boiler logic for winter mode.
+
+    Determines whether to turn the boiler on/off based on tariff, solar surplus,
+    force heat mode, and deadline approaching. The boiler has priority 2 (after
+    frost protection) because hot water is essential.
+
+    Args:
+        decisions: Decisions object to update with boiler action.
+        plan: List of strings to append decision rationale.
+        ctx: Context dictionary with ovr, config, can_switch, tariff, etc.
+        effective_headroom: Current available power capacity in watts.
+
+    Returns:
+        Tuple of (boiler_will_use, updated_effective_headroom) where
+        boiler_will_use is the power reserved for the boiler.
+    """
     ovr = ctx['ovr']
-    headroom = ctx['headroom']
     hyst = ctx['hyst']
     config = ctx['config']
     can_switch = ctx['can_switch']
     tariff = ctx['tariff']
 
-    # Track effective headroom as we make decisions
-    effective_headroom = headroom
-
-    # === BOILER FIRST (Priority 2 - hot water is essential!) ===
     boiler_will_use = 0
     hour = ctx['date'].hour + ctx['date'].minute / 60
     deadline = config.boiler.deadline_winter
     boiler_force = ctx.get('boiler_force', False)
     is_exporting = ctx.get('is_exporting', False)
 
-    if ovr['boiler'] == 'auto':
-        # Force heat overrides everything - heat anytime
-        if boiler_force and not ctx['boiler_full']:
-            if not ctx['boiler_on']:
-                if can_switch('boiler', True):
-                    decisions.boiler.action = 'on'
-                    boiler_will_use = config.boiler.power
-                    effective_headroom -= boiler_will_use
-                    plan.append("Boiler: ON (force heat)")
-            else:
+    if ovr['boiler'] != 'auto':
+        return boiler_will_use, effective_headroom
+
+    # Force heat overrides everything - heat anytime
+    if boiler_force and not ctx['boiler_full']:
+        if not ctx['boiler_on']:
+            if can_switch('boiler', True):
+                decisions.boiler.action = 'on'
                 boiler_will_use = config.boiler.power
                 effective_headroom -= boiler_will_use
+                plan.append("Boiler: ON (force heat)")
+        else:
+            boiler_will_use = config.boiler.power
+            effective_headroom -= boiler_will_use
+        return boiler_will_use, effective_headroom
 
-        elif tariff == 'peak' and ctx['boiler_on'] and not boiler_force:
-            # Turn off during peak (unless force heat)
-            if hour > deadline and can_switch('boiler', False):
-                decisions.boiler.action = 'off'
-                plan.append("Boiler: OFF (peak tariff)")
+    if tariff == 'peak' and ctx['boiler_on'] and not boiler_force:
+        # Turn off during peak (unless force heat)
+        if hour > deadline and can_switch('boiler', False):
+            decisions.boiler.action = 'off'
+            plan.append("Boiler: OFF (peak tariff)")
+        return boiler_will_use, effective_headroom
 
-        elif not ctx['boiler_full']:
-            # Determine if we should heat
-            approaching_deadline = hour >= (deadline - 2) and hour < deadline
-            enough_power = effective_headroom > config.boiler.power + hyst
+    if not ctx['boiler_full']:
+        # Determine if we should heat
+        approaching_deadline = hour >= (deadline - 2) and hour < deadline
+        enough_power = effective_headroom > config.boiler.power + hyst
 
-            # Solar surplus logic: if exporting significant power, use boiler
-            # Even if we need to import some, it's better than wasting solar
-            # Example: exporting 1500W, boiler uses 2500W -> import 1000W
-            # This is better than selling 1500W at low feed-in tariff
-            p1 = ctx.get('p1', 0)
-            export_power = abs(p1) if is_exporting else 0
-            min_export_for_boiler = 500  # Minimum export to justify turning on boiler
-            has_solar_surplus = is_exporting and export_power > min_export_for_boiler
+        # Solar surplus logic: if exporting significant power, use boiler
+        p1 = ctx.get('p1', 0)
+        export_power = abs(p1) if is_exporting else 0
+        has_solar_surplus = is_exporting and export_power > MIN_EXPORT_FOR_BOILER
 
-            # Only heat during:
-            # 1. Super off-peak (cheapest rate, 01:00-07:00)
-            # 2. Solar surplus (better to use than sell)
-            # 3. Approaching deadline (need hot water by morning)
-            should_heat = False
-            reason = ""
+        # Only heat during:
+        # 1. Super off-peak (cheapest rate, 01:00-07:00)
+        # 2. Solar surplus (better to use than sell)
+        # 3. Approaching deadline (need hot water by morning)
+        should_heat = False
+        reason = ""
 
-            if tariff == 'super-off-peak' and enough_power:
-                should_heat = True
-                reason = "super-off-peak"
-            elif has_solar_surplus:
-                should_heat = True
-                reason = f"solar ({int(export_power)}W export)"
-            elif approaching_deadline and tariff in ('off-peak', 'super-off-peak'):
-                should_heat = True
-                reason = "approaching deadline"
+        if tariff == 'super-off-peak' and enough_power:
+            should_heat = True
+            reason = "super-off-peak"
+        elif has_solar_surplus:
+            should_heat = True
+            reason = f"solar ({int(export_power)}W export)"
+        elif approaching_deadline and tariff in ('off-peak', 'super-off-peak'):
+            should_heat = True
+            reason = "approaching deadline"
 
-            if should_heat and not ctx['boiler_on']:
-                if can_switch('boiler', True):
-                    decisions.boiler.action = 'on'
-                    boiler_will_use = config.boiler.power
-                    effective_headroom -= boiler_will_use
-                    plan.append(f"Boiler: ON ({reason})")
-            elif ctx['boiler_on']:
-                # Boiler already on, reserve its power
+        if should_heat and not ctx['boiler_on']:
+            if can_switch('boiler', True):
+                decisions.boiler.action = 'on'
                 boiler_will_use = config.boiler.power
                 effective_headroom -= boiler_will_use
+                plan.append(f"Boiler: ON ({reason})")
+        elif ctx['boiler_on']:
+            # Boiler already on, reserve its power
+            boiler_will_use = config.boiler.power
+            effective_headroom -= boiler_will_use
 
-    # === EV CHARGING (Priority 3 - use remaining capacity) ===
-    if ovr['ev'] == 'auto' and ctx['ev_plugged'] and not ctx['ev_done']:
-        # When EV is already charging, its power is included in p1.
-        # To calculate target amps, we need TOTAL power available for EV,
-        # not just the remaining headroom. Add back current EV power.
-        current_ev_watts = ctx['ev_limit'] * config.ev.watts_per_amp if ctx['ev_charging'] else 0
+    return boiler_will_use, effective_headroom
 
-        if tariff == 'super-off-peak':
-            # Super off-peak (8kW limit) - plenty of room for EV
-            # Total power for EV = remaining headroom + current EV consumption
+
+def _handle_ev_winter(
+    decisions: Decisions,
+    plan: list,
+    ctx: dict,
+    effective_headroom: float,
+    boiler_will_use: float
+) -> float:
+    """Handle EV charging logic for winter mode.
+
+    Manages EV charging based on tariff periods and available capacity.
+    During super-off-peak, EV can charge alongside boiler. During off-peak,
+    EV only charges if boiler is idle. Charging stops during peak tariff.
+
+    Args:
+        decisions: Decisions object to update with EV action.
+        plan: List of strings to append decision rationale.
+        ctx: Context dictionary with ev states, config, can_switch, etc.
+        effective_headroom: Current available power capacity in watts.
+        boiler_will_use: Power reserved for boiler (affects off-peak logic).
+
+    Returns:
+        Updated effective_headroom after accounting for EV charging.
+    """
+    ovr = ctx['ovr']
+    hyst = ctx['hyst']
+    config = ctx['config']
+    can_switch = ctx['can_switch']
+    tariff = ctx['tariff']
+
+    if ovr['ev'] != 'auto' or not ctx['ev_plugged'] or ctx['ev_done']:
+        return effective_headroom
+
+    # When EV is already charging, its power is included in p1.
+    # To calculate target amps, we need TOTAL power available for EV.
+    current_ev_watts = ctx['ev_limit'] * config.ev.watts_per_amp if ctx['ev_charging'] else 0
+
+    if tariff == 'super-off-peak':
+        # Super off-peak (8kW limit) - plenty of room for EV
+        total_for_ev = effective_headroom + current_ev_watts - hyst
+        available_amps = calculate_available_amps(total_for_ev, config.ev.watts_per_amp)
+        target_amps = max(config.ev.min_amps, min(available_amps, config.ev.max_amps))
+
+        if ctx['ev_charging']:
+            amp_diff = abs(target_amps - ctx['ev_limit'])
+            if amp_diff >= config.ev.amp_change_threshold:
+                decisions.ev.action = 'adjust'
+                decisions.ev.amps = target_amps
+                plan.append(f"EV: adjust to {target_amps}A")
+        elif ctx['ev_ready'] and target_amps >= config.ev.min_amps:
+            if can_switch('ev', True):
+                decisions.ev.action = 'on'
+                decisions.ev.amps = target_amps
+                effective_headroom -= target_amps * config.ev.watts_per_amp
+                plan.append(f"EV: START at {target_amps}A (super-off-peak)")
+
+    elif tariff == 'off-peak':
+        # Off-peak (5kW limit) - only charge if boiler not needed
+        if boiler_will_use == 0 and not ctx['boiler_on']:
             total_for_ev = effective_headroom + current_ev_watts - hyst
-            available_amps = int(total_for_ev / config.ev.watts_per_amp)
+            available_amps = calculate_available_amps(total_for_ev, config.ev.watts_per_amp)
             target_amps = max(config.ev.min_amps, min(available_amps, config.ev.max_amps))
 
             if ctx['ev_charging']:
@@ -446,84 +637,135 @@ def _apply_winter_logic(decisions: Decisions, plan: list, ctx: dict):
                     decisions.ev.action = 'on'
                     decisions.ev.amps = target_amps
                     effective_headroom -= target_amps * config.ev.watts_per_amp
-                    plan.append(f"EV: START at {target_amps}A (super-off-peak)")
-
-        elif tariff == 'off-peak':
-            # Off-peak (5kW limit) - only charge if boiler not needed
-            if boiler_will_use == 0 and not ctx['boiler_on']:
-                # Boiler not running and not needed, can use capacity for EV
-                total_for_ev = effective_headroom + current_ev_watts - hyst
-                available_amps = int(total_for_ev / config.ev.watts_per_amp)
-                target_amps = max(config.ev.min_amps, min(available_amps, config.ev.max_amps))
-
-                if ctx['ev_charging']:
-                    amp_diff = abs(target_amps - ctx['ev_limit'])
-                    if amp_diff >= config.ev.amp_change_threshold:
-                        decisions.ev.action = 'adjust'
-                        decisions.ev.amps = target_amps
-                        plan.append(f"EV: adjust to {target_amps}A")
-                elif ctx['ev_ready'] and target_amps >= config.ev.min_amps:
-                    if can_switch('ev', True):
-                        decisions.ev.action = 'on'
-                        decisions.ev.amps = target_amps
-                        effective_headroom -= target_amps * config.ev.watts_per_amp
-                        plan.append(f"EV: START at {target_amps}A (off-peak, boiler idle)")
-            elif ctx['ev_charging']:
-                # EV already charging but boiler needs power - reduce or stop EV
-                if can_switch('ev', False):
-                    decisions.ev.action = 'off'
-                    plan.append("EV: PAUSE (boiler priority)")
-
-        elif tariff == 'peak' and ctx['ev_charging']:
-            # Stop charging during peak
+                    plan.append(f"EV: START at {target_amps}A (off-peak, boiler idle)")
+        elif ctx['ev_charging']:
+            # EV already charging but boiler needs power - reduce or stop EV
             if can_switch('ev', False):
                 decisions.ev.action = 'off'
-                plan.append("EV: STOP (peak tariff)")
+                plan.append("EV: PAUSE (boiler priority)")
 
-    # === TABLE HEATER (Priority 4 - lowest, use remaining capacity) ===
-    # Prefer super-off-peak (cheapest) but use off-peak if EV needs the super-off-peak capacity
-    if ovr['table_heater'] == 'auto':
-        table_power = config.heaters.table_power
-        ht_on = ctx['ht_on']
+    elif tariff == 'peak' and ctx['ev_charging']:
+        # Stop charging during peak
+        if can_switch('ev', False):
+            decisions.ev.action = 'off'
+            plan.append("EV: STOP (peak tariff)")
 
-        # Calculate remaining capacity
-        remaining = effective_headroom
-        if ctx['ev_charging'] and decisions.ev.action == 'none':
-            remaining -= ctx['ev_limit'] * config.ev.watts_per_amp
-        enough_power = remaining > table_power + hyst
+    return effective_headroom
 
-        # Check if EV will use most of super-off-peak capacity
-        # Super-off-peak: 6h × 8kW = 48kWh
-        # If EV needs significant charging, use off-peak for heater
-        ev_needs_capacity = ctx['ev_plugged'] and not ctx['ev_done']
 
-        if tariff == 'super-off-peak':
-            if not ht_on and enough_power:
-                if can_switch('heater_table', True):
-                    decisions.heater_table.action = 'on'
-                    plan.append("Table heater: ON (super-off-peak)")
-            elif ht_on and remaining < table_power - hyst:
-                if can_switch('heater_table', False):
-                    decisions.heater_table.action = 'off'
-                    plan.append("Table heater: OFF (capacity needed)")
+def _handle_heater_winter(
+    decisions: Decisions,
+    plan: list,
+    ctx: dict,
+    effective_headroom: float
+) -> None:
+    """Handle table heater logic for winter mode.
 
-        elif tariff == 'off-peak':
-            # Use off-peak if EV will need the super-off-peak capacity
-            if ev_needs_capacity and enough_power:
-                if not ht_on:
-                    if can_switch('heater_table', True):
-                        decisions.heater_table.action = 'on'
-                        plan.append("Table heater: ON (off-peak, EV needs super-off-peak)")
-            elif ht_on and not ev_needs_capacity:
-                # No EV charging needed, save for super-off-peak
-                if can_switch('heater_table', False):
-                    decisions.heater_table.action = 'off'
-                    plan.append("Table heater: OFF (save for super-off-peak)")
+    The table heater has the lowest priority (4) and uses remaining capacity
+    after boiler and EV. Prefers super-off-peak but may use off-peak if EV
+    needs the super-off-peak capacity.
 
-        elif tariff == 'peak' and ht_on:
+    Args:
+        decisions: Decisions object to update with heater action.
+        plan: List of strings to append decision rationale.
+        ctx: Context dictionary with heater states, config, can_switch, etc.
+        effective_headroom: Current available power capacity in watts.
+    """
+    ovr = ctx['ovr']
+    hyst = ctx['hyst']
+    config = ctx['config']
+    can_switch = ctx['can_switch']
+    tariff = ctx['tariff']
+
+    if ovr['table_heater'] != 'auto':
+        return
+
+    table_power = config.heaters.table_power
+    ht_on = ctx['ht_on']
+
+    # Calculate remaining capacity
+    remaining = effective_headroom
+    if ctx['ev_charging'] and decisions.ev.action == 'none':
+        remaining -= ctx['ev_limit'] * config.ev.watts_per_amp
+    enough_power = remaining > table_power + hyst
+
+    # Check if EV will use most of super-off-peak capacity
+    ev_needs_capacity = ctx['ev_plugged'] and not ctx['ev_done']
+
+    if tariff == 'super-off-peak':
+        if not ht_on and enough_power:
+            if can_switch('heater_table', True):
+                decisions.heater_table.action = 'on'
+                plan.append("Table heater: ON (super-off-peak)")
+        elif ht_on and remaining < table_power - hyst:
             if can_switch('heater_table', False):
                 decisions.heater_table.action = 'off'
-                plan.append("Table heater: OFF (peak tariff)")
+                plan.append("Table heater: OFF (capacity needed)")
+
+    elif tariff == 'off-peak':
+        # Use off-peak if EV will need the super-off-peak capacity
+        if ev_needs_capacity and enough_power:
+            if not ht_on:
+                if can_switch('heater_table', True):
+                    decisions.heater_table.action = 'on'
+                    plan.append("Table heater: ON (off-peak, EV needs super-off-peak)")
+        elif ht_on and not ev_needs_capacity:
+            # No EV charging needed, save for super-off-peak
+            if can_switch('heater_table', False):
+                decisions.heater_table.action = 'off'
+                plan.append("Table heater: OFF (save for super-off-peak)")
+
+    elif tariff == 'peak' and ht_on:
+        if can_switch('heater_table', False):
+            decisions.heater_table.action = 'off'
+            plan.append("Table heater: OFF (peak tariff)")
+
+
+def _apply_winter_logic(decisions: Decisions, plan: list, ctx: dict):
+    """Apply winter heating and charging logic based on tariff periods.
+
+    This function orchestrates the decision-making for winter months by
+    delegating to specialized handler functions for each device type.
+    It manages device scheduling to minimize electricity costs while
+    ensuring essential needs (hot water, vehicle charging) are met.
+
+    Priority Order:
+        1. Frost Protection - Handled separately before this function
+        2. Boiler (hot water) - Essential, runs during super-off-peak or solar
+        3. EV Charging - Uses remaining capacity after boiler
+        4. Table Heater - Comfort device, lowest priority
+        5. Dishwasher - Smart scheduled via separate logic
+
+    Key Logic Branches:
+        - Super-off-peak (01:00-07:00): Both boiler and EV can run together
+          with 8kW limit. Table heater uses any remaining capacity.
+        - Off-peak (varies): EV only charges if boiler is idle. 5kW limit.
+        - Peak (07:00-11:00, 17:00-22:00): Devices turned off to avoid high
+          tariff, except for force overrides and deadline approaching.
+        - Solar surplus: Boiler runs even during peak if exporting >500W.
+
+    Args:
+        decisions: Decisions object to populate with device actions.
+        plan: List of strings describing the decision rationale.
+        ctx: Context dictionary containing current state and configuration.
+    """
+    headroom = ctx['headroom']
+
+    # Track effective headroom as we make decisions
+    effective_headroom = headroom
+
+    # === BOILER FIRST (Priority 2 - hot water is essential!) ===
+    boiler_will_use, effective_headroom = _handle_boiler_winter(
+        decisions, plan, ctx, effective_headroom
+    )
+
+    # === EV CHARGING (Priority 3 - use remaining capacity) ===
+    effective_headroom = _handle_ev_winter(
+        decisions, plan, ctx, effective_headroom, boiler_will_use
+    )
+
+    # === TABLE HEATER (Priority 4 - lowest, use remaining capacity) ===
+    _handle_heater_winter(decisions, plan, ctx, effective_headroom)
 
     # === DISHWASHER (Priority 5 - smart scheduling) ===
     # Never interrupt running cycles, optimize start time for tariffs/solar
@@ -557,10 +799,10 @@ def _apply_dishwasher_logic(decisions: Decisions, plan: list, ctx: dict):
     hyst = ctx.get('hyst', 100)
 
     # Dishwasher power consumption (peak during heating phases)
-    dw_expected_power = 1900  # ~1850W peak, use 1900 for safety margin
+    # DW_EXPECTED_POWER = ~1850W peak, use 1900 for safety margin
 
     # Minimum solar export to consider "solar surplus"
-    min_solar_surplus = 500  # 500W export = good solar
+    # MIN_SOLAR_SURPLUS = 500W export = good solar
 
     # If dishwasher is running (drawing power), NEVER interrupt
     if dw_running:
@@ -576,13 +818,13 @@ def _apply_dishwasher_logic(decisions: Decisions, plan: list, ctx: dict):
     # waiting for the smart scheduling to release it
 
     if dw_waiting:
-        has_solar_surplus = is_exporting and abs(p1) > min_solar_surplus
+        has_solar_surplus = is_exporting and abs(p1) > MIN_SOLAR_SURPLUS
         is_cheap_tariff = tariff in ('off-peak', 'super-off-peak')
 
         # Check if we have enough headroom for the dishwasher
         # Account for already running devices
         available_power = headroom - hyst
-        has_enough_power = available_power > dw_expected_power
+        has_enough_power = available_power > DW_EXPECTED_POWER
 
         # Determine when next cheap rate starts (for display)
         next_change = tariff_info.get('next_change', 0)
@@ -602,12 +844,14 @@ def _apply_dishwasher_logic(decisions: Decisions, plan: list, ctx: dict):
             plan.append(f"Dishwasher: RUN ({tariff}, {available_power:.0f}W avail)")
         elif is_cheap_tariff and not has_enough_power:
             # Cheap tariff but not enough power - wait for other devices to finish
-            decisions.dishwasher.action = 'off'
+            # Don't turn off the switch - user may be selecting a program
+            decisions.dishwasher.action = 'none'
             decisions.dishwasher.reason = 'waiting for headroom'
-            plan.append(f"Dishwasher: WAIT (need {dw_expected_power}W, have {available_power:.0f}W)")
+            plan.append(f"Dishwasher: WAITING (need {DW_EXPECTED_POWER}W, have {available_power:.0f}W)")
         else:
             # Peak rate, no solar - hold until cheap rate
-            decisions.dishwasher.action = 'off'
+            # Don't turn off the switch - user may be selecting a program
+            decisions.dishwasher.action = 'none'
             decisions.dishwasher.reason = 'waiting for cheap rate'
 
             # Calculate wait time for display
@@ -616,7 +860,7 @@ def _apply_dishwasher_logic(decisions: Decisions, plan: list, ctx: dict):
             else:
                 wait_hours = (24 - current_hour) + next_change
 
-            plan.append(f"Dishwasher: PAUSED (off-peak in {wait_hours}h)")
+            plan.append(f"Dishwasher: WAITING (off-peak in {wait_hours}h)")
 
 
 def _apply_summer_logic(decisions: Decisions, plan: list, ctx: dict):
@@ -631,12 +875,11 @@ def _apply_summer_logic(decisions: Decisions, plan: list, ctx: dict):
 
     # EV Charging - solar-assisted charging
     # Allow up to 1kW grid import when solar is good (better than exporting all)
-    max_grid_import_for_ev = 1000  # Allow 1kW grid when solar is good
     p1 = ctx.get('p1', 0)
 
     if ovr['ev'] == 'auto' and ctx['ev_plugged'] and not ctx['ev_done']:
         # Good solar: either exporting, or importing less than threshold
-        has_good_solar = pv > 1500 and (is_exporting or p1 < max_grid_import_for_ev)
+        has_good_solar = pv > 1500 and (is_exporting or p1 < MAX_GRID_IMPORT_FOR_EV)
 
         if has_good_solar:
             # Calculate available power for EV
@@ -644,16 +887,16 @@ def _apply_summer_logic(decisions: Decisions, plan: list, ctx: dict):
             # If importing < threshold: we can use (threshold - current import)
             if is_exporting:
                 # Exporting = can use all export + allowed import buffer
-                available_power = abs(p1) + max_grid_import_for_ev
+                available_power = abs(p1) + MAX_GRID_IMPORT_FOR_EV
             else:
                 # Already importing, but under threshold
-                available_power = max_grid_import_for_ev - p1
+                available_power = MAX_GRID_IMPORT_FOR_EV - p1
 
             # When EV is already charging, add back its consumption
             current_ev_watts = ctx['ev_limit'] * config.ev.watts_per_amp if ctx['ev_charging'] else 0
             total_for_ev = available_power + current_ev_watts - hyst
 
-            available_amps = int(total_for_ev / config.ev.watts_per_amp)
+            available_amps = calculate_available_amps(total_for_ev, config.ev.watts_per_amp)
             target_amps = max(config.ev.min_amps, min(available_amps, config.ev.max_amps))
 
             if ctx['ev_ready'] and target_amps >= config.ev.min_amps:
@@ -672,7 +915,7 @@ def _apply_summer_logic(decisions: Decisions, plan: list, ctx: dict):
                     else:
                         decisions.ev.action = 'off'
                         plan.append("EV: STOP (insufficient solar)")
-        elif ctx['ev_charging'] and p1 > max_grid_import_for_ev:
+        elif ctx['ev_charging'] and p1 > MAX_GRID_IMPORT_FOR_EV:
             # Importing too much from grid, stop or reduce
             if can_switch('ev', False):
                 decisions.ev.action = 'off'

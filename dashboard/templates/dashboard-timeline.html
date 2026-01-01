@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Timeline & Plan</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        /* Compact styles for small display */
+        body {
+            margin: 0;
+            padding: 0;
+            background: var(--ha-background);
+        }
+        .dashboard-compact {
+            padding: 8px;
+            height: 100vh;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .compact-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 4px 8px;
+            background: var(--ha-card-bg);
+            border-radius: 8px;
+            margin-bottom: 8px;
+            flex-shrink: 0;
+        }
+        .compact-header h1 {
+            font-size: 14px;
+            margin: 0;
+            color: var(--ha-text);
+        }
+        .compact-header .badges {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+        .timeline-section-compact {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: var(--ha-card-bg);
+            border-radius: 12px;
+            padding: 12px;
+            overflow-y: auto;
+        }
+        .timeline-section-compact h2 {
+            font-size: 14px;
+            margin: 0 0 8px 0;
+        }
+        .timeline-container {
+            flex-shrink: 0;
+        }
+        .device-timeline-row {
+            padding: 2px 0;
+        }
+        .device-label {
+            font-size: 11px;
+        }
+        .device-power-label {
+            font-size: 10px;
+        }
+        .timeline-legend {
+            font-size: 10px;
+            padding: 4px 0;
+        }
+        .plan-section {
+            margin-top: 12px;
+            flex: 1;
+            min-height: 0;
+        }
+        .plan-section h3 {
+            font-size: 12px;
+            margin: 0 0 6px 0;
+            color: var(--ha-text);
+        }
+        .status-summary {
+            background: var(--ha-secondary-bg);
+            border-radius: 6px;
+            padding: 8px;
+            max-height: 120px;
+            overflow-y: auto;
+        }
+        .status-summary .summary-item {
+            font-size: 11px;
+            padding: 2px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        .status-summary .summary-item:last-child {
+            border-bottom: none;
+        }
+        .estimates-section-compact {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+            flex-wrap: wrap;
+        }
+        .estimate-item {
+            font-size: 11px;
+            background: var(--ha-secondary-bg);
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+        .compact-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 4px 8px;
+            font-size: 10px;
+            color: var(--ha-text-secondary);
+            margin-top: 8px;
+            flex-shrink: 0;
+        }
+        #status-indicator {
+            width: 8px;
+            height: 8px;
+        }
+        /* Hide elements not needed in this view */
+        .power-section, .devices-section, .consumers-section,
+        .settings-section, .alerts-section, .schedule-cards,
+        .timetable-section { display: none !important; }
+    </style>
+</head>
+<body>
+    <div class="dashboard-compact">
+        <!-- Compact Header -->
+        <div class="compact-header">
+            <h1>Timeline & Plan</h1>
+            <div class="badges">
+                <span class="tariff-badge" id="tariff-badge">PEAK</span>
+                <span class="next-tariff" id="next-tariff" style="font-size:10px"></span>
+                <div id="status-indicator" class="status-ok" role="status"></div>
+            </div>
+        </div>
+
+        <!-- Timeline Section -->
+        <section class="timeline-section-compact">
+            <h2>24-Hour Schedule</h2>
+
+            <!-- Timeline Visual -->
+            <div class="timeline-container">
+                <div class="timeline-row">
+                    <span class="device-label"></span>
+                    <div class="timeline" id="tariff-timeline"></div>
+                    <span class="device-power-label"></span>
+                </div>
+                <div class="timeline-row">
+                    <span class="device-label" style="font-size:9px;color:var(--ha-text-secondary)">Now</span>
+                    <div class="timeline-labels">
+                        <span>+6h</span>
+                        <span>+12h</span>
+                        <span>+18h</span>
+                        <span>+24h</span>
+                    </div>
+                    <span class="device-power-label"></span>
+                </div>
+                <!-- Device Activity Rows -->
+                <div class="device-timelines" id="device-timelines">
+                    <div class="device-timeline-row">
+                        <span class="device-label">🚗 EV</span>
+                        <div class="device-bar" id="ev-timeline"></div>
+                        <span class="device-power-label" id="ev-power-label">11kW</span>
+                    </div>
+                    <div class="device-timeline-row">
+                        <span class="device-label">🔥 Boiler</span>
+                        <div class="device-bar" id="boiler-timeline"></div>
+                        <span class="device-power-label" id="boiler-power-label">2.5kW</span>
+                    </div>
+                    <div class="device-timeline-row">
+                        <span class="device-label">🪑 Heater</span>
+                        <div class="device-bar" id="heater-timeline"></div>
+                        <span class="device-power-label" id="heater-power-label">4.1kW</span>
+                    </div>
+                    <div class="device-timeline-row">
+                        <span class="device-label">🌊 Pool</span>
+                        <div class="device-bar" id="pool-timeline"></div>
+                        <span class="device-power-label" id="pool-power-label">0.5kW</span>
+                    </div>
+                    <div class="device-timeline-row">
+                        <span class="device-label">🍽️ Dish</span>
+                        <div class="device-bar" id="dishwasher-timeline"></div>
+                        <span class="device-power-label" id="dishwasher-power-label">1.9kW</span>
+                    </div>
+                    <div class="device-timeline-row total-row">
+                        <span class="device-label">⚡ Total</span>
+                        <div class="device-bar" id="total-timeline"></div>
+                        <span class="device-power-label" id="total-power-label"></span>
+                    </div>
+                </div>
+                <div class="timeline-legend">
+                    <div class="legend-item"><span class="legend-color peak"></span> Peak</div>
+                    <div class="legend-item"><span class="legend-color off-peak"></span> Off-Peak</div>
+                    <div class="legend-item"><span class="legend-color super-off-peak"></span> Super Off-Peak</div>
+                </div>
+            </div>
+
+            <!-- Estimates -->
+            <div class="estimates-section-compact">
+                <div class="estimate-item" id="ev-estimate">
+                    <span class="estimate-icon">⚡</span>
+                    <span class="estimate-text">EV: Loading...</span>
+                </div>
+                <div class="estimate-item" id="boiler-estimate">
+                    <span class="estimate-icon">🔥</span>
+                    <span class="estimate-text">Boiler: Loading...</span>
+                </div>
+            </div>
+
+            <!-- Decision Plan -->
+            <div class="plan-section">
+                <h3>Current Plan</h3>
+                <div class="status-summary" id="status-summary">
+                    <div class="summary-item">Loading...</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Compact Footer -->
+        <div class="compact-footer">
+            <span>Updated: <span id="last-update">--</span></span>
+            <span id="season-badge" style="display:none"></span>
+        </div>
+    </div>
+
+    <!-- Hidden elements for JS compatibility -->
+    <div style="display:none">
+        <span id="pv-power"></span>
+        <span id="net-power"></span>
+        <span id="grid-power"></span>
+        <span id="grid-direction"></span>
+        <span id="power-used"></span>
+        <span id="power-limit"></span>
+        <div id="power-bar-fill"></div>
+        <div id="power-bar-limit"></div>
+        <span id="boiler-state"></span>
+        <span id="boiler-power"></span>
+        <span id="boiler-dot"></span>
+        <span id="ev-state"></span>
+        <span id="ev-power"></span>
+        <span id="ev-amps"></span>
+        <span id="ev-dot"></span>
+        <span id="pool-pump-state"></span>
+        <span id="pool-pump-power"></span>
+        <span id="pool-ambient-temp"></span>
+        <span id="pool-dot"></span>
+        <span id="table-heater-state"></span>
+        <span id="table-heater-power"></span>
+        <span id="table-heater-dot"></span>
+        <span id="bmw-i5-battery"></span>
+        <span id="bmw-i5-range"></span>
+        <span id="bmw-i5-location"></span>
+        <span id="bmw-ix1-battery"></span>
+        <span id="bmw-ix1-range"></span>
+        <span id="bmw-ix1-location"></span>
+        <span id="consumers-tracked"></span>
+        <span id="consumers-untracked"></span>
+        <span id="consumers-import"></span>
+        <div id="consumers-grid"></div>
+        <div id="ev-schedule-list"></div>
+        <div id="boiler-schedule-list"></div>
+        <div id="timetable-grid"></div>
+        <div id="alerts-section"></div>
+        <div id="alerts-list"></div>
+        <div id="washing-machine-timeline"></div>
+        <div id="tumble-dryer-timeline"></div>
+        <span id="washing-machine-power-label"></span>
+        <span id="tumble-dryer-power-label"></span>
+    </div>
+
+    <script src="/static/dashboard.js"></script>
+</body>
+</html>

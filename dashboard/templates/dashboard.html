@@ -17,7 +17,9 @@
             <div class="header-right">
                 <span class="tariff-badge" id="tariff-badge">PEAK</span>
                 <span class="next-tariff" id="next-tariff">Off-peak at 22:00</span>
-                <div id="status-indicator" class="status-ok"></div>
+                <div id="status-indicator" class="status-ok" role="status" aria-label="Connection status: connected">
+                    <span class="visually-hidden">Connected</span>
+                </div>
             </div>
         </header>
 
@@ -29,8 +31,8 @@
                 <section class="power-section">
                     <div class="power-flow-visual">
                         <div class="power-node solar">
-                            <div class="node-icon">☀️</div>
-                            <div class="node-value" id="pv-power">0W</div>
+                            <div class="node-icon" aria-hidden="true">☀️</div>
+                            <div class="node-value" id="pv-power" aria-live="polite" aria-label="Solar power production">0W</div>
                             <div class="node-label">Solar</div>
                         </div>
                         <div class="power-arrows">
@@ -38,13 +40,13 @@
                             <div class="arrow grid-to-home" id="arrow-grid">←</div>
                         </div>
                         <div class="power-node home">
-                            <div class="node-icon">🏠</div>
-                            <div class="node-value" id="net-power">0W</div>
+                            <div class="node-icon" aria-hidden="true">🏠</div>
+                            <div class="node-value" id="net-power" aria-live="polite" aria-label="Home power consumption">0W</div>
                             <div class="node-label">Home</div>
                         </div>
                         <div class="power-node grid">
-                            <div class="node-icon">⚡</div>
-                            <div class="node-value" id="grid-power">0W</div>
+                            <div class="node-icon" aria-hidden="true">⚡</div>
+                            <div class="node-value" id="grid-power" aria-live="polite" aria-label="Grid power">0W</div>
                             <div class="node-label" id="grid-direction">Import</div>
                         </div>
                     </div>
@@ -66,68 +68,68 @@
                     <div class="devices-grid">
                         <!-- Boiler -->
                         <div class="device" id="device-boiler">
-                            <div class="device-icon">🔥</div>
+                            <div class="device-icon" aria-hidden="true">🔥</div>
                             <div class="device-info">
                                 <div class="device-name">Boiler</div>
                                 <div class="device-status">
-                                    <span class="status-dot" id="boiler-dot"></span>
+                                    <span class="status-dot" id="boiler-dot" role="status" aria-label="Boiler status: off"><span class="visually-hidden">OFF</span></span>
                                     <span id="boiler-state">OFF</span>
                                 </div>
-                                <div class="device-power" id="boiler-power">0W</div>
+                                <div class="device-power" id="boiler-power" aria-live="polite">0W</div>
                             </div>
-                            <div class="device-controls">
-                                <button onclick="setOverride('boiler', 'auto')" class="btn auto">A</button>
-                                <button onclick="setOverride('boiler', 'on')" class="btn on">On</button>
-                                <button onclick="setOverride('boiler', 'off')" class="btn off">Off</button>
+                            <div class="device-controls" role="group" aria-label="Boiler override controls">
+                                <button onclick="setOverride('boiler', 'auto')" class="btn auto" aria-label="Set boiler to auto mode" data-device="boiler" data-mode="auto">A</button>
+                                <button onclick="setOverride('boiler', 'on')" class="btn on" aria-label="Turn boiler on" data-device="boiler" data-mode="on">On</button>
+                                <button onclick="setOverride('boiler', 'off')" class="btn off" aria-label="Turn boiler off" data-device="boiler" data-mode="off">Off</button>
                             </div>
                         </div>
 
                         <!-- EV Charger -->
                         <div class="device" id="device-ev">
-                            <div class="device-icon">🚗</div>
+                            <div class="device-icon" aria-hidden="true">🚗</div>
                             <div class="device-info">
                                 <div class="device-name">EV Charger</div>
                                 <div class="device-status">
-                                    <span class="status-dot" id="ev-dot"></span>
+                                    <span class="status-dot" id="ev-dot" role="status" aria-label="EV charger status: no car"><span class="visually-hidden">No car</span></span>
                                     <span id="ev-state">No car</span>
                                 </div>
-                                <div class="device-power"><span id="ev-power">0W</span> <span id="ev-amps" class="small">(0A)</span></div>
+                                <div class="device-power"><span id="ev-power" aria-live="polite">0W</span> <span id="ev-amps" class="small">(0A)</span></div>
                             </div>
-                            <div class="device-controls">
-                                <button onclick="setOverride('ev', 'auto')" class="btn auto">A</button>
-                                <button onclick="setOverride('ev', 'on')" class="btn on">On</button>
-                                <button onclick="setOverride('ev', 'off')" class="btn off">Off</button>
+                            <div class="device-controls" role="group" aria-label="EV charger override controls">
+                                <button onclick="setOverride('ev', 'auto')" class="btn auto" aria-label="Set EV charger to auto mode" data-device="ev" data-mode="auto">A</button>
+                                <button onclick="setOverride('ev', 'on')" class="btn on" aria-label="Turn EV charger on" data-device="ev" data-mode="on">On</button>
+                                <button onclick="setOverride('ev', 'off')" class="btn off" aria-label="Turn EV charger off" data-device="ev" data-mode="off">Off</button>
                             </div>
                         </div>
 
                         <!-- Pool Pump -->
                         <div class="device" id="device-pool">
-                            <div class="device-icon">🌊</div>
+                            <div class="device-icon" aria-hidden="true">🌊</div>
                             <div class="device-info">
                                 <div class="device-name">Pool Pump</div>
                                 <div class="device-status">
-                                    <span class="status-dot" id="pool-dot"></span>
+                                    <span class="status-dot" id="pool-dot" role="status" aria-label="Pool pump status: off"><span class="visually-hidden">OFF</span></span>
                                     <span id="pool-pump-state">OFF</span>
                                 </div>
-                                <div class="device-power"><span id="pool-pump-power">0W</span> <span id="pool-ambient-temp" class="temp"></span></div>
+                                <div class="device-power"><span id="pool-pump-power" aria-live="polite">0W</span> <span id="pool-ambient-temp" class="temp"></span></div>
                             </div>
                         </div>
 
                         <!-- Table Heater -->
                         <div class="device" id="device-table-heater">
-                            <div class="device-icon">🔥</div>
+                            <div class="device-icon" aria-hidden="true">🔥</div>
                             <div class="device-info">
                                 <div class="device-name">Table Heater</div>
                                 <div class="device-status">
-                                    <span class="status-dot" id="table-heater-dot"></span>
+                                    <span class="status-dot" id="table-heater-dot" role="status" aria-label="Table heater status: off"><span class="visually-hidden">OFF</span></span>
                                     <span id="table-heater-state">OFF</span>
                                 </div>
-                                <div class="device-power" id="table-heater-power">0W</div>
+                                <div class="device-power" id="table-heater-power" aria-live="polite">0W</div>
                             </div>
-                            <div class="device-controls">
-                                <button onclick="setOverride('table_heater', 'auto')" class="btn auto">A</button>
-                                <button onclick="setOverride('table_heater', 'on')" class="btn on">On</button>
-                                <button onclick="setOverride('table_heater', 'off')" class="btn off">Off</button>
+                            <div class="device-controls" role="group" aria-label="Table heater override controls">
+                                <button onclick="setOverride('table_heater', 'auto')" class="btn auto" aria-label="Set table heater to auto mode" data-device="table_heater" data-mode="auto">A</button>
+                                <button onclick="setOverride('table_heater', 'on')" class="btn on" aria-label="Turn table heater on" data-device="table_heater" data-mode="on">On</button>
+                                <button onclick="setOverride('table_heater', 'off')" class="btn off" aria-label="Turn table heater off" data-device="table_heater" data-mode="off">Off</button>
                             </div>
                         </div>
 
@@ -228,6 +230,21 @@
                                 <span class="device-label">🌊 Pool</span>
                                 <div class="device-bar" id="pool-timeline"></div>
                                 <span class="device-power-label" id="pool-power-label">0.5kW</span>
+                            </div>
+                            <div class="device-timeline-row">
+                                <span class="device-label">🍽️ Dish</span>
+                                <div class="device-bar" id="dishwasher-timeline"></div>
+                                <span class="device-power-label" id="dishwasher-power-label">1.9kW</span>
+                            </div>
+                            <div class="device-timeline-row">
+                                <span class="device-label">🧺 Wash</span>
+                                <div class="device-bar" id="washing-machine-timeline"></div>
+                                <span class="device-power-label" id="washing-machine-power-label">2kW</span>
+                            </div>
+                            <div class="device-timeline-row">
+                                <span class="device-label">👕 Dryer</span>
+                                <div class="device-bar" id="tumble-dryer-timeline"></div>
+                                <span class="device-power-label" id="tumble-dryer-power-label">2.5kW</span>
                             </div>
                             <div class="device-timeline-row total-row">
                                 <span class="device-label">⚡ Total</span>

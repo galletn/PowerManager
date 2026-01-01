@@ -1,11 +1,14 @@
 """Configuration management for Power Manager."""
 
+import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
 import yaml
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -50,6 +53,7 @@ class BoilerConfig:
     idle_threshold: int = 50
     deadline_winter: float = 6.5
     deadline_summer: float = 8.0
+    full_confirm_seconds: int = 120  # Power must be low for this many seconds to confirm "full"
 
 
 @dataclass
@@ -190,6 +194,7 @@ class EntitiesConfig:
     serverroom_storage_power: str = "sensor.serverroom_storage_power"
     pool_heater_power: str = "sensor.pool_heating_current_consumption"
     table_heater_power: str = "sensor.livingroom_table_heater_power"
+    chargers_power: str = "sensor.livingroom_chargers_power"
 
 
 @dataclass
@@ -205,6 +210,7 @@ class Config:
     """Main configuration."""
     home_assistant: HAConfig = field(default_factory=HAConfig)
     polling_interval: int = 30
+    port: int = 8081  # Server port for uvicorn
     max_import: GridConfig = field(default_factory=GridConfig)
     tariff_prices: TariffPricesConfig = field(default_factory=TariffPricesConfig)
     ev: EVConfig = field(default_factory=EVConfig)
@@ -245,6 +251,20 @@ def load_config(config_path: Optional[str] = None) -> Config:
     if os.environ.get("HA_TOKEN"):
         config.home_assistant.token = os.environ["HA_TOKEN"]
 
+    # Validate configuration
+    if not config.home_assistant.token:
+        raise ValueError("Home Assistant token is required but not configured")
+
+    if config.max_import.peak <= 0:
+        raise ValueError("max_import.peak must be greater than 0")
+    if config.max_import.off_peak <= 0:
+        raise ValueError("max_import.off_peak must be greater than 0")
+    if config.max_import.super_off_peak <= 0:
+        raise ValueError("max_import.super_off_peak must be greater than 0")
+
+    if not config.home_assistant.verify_ssl:
+        logger.warning("SSL verification is disabled for Home Assistant connection")
+
     return config
 
 
@@ -261,6 +281,9 @@ def _apply_config(config: Config, data: dict) -> None:
 
     if "polling_interval" in data:
         config.polling_interval = data["polling_interval"]
+
+    if "port" in data:
+        config.port = data["port"]
 
     if "max_import" in data:
         mi = data["max_import"]

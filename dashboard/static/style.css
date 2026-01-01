@@ -315,14 +315,14 @@ h2 {
 }
 
 .device-controls .btn {
-    width: 28px;
-    height: 28px;
+    width: 44px;
+    height: 44px;
     border: none;
     border-radius: 50%;
     cursor: pointer;
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 500;
-    transition: transform 0.1s, opacity 0.2s;
+    transition: transform 0.1s, opacity 0.2s, background-color 0.2s;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -495,6 +495,18 @@ h2 {
 
 .device-bar-segment.pool_pump.active {
     background: #00bcd4;
+}
+
+.device-bar-segment.dishwasher.active {
+    background: #9c27b0;
+}
+
+.device-bar-segment.washing_machine.active {
+    background: #3f51b5;
+}
+
+.device-bar-segment.tumble_dryer.active {
+    background: #795548;
 }
 
 /* Total power row colors */
@@ -1054,4 +1066,79 @@ h2 {
     .consumer-inactive-group .consumer-item {
         flex: 0 0 100%;
     }
+}
+
+/* Accessibility: Visually hidden text for screen readers */
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* Loading skeleton screens */
+.skeleton {
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: skeleton-loading 1.5s infinite;
+    border-radius: 4px;
+}
+
+@keyframes skeleton-loading {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* Button feedback animations */
+.device-controls .btn.success {
+    animation: btn-success-flash 0.5s ease;
+}
+
+.device-controls .btn.error {
+    animation: btn-error-shake 0.5s ease;
+}
+
+@keyframes btn-success-flash {
+    0% { background-color: inherit; }
+    50% { background-color: var(--ha-success); box-shadow: 0 0 8px var(--ha-success); }
+    100% { background-color: inherit; }
+}
+
+@keyframes btn-error-shake {
+    0%, 100% { transform: translateX(0); background-color: inherit; }
+    10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); background-color: var(--ha-error); }
+    20%, 40%, 60%, 80% { transform: translateX(4px); background-color: var(--ha-error); }
+}
+
+/* Inline error message for override failures */
+.override-error {
+    position: absolute;
+    bottom: -24px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--ha-error);
+    color: white;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    white-space: nowrap;
+    z-index: 10;
+    animation: fade-in-out 3s ease forwards;
+}
+
+@keyframes fade-in-out {
+    0% { opacity: 0; }
+    10% { opacity: 1; }
+    80% { opacity: 1; }
+    100% { opacity: 0; }
+}
+
+/* Position device-controls for error message placement */
+.device-controls {
+    position: relative;
 }

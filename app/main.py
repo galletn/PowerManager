@@ -8,11 +8,13 @@ Provides REST API, dashboard, and scheduled decision loop.
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, Request, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -20,7 +22,7 @@ from fastapi.templating import Jinja2Templates
 from .config import Config, load_config
 from .ha_client import HAClient
 from .decision_engine import calculate_decisions
-from .models import PowerInputs, AllDeviceStates, PowerStatus, Decisions
+from .models import PowerInputs, AllDeviceStates, Decisions
 from .tariff import generate_24h_schedule, format_24h_plan_text
 from .scheduler import generate_schedule, format_timetable_text
 
@@ -31,68 +33,127 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Global state
-config: Optional[Config] = None
-ha_client: Optional[HAClient] = None
-device_state: AllDeviceStates = AllDeviceStates()
-last_inputs: Optional[PowerInputs] = None
-last_decisions: Optional[Decisions] = None
-last_plan: list[str] = []
-last_alerts: list[dict] = []
-last_update: Optional[datetime] = None
-running = False
-
-# Alert cooldown tracking (alert_key -> last_sent_timestamp)
-alert_cooldowns: dict[str, datetime] = {}
+# Constants
 ALERT_COOLDOWN_MINUTES = 30  # Don't repeat same alert for 30 minutes
+ALERT_COOLDOWN_CLEANUP_MINUTES = 60  # Clean up cooldown entries older than 1 hour
+
+
+@dataclass
+class AppState:
+    """Encapsulates all application state for the Power Manager service.
+
+    This dataclass consolidates what were previously 9+ global variables into
+    a single cohesive state object. This improves testability, makes state
+    dependencies explicit, and eliminates the global state anti-pattern.
+
+    Attributes:
+        config: Application configuration loaded from config.yaml.
+        ha_client: Home Assistant REST API client for device control.
+        device_state: Tracks device on/off states and last change times
+            for hysteresis control (preventing rapid switching).
+        last_inputs: Most recent power readings from Home Assistant sensors.
+        last_decisions: Most recent device control decisions from the engine.
+        last_plan: List of human-readable decision explanations for dashboard.
+        last_alerts: List of alert dicts (level, message) for dashboard.
+        last_update: Timestamp of last successful decision loop iteration.
+        last_ha_states: Cached dict of all HA entity states for API endpoints.
+        running: Flag to control the decision loop lifecycle.
+        alert_cooldowns: Maps alert keys to timestamps to prevent spam.
+    """
+    config: Optional[Config] = None
+    ha_client: Optional[HAClient] = None
+    device_state: AllDeviceStates = field(default_factory=AllDeviceStates)
+    last_inputs: Optional[PowerInputs] = None
+    last_decisions: Optional[Decisions] = None
+    last_plan: list[str] = field(default_factory=list)
+    last_alerts: list[dict] = field(default_factory=list)
+    last_update: Optional[datetime] = None
+    last_ha_states: Optional[dict] = None
+    running: bool = False
+    alert_cooldowns: dict[str, datetime] = field(default_factory=dict)
+
+    def cleanup_alert_cooldowns(self) -> None:
+        """Remove alert cooldown entries older than ALERT_COOLDOWN_CLEANUP_MINUTES."""
+        now = datetime.now()
+        cutoff_seconds = ALERT_COOLDOWN_CLEANUP_MINUTES * 60
+
+        # Build list of keys to remove (avoid modifying dict during iteration)
+        keys_to_remove = [
+            key for key, timestamp in self.alert_cooldowns.items()
+            if (now - timestamp).total_seconds() > cutoff_seconds
+        ]
+
+        for key in keys_to_remove:
+            del self.alert_cooldowns[key]
+
+        if keys_to_remove:
+            logger.debug(
+                f"Cleaned up {len(keys_to_remove)} expired alert cooldown entries"
+            )
+
+
+# Single application state instance
+app_state = AppState()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager."""
-    global config, ha_client, running
-
     # Startup
     logger.info("Starting Power Manager...")
-    config = load_config()
+    app_state.config = load_config()
 
-    if config.debug:
+    if not app_state.config.home_assistant.verify_ssl:
+        logger.warning(
+            "SSL verification is DISABLED for Home Assistant connection. "
+            "This is acceptable for self-signed certificates but reduces security."
+        )
+
+    if app_state.config.debug:
         logging.getLogger().setLevel(logging.DEBUG)
 
-    ha_client = HAClient(config)
+    app_state.ha_client = HAClient(app_state.config)
 
     # Wait for Home Assistant to be ready (retry with backoff)
     max_retries = 30  # 5 minutes max wait
     retry_delay = 10  # seconds
     for attempt in range(max_retries):
         try:
-            await ha_client.connect()
+            await app_state.ha_client.connect()
             # Test connection
-            await ha_client.get_all_states()
+            await app_state.ha_client.get_all_states()
             logger.info("Connected to Home Assistant")
             break
         except Exception as e:
             if attempt < max_retries - 1:
-                logger.warning(f"HA not ready (attempt {attempt + 1}/{max_retries}): {e}")
+                logger.warning(
+                    f"HA not ready (attempt {attempt + 1}/{max_retries}): "
+                    f"{type(e).__name__}"
+                )
                 logger.info(f"Retrying in {retry_delay}s...")
-                if ha_client._session:
-                    await ha_client.close()
+                if app_state.ha_client._session:
+                    await app_state.ha_client.close()
                 await asyncio.sleep(retry_delay)
             else:
-                logger.error("Failed to connect to Home Assistant after all retries")
+                logger.error(
+                    "Failed to connect to Home Assistant after all retries"
+                )
                 raise
 
-    running = True
+    app_state.running = True
     asyncio.create_task(decision_loop())
 
-    logger.info(f"Power Manager started, polling every {config.polling_interval}s")
+    logger.info(
+        f"Power Manager started, polling every "
+        f"{app_state.config.polling_interval}s"
+    )
 
     yield
 
     # Shutdown
-    running = False
-    if ha_client:
-        await ha_client.close()
+    app_state.running = False
+    if app_state.ha_client:
+        await app_state.ha_client.close()
     logger.info("Power Manager stopped")
 
 
@@ -101,6 +162,22 @@ app = FastAPI(
     description="Home energy management system",
     version="1.0.0",
     lifespan=lifespan
+)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:8080",
+        "http://localhost:8081",
+        "http://127.0.0.1:8080",
+        "http://127.0.0.1:8081",
+        "http://192.168.68.78:8080",
+        "https://gallet.duckdns.org:8123",  # Home Assistant
+    ],
+    allow_credentials=True,
+    allow_methods=["GET", "POST"],
+    allow_headers=["*"],
 )
 
 # Setup templates
@@ -118,27 +195,30 @@ if static_dir.exists():
 
 async def decision_loop():
     """Main decision loop - runs every polling_interval seconds."""
-    global last_inputs, last_decisions, last_plan, last_alerts, last_update, device_state
-
     consecutive_errors = 0
     max_consecutive_errors = 5
 
-    while running:
+    while app_state.running:
         try:
-            # Fetch all states from HA
-            states = await ha_client.get_all_states()
-            inputs = ha_client.parse_inputs(states)
-            last_inputs = inputs
+            # Fetch all states from HA and cache them
+            states = await app_state.ha_client.get_all_states()
+            app_state.last_ha_states = states  # Store for use in /api/status
+            inputs = app_state.ha_client.parse_inputs(states)
+            app_state.last_inputs = inputs
 
             # Calculate decisions
-            result = calculate_decisions(inputs, config, device_state)
-            last_decisions = result.decisions
-            last_plan = result.plan
-            last_alerts = [{'level': a.level, 'message': a.message} for a in result.alerts]
-            last_update = datetime.now()
+            result = calculate_decisions(
+                inputs, app_state.config, app_state.device_state
+            )
+            app_state.last_decisions = result.decisions
+            app_state.last_plan = result.plan
+            app_state.last_alerts = [
+                {'level': a.level, 'message': a.message} for a in result.alerts
+            ]
+            app_state.last_update = datetime.now()
 
-            # Execute decisions
-            await execute_decisions(result.decisions, inputs)
+            # Execute decisions and get confirmed states from HA API responses
+            confirmed_states = await execute_decisions(result.decisions, inputs)
 
             # Send alerts (with cooldown to prevent spam)
             for alert in result.alerts:
@@ -148,134 +228,212 @@ async def decision_loop():
                     now_time = datetime.now()
 
                     # Check cooldown
-                    last_sent = alert_cooldowns.get(alert_key)
+                    last_sent = app_state.alert_cooldowns.get(alert_key)
                     if last_sent:
                         minutes_since = (now_time - last_sent).total_seconds() / 60
                         if minutes_since < ALERT_COOLDOWN_MINUTES:
-                            logger.debug(f"Alert suppressed (cooldown): {alert_key}")
+                            logger.debug(
+                                f"Alert suppressed (cooldown): {alert_key}"
+                            )
                             continue
 
                     try:
-                        await ha_client.send_notification(
+                        await app_state.ha_client.send_notification(
                             alert.notify_entity,
                             "Power Manager Alert",
                             alert.message
                         )
                         # Update cooldown
-                        alert_cooldowns[alert_key] = now_time
+                        app_state.alert_cooldowns[alert_key] = now_time
                         logger.info(f"Alert sent: {alert.message}")
                     except Exception as e:
-                        logger.error(f"Failed to send notification: {e}")
+                        logger.error(
+                            f"Failed to send notification: {e}", exc_info=True
+                        )
 
-            # Update device state for timing
-            _update_device_state(inputs, result.decisions)
+            # Update device state using confirmed states from HA API
+            _update_device_state(inputs, confirmed_states)
 
-            if config.debug:
+            if app_state.config.debug:
                 logger.debug(f"Plan: {result.plan}")
+
+            # Clean up old alert cooldown entries to prevent memory leak
+            app_state.cleanup_alert_cooldowns()
 
             # Reset error counter on success
             consecutive_errors = 0
 
         except Exception as e:
             consecutive_errors += 1
-            logger.error(f"Decision loop error ({consecutive_errors}/{max_consecutive_errors}): {e}")
+            logger.error(
+                f"Decision loop error ({consecutive_errors}/"
+                f"{max_consecutive_errors}): {e}",
+                exc_info=True
+            )
 
             if consecutive_errors >= max_consecutive_errors:
-                logger.warning("Too many consecutive errors, reconnecting to HA...")
+                logger.warning(
+                    "Too many consecutive errors, reconnecting to HA..."
+                )
                 try:
-                    await ha_client.close()
-                    await ha_client.connect()
+                    await app_state.ha_client.close()
+                    await app_state.ha_client.connect()
                     consecutive_errors = 0
                     logger.info("Reconnected to Home Assistant")
                 except Exception as reconnect_error:
-                    logger.error(f"Failed to reconnect: {reconnect_error}")
+                    logger.error(
+                        f"Failed to reconnect: {reconnect_error}", exc_info=True
+                    )
 
-        await asyncio.sleep(config.polling_interval)
+        await asyncio.sleep(app_state.config.polling_interval)
 
 
-async def execute_decisions(decisions: Decisions, inputs: PowerInputs):
-    """Execute device decisions via HA API."""
+async def execute_decisions(
+    decisions: Decisions, inputs: PowerInputs
+) -> dict[str, bool]:
+    """Execute device decisions via HA API.
+
+    Returns a dict mapping device names to their confirmed state (True=on,
+    False=off). Only includes devices where a state change was attempted
+    and confirmed by HA API response.
+    """
+    confirmed_states = {}
+    config = app_state.config
+    ha_client = app_state.ha_client
+
     try:
         # EV Charger
         if decisions.ev.action == 'on':
-            await ha_client.set_number(config.entities.ev_limit, decisions.ev.amps)
-            await ha_client.turn_on(config.entities.ev_switch)
+            await ha_client.set_number(
+                config.entities.ev_limit, decisions.ev.amps
+            )
+            success = await ha_client.turn_on(config.entities.ev_switch)
+            if success:
+                confirmed_states['ev'] = True
             logger.info(f"EV: Started at {decisions.ev.amps}A")
         elif decisions.ev.action == 'off':
-            await ha_client.turn_off(config.entities.ev_switch)
+            success = await ha_client.turn_off(config.entities.ev_switch)
+            if success:
+                confirmed_states['ev'] = False
             logger.info("EV: Stopped")
         elif decisions.ev.action == 'adjust':
-            await ha_client.set_number(config.entities.ev_limit, decisions.ev.amps)
+            await ha_client.set_number(
+                config.entities.ev_limit, decisions.ev.amps
+            )
             logger.info(f"EV: Adjusted to {decisions.ev.amps}A")
 
         # Boiler
         if decisions.boiler.action == 'on':
-            await ha_client.turn_on(config.entities.boiler_switch)
+            success = await ha_client.turn_on(config.entities.boiler_switch)
+            if success:
+                confirmed_states['boiler'] = True
             logger.info("Boiler: ON")
         elif decisions.boiler.action == 'off':
-            await ha_client.turn_off(config.entities.boiler_switch)
+            success = await ha_client.turn_off(config.entities.boiler_switch)
+            if success:
+                confirmed_states['boiler'] = False
             logger.info("Boiler: OFF")
 
         # Pool Pump (frost protection)
         if decisions.pool_pump.action == 'on':
-            await ha_client.turn_on(config.entities.pool_pump)
+            success = await ha_client.turn_on(config.entities.pool_pump)
+            if success:
+                confirmed_states['pool_pump'] = True
             logger.info("Pool Pump: ON (frost protection)")
         elif decisions.pool_pump.action == 'off':
-            await ha_client.turn_off(config.entities.pool_pump)
+            success = await ha_client.turn_off(config.entities.pool_pump)
+            if success:
+                confirmed_states['pool_pump'] = False
             logger.info("Pool Pump: OFF")
 
         # Pool Heat Pump
         if decisions.pool.action == 'on':
-            await ha_client.set_climate(config.entities.pool_climate, 'heat')
+            success = await ha_client.set_climate(
+                config.entities.pool_climate, 'heat'
+            )
+            if success:
+                confirmed_states['pool'] = True
             logger.info("Pool Heat: ON")
         elif decisions.pool.action == 'off':
-            await ha_client.set_climate(config.entities.pool_climate, 'off')
+            success = await ha_client.set_climate(
+                config.entities.pool_climate, 'off'
+            )
+            if success:
+                confirmed_states['pool'] = False
             logger.info("Pool Heat: OFF")
 
         # Table Heater
         if decisions.heater_table.action == 'on':
-            await ha_client.turn_on(config.entities.heater_table)
+            success = await ha_client.turn_on(config.entities.heater_table)
+            if success:
+                confirmed_states['heater_table'] = True
             logger.info("Table Heater: ON")
         elif decisions.heater_table.action == 'off':
-            await ha_client.turn_off(config.entities.heater_table)
+            success = await ha_client.turn_off(config.entities.heater_table)
+            if success:
+                confirmed_states['heater_table'] = False
             logger.info("Table Heater: OFF")
 
         # Dishwasher (smart scheduling)
         if decisions.dishwasher.action == 'on':
-            await ha_client.turn_on(config.entities.dishwasher_switch)
+            success = await ha_client.turn_on(config.entities.dishwasher_switch)
+            if success:
+                confirmed_states['dishwasher'] = True
             logger.info(f"Dishwasher: ON ({decisions.dishwasher.reason})")
         elif decisions.dishwasher.action == 'off':
-            await ha_client.turn_off(config.entities.dishwasher_switch)
+            success = await ha_client.turn_off(config.entities.dishwasher_switch)
+            if success:
+                confirmed_states['dishwasher'] = False
             logger.info(f"Dishwasher: PAUSED ({decisions.dishwasher.reason})")
 
     except Exception as e:
         logger.error(f"Failed to execute decisions: {e}", exc_info=True)
 
+    return confirmed_states
 
-def _update_device_state(inputs: PowerInputs, decisions: Decisions):
-    """Update device state tracking for hysteresis."""
-    global device_state
+
+def _update_device_state(inputs: PowerInputs, confirmed_states: dict[str, bool]):
+    """Update device state tracking for hysteresis.
+
+    Uses confirmed states from HA API responses when available, otherwise
+    falls back to current input states. This fixes the race condition where
+    we were updating state based on predicted decisions instead of actual
+    HA response.
+
+    Args:
+        inputs: Current power inputs from HA
+        confirmed_states: Dict of device name -> confirmed on/off state from
+            HA API calls
+    """
     now = datetime.now().timestamp() * 1000
+    device_state = app_state.device_state
 
-    # Update based on actual states and decisions
-    def update_state(name: str, is_on: bool, decision_action: str):
+    def update_state(name: str, current_is_on: bool):
+        """Update device state, using confirmed state if available."""
         state = getattr(device_state, name)
-        new_on = is_on if decision_action == 'none' else (decision_action == 'on')
+        # Use confirmed state from HA API if we made a change, else current input
+        if name in confirmed_states:
+            new_on = confirmed_states[name]
+        else:
+            new_on = current_is_on
+
         if state.on != new_on:
             state.on = new_on
             state.last_change = now
 
-    update_state('ev', inputs.ev_state == 132, decisions.ev.action)
-    update_state('boiler', inputs.boiler_switch == 'on', decisions.boiler.action)
-    update_state('pool_pump', inputs.pool_pump_switch == 'on', decisions.pool_pump.action)
-    update_state('heater_table', inputs.heater_table_switch == 'on',
-                 decisions.heater_table.action)
-    update_state('dishwasher', inputs.dishwasher_switch == 'on', decisions.dishwasher.action)
+    # Update each device using confirmed states or fallback to current inputs
+    update_state('ev', inputs.ev_state == 132)
+    update_state('boiler', inputs.boiler_switch == 'on')
+    update_state('pool_pump', inputs.pool_pump_switch == 'on')
+    update_state('heater_table', inputs.heater_table_switch == 'on')
+    update_state('dishwasher', inputs.dishwasher_switch == 'on')
 
 
 # === API Routes ===
 
-@app.get("/", response_class=HTMLResponse)
+@app.get("/", response_class=HTMLResponse,
+         summary="Dashboard",
+         description="Serves the main Power Manager dashboard HTML page with real-time power monitoring and device control")
 async def dashboard(request: Request):
     """Serve the dashboard page."""
     if templates is None:
@@ -287,14 +445,54 @@ async def dashboard(request: Request):
     })
 
 
-@app.get("/api/status")
+@app.get("/power", response_class=HTMLResponse,
+         summary="Power Flow Dashboard",
+         description="Compact dashboard showing only power flow (solar/home/grid)")
+async def dashboard_power(request: Request):
+    """Serve the compact power flow dashboard for small displays."""
+    if templates is None:
+        return HTMLResponse("<h1>Dashboard not configured</h1>")
+
+    return templates.TemplateResponse("dashboard-power.html", {
+        "request": request,
+        "title": "Power Flow"
+    })
+
+
+@app.get("/timeline", response_class=HTMLResponse,
+         summary="Timeline Dashboard",
+         description="Compact dashboard showing timeline and decision plan")
+async def dashboard_timeline(request: Request):
+    """Serve the compact timeline dashboard for small displays."""
+    if templates is None:
+        return HTMLResponse("<h1>Dashboard not configured</h1>")
+
+    return templates.TemplateResponse("dashboard-timeline.html", {
+        "request": request,
+        "title": "Timeline & Plan"
+    })
+
+
+@app.get("/api/status",
+         summary="Get current power status",
+         description="Returns current power readings, device states, 24-hour "
+                     "schedule, timetable, power limits, and alerts.")
 async def get_status():
     """Get current power status for dashboard."""
+    last_inputs = app_state.last_inputs
+    last_decisions = app_state.last_decisions
+    config = app_state.config
+
     if last_inputs is None:
         return JSONResponse({"error": "No data yet"}, status_code=503)
 
     # Get consumer power values
     consumers = await _get_consumers_data()
+
+    # Calculate table heater power
+    table_heater_power = 0
+    if last_inputs.heater_table_switch == 'on' and config:
+        table_heater_power = config.heaters.table_power
 
     return {
         "grid_import": last_inputs.p1_power,
@@ -306,19 +504,25 @@ async def get_status():
             "boiler": {
                 "state": last_inputs.boiler_switch,
                 "power": last_inputs.boiler_power,
-                "decision": last_decisions.boiler.action if last_decisions else "none"
+                "decision": (
+                    last_decisions.boiler.action if last_decisions else "none"
+                )
             },
             "ev": {
                 "state": last_inputs.ev_state,
                 "power": last_inputs.ev_power,
                 "amps": last_inputs.ev_limit,
-                "decision": last_decisions.ev.action if last_decisions else "none"
+                "decision": (
+                    last_decisions.ev.action if last_decisions else "none"
+                )
             },
             "pool_pump": {
                 "state": last_inputs.pool_pump_switch,
                 "power": last_inputs.pool_pump_power,
                 "ambient_temp": last_inputs.pool_ambient_temp,
-                "decision": last_decisions.pool_pump.action if last_decisions else "none"
+                "decision": (
+                    last_decisions.pool_pump.action if last_decisions else "none"
+                )
             },
             "bmw_i5": {
                 "battery": last_inputs.bmw_i5_battery,
@@ -332,20 +536,31 @@ async def get_status():
             },
             "table_heater": {
                 "state": last_inputs.heater_table_switch,
-                "power": config.heaters.table_power if last_inputs.heater_table_switch == 'on' else 0,
-                "decision": last_decisions.heater_table.action if last_decisions else "none"
+                "power": table_heater_power,
+                "decision": (
+                    last_decisions.heater_table.action
+                    if last_decisions else "none"
+                )
             },
             "dishwasher": {
                 "state": last_inputs.dishwasher_switch,
                 "power": last_inputs.dishwasher_power,
-                "decision": last_decisions.dishwasher.action if last_decisions else "none",
-                "reason": last_decisions.dishwasher.reason if last_decisions else ""
+                "decision": (
+                    last_decisions.dishwasher.action
+                    if last_decisions else "none"
+                ),
+                "reason": (
+                    last_decisions.dishwasher.reason if last_decisions else ""
+                )
             }
         },
         "consumers": consumers,
-        "plan": last_plan,
-        "alerts": last_alerts,
-        "last_update": last_update.isoformat() if last_update else None,
+        "plan": app_state.last_plan,
+        "alerts": app_state.last_alerts,
+        "last_update": (
+            app_state.last_update.isoformat()
+            if app_state.last_update else None
+        ),
         "schedule_24h": generate_24h_schedule(datetime.now(), config, last_inputs),
         "timetable": _get_timetable_data(),
         "limits": {
@@ -358,6 +573,10 @@ async def get_status():
 
 async def _get_consumers_data():
     """Get power consumption data for all tracked consumers."""
+    config = app_state.config
+    ha_client = app_state.ha_client
+    last_inputs = app_state.last_inputs
+
     if config is None or ha_client is None:
         return None
 
@@ -374,46 +593,52 @@ async def _get_consumers_data():
             except (ValueError, TypeError):
                 return 0
 
+        entities = config.entities
+
         # Define all consumers with display names and icons
         consumers = [
-            {"id": "boiler", "name": "Boiler", "icon": "🔥",
-             "power": get_power(config.entities.boiler_power)},
-            {"id": "ev", "name": "EV Charger", "icon": "🚗",
-             "power": get_power(config.entities.ev_power)},
-            {"id": "pool_pump", "name": "Pool Pump", "icon": "🌊",
-             "power": get_power(config.entities.pool_pump_power)},
-            {"id": "pool_heater", "name": "Pool Heater", "icon": "♨️",
-             "power": get_power(config.entities.pool_heater_power)},
-            {"id": "table_heater", "name": "Table Heater", "icon": "🪑",
-             "power": get_power(config.entities.table_heater_power)},
-            {"id": "ac_living", "name": "AC Living", "icon": "❄️",
-             "power": get_power(config.entities.ac_living_power)},
-            {"id": "ac_office", "name": "AC Office", "icon": "❄️",
-             "power": get_power(config.entities.ac_office_power)},
-            {"id": "media", "name": "Media", "icon": "📺",
-             "power": get_power(config.entities.media_power)},
-            {"id": "server", "name": "Server", "icon": "🖥️",
-             "power": get_power(config.entities.server_power)},
-            {"id": "desk", "name": "Desk", "icon": "💻",
-             "power": get_power(config.entities.desk_power)},
-            {"id": "storage_fridge", "name": "Fridge (Storage)", "icon": "🧊",
-             "power": get_power(config.entities.storage_fridge_power)},
-            {"id": "kitchen_fridge", "name": "Fridge (Kitchen)", "icon": "🧊",
-             "power": get_power(config.entities.kitchen_fridge_power)},
-            {"id": "washing_machine", "name": "Washing Machine", "icon": "🧺",
-             "power": get_power(config.entities.washing_machine_power)},
-            {"id": "dishwasher", "name": "Dishwasher", "icon": "🍽️",
-             "power": get_power(config.entities.dishwasher_power)},  # kitchen_dishwasher_power
-            {"id": "tumble_dryer", "name": "Tumble Dryer", "icon": "👕",
-             "power": get_power(config.entities.tumble_dryer_power)},
-            {"id": "serverroom_storage", "name": "Serverroom Storage", "icon": "💾",
-             "power": get_power(config.entities.serverroom_storage_power)},
+            {"id": "boiler", "name": "Boiler", "icon": "fire",
+             "power": get_power(entities.boiler_power)},
+            {"id": "ev", "name": "EV Charger", "icon": "car",
+             "power": get_power(entities.ev_power)},
+            {"id": "pool_pump", "name": "Pool Pump", "icon": "water",
+             "power": get_power(entities.pool_pump_power)},
+            {"id": "pool_heater", "name": "Pool Heater", "icon": "hot",
+             "power": get_power(entities.pool_heater_power)},
+            {"id": "table_heater", "name": "Table Heater", "icon": "chair",
+             "power": get_power(entities.table_heater_power)},
+            {"id": "ac_living", "name": "AC Living", "icon": "snow",
+             "power": get_power(entities.ac_living_power)},
+            {"id": "ac_office", "name": "AC Office", "icon": "snow",
+             "power": get_power(entities.ac_office_power)},
+            {"id": "media", "name": "Media", "icon": "tv",
+             "power": get_power(entities.media_power)},
+            {"id": "server", "name": "Server", "icon": "server",
+             "power": get_power(entities.server_power)},
+            {"id": "desk", "name": "Desk", "icon": "laptop",
+             "power": get_power(entities.desk_power)},
+            {"id": "storage_fridge", "name": "Fridge (Storage)", "icon": "ice",
+             "power": get_power(entities.storage_fridge_power)},
+            {"id": "kitchen_fridge", "name": "Fridge (Kitchen)", "icon": "ice",
+             "power": get_power(entities.kitchen_fridge_power)},
+            {"id": "washing_machine", "name": "Washing Machine", "icon": "wash",
+             "power": get_power(entities.washing_machine_power)},
+            {"id": "dishwasher", "name": "Dishwasher", "icon": "dish",
+             "power": get_power(entities.dishwasher_power)},
+            {"id": "tumble_dryer", "name": "Tumble Dryer", "icon": "shirt",
+             "power": get_power(entities.tumble_dryer_power)},
+            {"id": "serverroom_storage", "name": "Serverroom Storage",
+             "icon": "disk", "power": get_power(entities.serverroom_storage_power)},
+            {"id": "chargers", "name": "Chargers", "icon": "plug",
+             "power": get_power(entities.chargers_power)},
         ]
 
         # Calculate totals
         # Home consumption = grid import + solar production
         total_tracked = sum(c["power"] for c in consumers)
-        total_home = (last_inputs.p1_power + last_inputs.pv_power) if last_inputs else 0
+        total_home = 0
+        if last_inputs:
+            total_home = last_inputs.p1_power + last_inputs.pv_power
         untracked = max(0, total_home - total_tracked)
 
         return {
@@ -423,19 +648,25 @@ async def _get_consumers_data():
             "untracked": untracked
         }
     except Exception as e:
-        logger.error(f"Failed to get consumers data: {e}")
+        logger.error(f"Failed to get consumers data: {e}", exc_info=True)
         return None
 
 
 def _get_timetable_data():
     """Generate timetable data for dashboard."""
+    config = app_state.config
+    last_inputs = app_state.last_inputs
+
     if config is None or last_inputs is None:
         return None
     try:
         now = datetime.now()
         timetable = generate_schedule(now, config, last_inputs)
         # Use actual device powers where available
-        pool_pump_power = int(last_inputs.pool_pump_power) if last_inputs.pool_pump_power > 0 else config.frost_protection.pump_min_power
+        if last_inputs.pool_pump_power > 0:
+            pool_pump_power = int(last_inputs.pool_pump_power)
+        else:
+            pool_pump_power = config.frost_protection.pump_min_power
         return {
             "ev_estimate": timetable.ev_estimate,
             "boiler_estimate": timetable.boiler_estimate,
@@ -449,33 +680,43 @@ def _get_timetable_data():
             }
         }
     except Exception as e:
-        logger.error(f"Failed to generate timetable: {e}")
+        logger.error(f"Failed to generate timetable: {e}", exc_info=True)
         return None
 
 
-@app.post("/api/override/{device}")
+@app.post("/api/override/{device}",
+          summary="Set device override",
+          description="Set manual override mode for a device.")
 async def set_override(device: str, mode: str):
     """Set manual override for a device."""
+    config = app_state.config
+    ha_client = app_state.ha_client
+
     valid_devices = ['ev', 'boiler', 'pool', 'table_heater', 'dishwasher',
                      'ac_living', 'ac_bedroom', 'ac_office', 'ac_mancave']
     valid_modes = ['auto', 'on', 'off']
 
     if device not in valid_devices:
-        raise HTTPException(400, f"Invalid device. Must be one of: {valid_devices}")
+        raise HTTPException(
+            400, f"Invalid device. Must be one of: {valid_devices}"
+        )
     if mode not in valid_modes:
-        raise HTTPException(400, f"Invalid mode. Must be one of: {valid_modes}")
+        raise HTTPException(
+            400, f"Invalid mode. Must be one of: {valid_modes}"
+        )
 
     # Set the override in HA
+    entities = config.entities
     entity_map = {
-        'ev': config.entities.ovr_ev,
-        'boiler': config.entities.ovr_boiler,
-        'pool': config.entities.ovr_pool,
-        'table_heater': config.entities.ovr_table_heater,
-        'dishwasher': config.entities.ovr_dishwasher,
-        'ac_living': config.entities.ovr_ac_living,
-        'ac_bedroom': config.entities.ovr_ac_bedroom,
-        'ac_office': config.entities.ovr_ac_office,
-        'ac_mancave': config.entities.ovr_ac_mancave,
+        'ev': entities.ovr_ev,
+        'boiler': entities.ovr_boiler,
+        'pool': entities.ovr_pool,
+        'table_heater': entities.ovr_table_heater,
+        'dishwasher': entities.ovr_dishwasher,
+        'ac_living': entities.ovr_ac_living,
+        'ac_bedroom': entities.ovr_ac_bedroom,
+        'ac_office': entities.ovr_ac_office,
+        'ac_mancave': entities.ovr_ac_mancave,
     }
 
     # Map API mode to HA input_select option (capitalized, device-specific)
@@ -500,25 +741,37 @@ async def set_override(device: str, mode: str):
             entity_map[device],
             option=ha_mode
         )
-        return {"status": "ok", "device": device, "mode": mode, "ha_mode": ha_mode}
+        return {
+            "status": "ok", "device": device, "mode": mode, "ha_mode": ha_mode
+        }
     except Exception as e:
-        logger.error(f"Failed to set override {device}={mode}: {e}")
+        logger.error(
+            f"Failed to set override {device}={mode}: {e}", exc_info=True
+        )
         raise HTTPException(500, str(e))
 
 
-@app.get("/api/health")
+@app.get("/api/health",
+         summary="Health check",
+         description="Returns the health status of the Power Manager service.")
 async def health():
     """Health check endpoint."""
+    last_update = app_state.last_update
     return {
         "status": "ok",
-        "running": running,
+        "running": app_state.running,
         "last_update": last_update.isoformat() if last_update else None
     }
 
 
-@app.get("/api/limits")
+@app.get("/api/limits",
+         summary="Get power limits",
+         description="Returns current power import limits for each tariff.")
 async def get_limits():
     """Get current power limits."""
+    config = app_state.config
+    ha_client = app_state.ha_client
+
     if config is None:
         return JSONResponse({"error": "Not initialized"}, status_code=503)
 
@@ -531,16 +784,17 @@ async def get_limits():
 
     try:
         states = await ha_client.get_all_states()
+        entities = config.entities
 
-        peak_state = states.get(config.entities.limit_peak, {})
+        peak_state = states.get(entities.limit_peak, {})
         if peak_state.get("state") not in (None, "unavailable", "unknown"):
             limits["peak"] = int(float(peak_state["state"]))
 
-        off_peak_state = states.get(config.entities.limit_off_peak, {})
+        off_peak_state = states.get(entities.limit_off_peak, {})
         if off_peak_state.get("state") not in (None, "unavailable", "unknown"):
             limits["off_peak"] = int(float(off_peak_state["state"]))
 
-        super_state = states.get(config.entities.limit_super_off_peak, {})
+        super_state = states.get(entities.limit_super_off_peak, {})
         if super_state.get("state") not in (None, "unavailable", "unknown"):
             limits["super_off_peak"] = int(float(super_state["state"]))
     except Exception as e:
@@ -550,19 +804,26 @@ async def get_limits():
 
 
 @app.post("/api/limits")
-async def set_limits(peak: int = None, off_peak: int = None,
-                     super_off_peak: int = None):
+async def set_limits(
+    peak: int = None,
+    off_peak: int = None,
+    super_off_peak: int = None
+):
     """Set power limits via HA input_numbers."""
+    config = app_state.config
+    ha_client = app_state.ha_client
+
     if config is None:
         return JSONResponse({"error": "Not initialized"}, status_code=503)
 
     results = {}
+    entities = config.entities
 
     try:
         if peak is not None:
             await ha_client.call_service(
                 "input_number", "set_value",
-                config.entities.limit_peak,
+                entities.limit_peak,
                 value=peak
             )
             config.max_import.peak = peak
@@ -571,7 +832,7 @@ async def set_limits(peak: int = None, off_peak: int = None,
         if off_peak is not None:
             await ha_client.call_service(
                 "input_number", "set_value",
-                config.entities.limit_off_peak,
+                entities.limit_off_peak,
                 value=off_peak
             )
             config.max_import.off_peak = off_peak
@@ -580,7 +841,7 @@ async def set_limits(peak: int = None, off_peak: int = None,
         if super_off_peak is not None:
             await ha_client.call_service(
                 "input_number", "set_value",
-                config.entities.limit_super_off_peak,
+                entities.limit_super_off_peak,
                 value=super_off_peak
             )
             config.max_import.super_off_peak = super_off_peak
@@ -588,13 +849,16 @@ async def set_limits(peak: int = None, off_peak: int = None,
 
         return {"status": "ok", "updated": results}
     except Exception as e:
-        logger.error(f"Failed to set limits: {e}")
+        logger.error(f"Failed to set limits: {e}", exc_info=True)
         raise HTTPException(500, str(e))
 
 
 @app.get("/api/schedule")
 async def get_schedule():
     """Get 24-hour schedule/plan with timetable."""
+    config = app_state.config
+    last_inputs = app_state.last_inputs
+
     if config is None:
         return JSONResponse({"error": "Not initialized"}, status_code=503)
 
@@ -619,13 +883,36 @@ async def get_schedule():
 
 # CLI entry point
 def main():
-    """Run the server."""
+    """Run the server with HTTPS."""
     import uvicorn
+    from pathlib import Path
+
+    # Load config to get port setting
+    startup_config = load_config()
+    port = startup_config.port
+
+    # SSL certificate paths
+    cert_dir = Path(__file__).parent.parent / "certs"
+    ssl_keyfile = cert_dir / "key.pem"
+    ssl_certfile = cert_dir / "cert.pem"
+
+    # Use HTTPS if certificates exist, otherwise fall back to HTTP
+    ssl_config = {}
+    if ssl_keyfile.exists() and ssl_certfile.exists():
+        ssl_config = {
+            "ssl_keyfile": str(ssl_keyfile),
+            "ssl_certfile": str(ssl_certfile),
+        }
+        logger.info(f"Starting with HTTPS (certificates from {cert_dir})")
+    else:
+        logger.warning("SSL certificates not found, starting with HTTP")
+
     uvicorn.run(
         "app.main:app",
         host="0.0.0.0",
-        port=8081,
-        reload=False
+        port=port,
+        reload=False,
+        **ssl_config
     )
 
 

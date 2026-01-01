@@ -20,7 +20,9 @@ Power Manager is an intelligent home energy management system for Home Assistant
 | User | `nicolas` |
 | App Path | `/opt/PowerManager` |
 | Service | `power-manager.service` |
-| Dashboard Port | `8080` |
+| Dashboard Port | `8081` |
+
+**Note**: The default port is 8081. To change the port, modify the `port` parameter in `app/main.py` in the `uvicorn.run()` call.
 
 ### SSH Authentication
 
@@ -91,16 +93,28 @@ curl -s -k -H "Authorization: Bearer $TOKEN" \
 
 **Controlled Devices**:
 - `switch.storage_boiler` - Water heater (2.5kW)
+- `sensor.storage_boiler_power` - Boiler power consumption
 - `switch.abb_terra_ac_charging` - EV charger on/off
+- `sensor.abb_terra_ac_active_power` - EV charger power consumption
 - `number.abb_terra_ac_current_limit` - EV charger amps (6-16A)
+- `sensor.abb_terra_ac_charging_state` - EV charger state
 - `switch.poolhouse_pool_pump` - Pool pump (frost protection)
+- `sensor.poolhouse_pool_pump_power` - Pool pump power consumption
 - `switch.livingroom_table_heater_state` - Table heater (4.1kW)
+- `sensor.livingroom_table_heater_power` - Table heater power consumption
+
+**Appliances** (smart scheduling and power tracking):
+- `switch.kitchen_dishwasher` - Dishwasher on/off (smart scheduled)
+- `sensor.kitchen_dishwasher_power` - Dishwasher power consumption
+- `sensor.garage_washing_machine_power` - Washing machine power (informational)
+- `sensor.garage_tumble_dryer_power` - Tumble dryer power (informational)
 
 **Override Helpers** (set via HA UI or API):
 - `input_select.pm_override_boiler` - Auto/On/Off
 - `input_select.pm_override_ev` - Auto/On/Off
 - `input_select.pm_override_pool` - Auto/On/Off
 - `input_select.pm_override_table_heater` - Auto/On/Off
+- `input_select.pm_override_dishwasher` - Auto/Run/Off
 
 ## Power Limits (Belgian Tariffs)
 
@@ -176,8 +190,8 @@ journalctl -u power-manager -f    # Follow logs
 
 ## Dashboard Access
 
-- **Local**: http://localhost:8080
-- **Server**: http://192.168.68.78:8080
+- **Local**: http://localhost:8081
+- **Server**: http://192.168.68.78:8081
 - **HA Iframe**: Embedded in Home Assistant sidebar
 
 ## Notes
