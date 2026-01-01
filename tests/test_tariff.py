@@ -44,6 +44,10 @@ class TestIsSummer:
     def test_january_is_winter(self):
         assert not is_summer(datetime(2024, 1, 15, 12, 0))
 
+    def test_march_is_summer(self):
+        """March is now part of solar season (March-October)."""
+        assert is_summer(datetime(2024, 3, 15, 12, 0))
+
     def test_april_is_summer(self):
         assert is_summer(datetime(2024, 4, 15, 12, 0))
 
@@ -53,8 +57,12 @@ class TestIsSummer:
     def test_september_is_summer(self):
         assert is_summer(datetime(2024, 9, 15, 12, 0))
 
-    def test_october_is_winter(self):
-        assert not is_summer(datetime(2024, 10, 15, 12, 0))
+    def test_october_is_summer(self):
+        """October is now part of solar season (March-October)."""
+        assert is_summer(datetime(2024, 10, 15, 12, 0))
+
+    def test_november_is_winter(self):
+        assert not is_summer(datetime(2024, 11, 15, 12, 0))
 
 
 class TestGetTariff:

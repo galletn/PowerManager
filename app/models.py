@@ -45,6 +45,10 @@ class PowerInputs:
     heater_right_switch: str = 'off'
     heater_table_switch: str = 'off'
 
+    # Dishwasher
+    dishwasher_switch: str = 'off'
+    dishwasher_power: float = 0.0
+
     # AC Units
     ac_living_state: str = 'off'
     ac_mancave_state: str = 'off'
@@ -67,6 +71,7 @@ class PowerInputs:
     ovr_boiler: str = ''
     ovr_ev: str = ''
     ovr_table_heater: str = ''
+    ovr_dishwasher: str = ''
 
     # BMW Cars
     bmw_i5_battery: Optional[float] = None
@@ -106,6 +111,7 @@ class Decisions:
     pool_pump: DeviceDecision = field(default_factory=lambda: DeviceDecision())
     heater_right: DeviceDecision = field(default_factory=lambda: DeviceDecision())
     heater_table: DeviceDecision = field(default_factory=lambda: DeviceDecision())
+    dishwasher: DeviceDecision = field(default_factory=lambda: DeviceDecision())
     ac_living: ACDecision = field(default_factory=lambda: ACDecision())
     ac_mancave: ACDecision = field(default_factory=lambda: ACDecision(temp=17))
     ac_office: ACDecision = field(default_factory=lambda: ACDecision())
@@ -128,6 +134,7 @@ class AllDeviceStates:
     pool_pump: DeviceState = field(default_factory=lambda: DeviceState(on=True))
     heater_right: DeviceState = field(default_factory=lambda: DeviceState())
     heater_table: DeviceState = field(default_factory=lambda: DeviceState())
+    dishwasher: DeviceState = field(default_factory=lambda: DeviceState())
     ac_living: DeviceState = field(default_factory=lambda: DeviceState())
     ac_mancave: DeviceState = field(default_factory=lambda: DeviceState())
     ac_office: DeviceState = field(default_factory=lambda: DeviceState())

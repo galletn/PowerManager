@@ -53,8 +53,12 @@ def get_belgian_holidays(year: int) -> set[date]:
 
 
 def is_summer(dt: datetime) -> bool:
-    """Check if date is in summer period (April-September)."""
-    return 4 <= dt.month <= 9
+    """Check if date is in solar season (March-October).
+
+    This determines when solar-optimized logic should be used.
+    Pool heating season is controlled separately via pool_season input.
+    """
+    return 3 <= dt.month <= 10
 
 
 def get_tariff(dt: datetime) -> Tuple[str, dict]:

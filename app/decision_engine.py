@@ -115,6 +115,7 @@ def calculate_decisions(
         'ac_bedroom': parse_override(inputs.ovr_ac_bedroom),
         'ac_office': parse_override(inputs.ovr_ac_office),
         'ac_mancave': parse_override(inputs.ovr_ac_mancave),
+        'dishwasher': parse_override(inputs.ovr_dishwasher),
     }
 
     # Device current states
@@ -135,6 +136,12 @@ def calculate_decisions(
     # Heaters and AC
     hr_on = inputs.heater_right_switch == 'on'
     ht_on = inputs.heater_table_switch == 'on'
+
+    # Dishwasher
+    dw_switch_on = inputs.dishwasher_switch == 'on'
+    dw_power = inputs.dishwasher_power
+    dw_running = dw_power > 50  # Actually running a cycle (drawing power)
+    dw_waiting = dw_switch_on and dw_power < 50  # Switch on but not running yet
 
     ac_states = {
         'living': inputs.ac_living_state,
@@ -214,6 +221,10 @@ def calculate_decisions(
             'boiler_force': boiler_force,
             'hr_on': hr_on,
             'ht_on': ht_on,
+            'dw_switch_on': dw_switch_on,
+            'dw_power': dw_power,
+            'dw_running': dw_running,
+            'dw_waiting': dw_waiting,
             'ac_states': ac_states,
             'temps': temps,
             'headroom': headroom,
@@ -239,17 +250,23 @@ def calculate_decisions(
             'ev_limit': ev_limit,
             'boiler_on': boiler_on,
             'boiler_full': boiler_full,
+            'dw_switch_on': dw_switch_on,
+            'dw_power': dw_power,
+            'dw_running': dw_running,
+            'dw_waiting': dw_waiting,
             'ac_states': ac_states,
             'temps': temps,
             'headroom': headroom,
             'hyst': hyst,
             'tariff': tariff,
+            'tariff_info': tariff_info,
             'config': config,
             'can_switch': can_switch,
             'device_state': device_state,
             'now': now_ts,
             'is_exporting': is_exporting,
             'pv': pv,
+            'p1': p1,
         })
 
     # Calculate final headroom
@@ -314,6 +331,14 @@ def _apply_manual_overrides(decisions: Decisions, plan: list, ovr: dict, ctx: di
     elif ovr['table_heater'] == 'off':
         decisions.heater_table.action = 'off'
         plan.append("Table heater: OVERRIDE OFF")
+
+    # Dishwasher override
+    if ovr.get('dishwasher') == 'on':
+        decisions.dishwasher.action = 'on'
+        plan.append("Dishwasher: OVERRIDE ON")
+    elif ovr.get('dishwasher') == 'off':
+        decisions.dishwasher.action = 'off'
+        plan.append("Dishwasher: OVERRIDE OFF")
 
 
 def _apply_winter_logic(decisions: Decisions, plan: list, ctx: dict):
@@ -398,10 +423,16 @@ def _apply_winter_logic(decisions: Decisions, plan: list, ctx: dict):
 
     # === EV CHARGING (Priority 3 - use remaining capacity) ===
     if ovr['ev'] == 'auto' and ctx['ev_plugged'] and not ctx['ev_done']:
+        # When EV is already charging, its power is included in p1.
+        # To calculate target amps, we need TOTAL power available for EV,
+        # not just the remaining headroom. Add back current EV power.
+        current_ev_watts = ctx['ev_limit'] * config.ev.watts_per_amp if ctx['ev_charging'] else 0
+
         if tariff == 'super-off-peak':
             # Super off-peak (8kW limit) - plenty of room for EV
-            available_watts = effective_headroom - hyst
-            available_amps = int(available_watts / config.ev.watts_per_amp)
+            # Total power for EV = remaining headroom + current EV consumption
+            total_for_ev = effective_headroom + current_ev_watts - hyst
+            available_amps = int(total_for_ev / config.ev.watts_per_amp)
             target_amps = max(config.ev.min_amps, min(available_amps, config.ev.max_amps))
 
             if ctx['ev_charging']:
@@ -421,8 +452,8 @@ def _apply_winter_logic(decisions: Decisions, plan: list, ctx: dict):
             # Off-peak (5kW limit) - only charge if boiler not needed
             if boiler_will_use == 0 and not ctx['boiler_on']:
                 # Boiler not running and not needed, can use capacity for EV
-                available_watts = effective_headroom - hyst
-                available_amps = int(available_watts / config.ev.watts_per_amp)
+                total_for_ev = effective_headroom + current_ev_watts - hyst
+                available_amps = int(total_for_ev / config.ev.watts_per_amp)
                 target_amps = max(config.ev.min_amps, min(available_amps, config.ev.max_amps))
 
                 if ctx['ev_charging']:
@@ -494,6 +525,99 @@ def _apply_winter_logic(decisions: Decisions, plan: list, ctx: dict):
                 decisions.heater_table.action = 'off'
                 plan.append("Table heater: OFF (peak tariff)")
 
+    # === DISHWASHER (Priority 5 - smart scheduling) ===
+    # Never interrupt running cycles, optimize start time for tariffs/solar
+    _apply_dishwasher_logic(decisions, plan, ctx)
+
+
+def _apply_dishwasher_logic(decisions: Decisions, plan: list, ctx: dict):
+    """
+    Apply dishwasher smart scheduling logic.
+
+    Rules:
+    - NEVER interrupt a running cycle (power > 50W)
+    - Check available headroom before allowing run
+    - If solar surplus: allow run (free power)
+    - If off-peak or super-off-peak: allow run (cheap)
+    - If peak, no solar, off-peak soon: hold until cheap rate
+    """
+    ovr = ctx.get('ovr', {})
+    if ovr.get('dishwasher') != 'auto':
+        return  # Override already handled
+
+    dw_running = ctx.get('dw_running', False)
+    dw_waiting = ctx.get('dw_waiting', False)
+    dw_switch_on = ctx.get('dw_switch_on', False)
+    dw_power = ctx.get('dw_power', 0)
+    is_exporting = ctx.get('is_exporting', False)
+    tariff = ctx.get('tariff', 'peak')
+    tariff_info = ctx.get('tariff_info', {})
+    p1 = ctx.get('p1', 0)
+    headroom = ctx.get('headroom', 0)
+    hyst = ctx.get('hyst', 100)
+
+    # Dishwasher power consumption (peak during heating phases)
+    dw_expected_power = 1900  # ~1850W peak, use 1900 for safety margin
+
+    # Minimum solar export to consider "solar surplus"
+    min_solar_surplus = 500  # 500W export = good solar
+
+    # If dishwasher is running (drawing power), NEVER interrupt
+    if dw_running:
+        plan.append(f"Dishwasher: RUNNING ({dw_power:.0f}W)")
+        return
+
+    # If dishwasher is not active at all, nothing to do
+    if not dw_switch_on:
+        return
+
+    # Dishwasher is waiting to run (switch on, but not yet drawing power)
+    # This happens when the user has loaded the dishwasher and turned it on,
+    # waiting for the smart scheduling to release it
+
+    if dw_waiting:
+        has_solar_surplus = is_exporting and abs(p1) > min_solar_surplus
+        is_cheap_tariff = tariff in ('off-peak', 'super-off-peak')
+
+        # Check if we have enough headroom for the dishwasher
+        # Account for already running devices
+        available_power = headroom - hyst
+        has_enough_power = available_power > dw_expected_power
+
+        # Determine when next cheap rate starts (for display)
+        next_change = tariff_info.get('next_change', 0)
+        date = ctx.get('date')
+        current_hour = date.hour if date else 0
+
+        if has_solar_surplus:
+            # Solar surplus - allow run, free power!
+            # Solar covers the consumption, no grid limit concern
+            decisions.dishwasher.action = 'on'
+            decisions.dishwasher.reason = 'solar surplus'
+            plan.append(f"Dishwasher: RUN (solar surplus {abs(p1):.0f}W)")
+        elif is_cheap_tariff and has_enough_power:
+            # Off-peak or super-off-peak with enough headroom - allow run
+            decisions.dishwasher.action = 'on'
+            decisions.dishwasher.reason = tariff
+            plan.append(f"Dishwasher: RUN ({tariff}, {available_power:.0f}W avail)")
+        elif is_cheap_tariff and not has_enough_power:
+            # Cheap tariff but not enough power - wait for other devices to finish
+            decisions.dishwasher.action = 'off'
+            decisions.dishwasher.reason = 'waiting for headroom'
+            plan.append(f"Dishwasher: WAIT (need {dw_expected_power}W, have {available_power:.0f}W)")
+        else:
+            # Peak rate, no solar - hold until cheap rate
+            decisions.dishwasher.action = 'off'
+            decisions.dishwasher.reason = 'waiting for cheap rate'
+
+            # Calculate wait time for display
+            if next_change > current_hour:
+                wait_hours = next_change - current_hour
+            else:
+                wait_hours = (24 - current_hour) + next_change
+
+            plan.append(f"Dishwasher: PAUSED (off-peak in {wait_hours}h)")
+
 
 def _apply_summer_logic(decisions: Decisions, plan: list, ctx: dict):
     """Apply summer solar optimization logic."""
@@ -505,19 +629,39 @@ def _apply_summer_logic(decisions: Decisions, plan: list, ctx: dict):
     is_exporting = ctx['is_exporting']
     pv = ctx['pv']
 
-    # EV Charging - solar surplus charging
+    # EV Charging - solar-assisted charging
+    # Allow up to 1kW grid import when solar is good (better than exporting all)
+    max_grid_import_for_ev = 1000  # Allow 1kW grid when solar is good
+    p1 = ctx.get('p1', 0)
+
     if ovr['ev'] == 'auto' and ctx['ev_plugged'] and not ctx['ev_done']:
-        if is_exporting and pv > 1000:  # Good solar production
-            # Calculate amps from surplus
-            surplus = -headroom + hyst  # headroom is negative when exporting
-            available_amps = int(surplus / config.ev.watts_per_amp)
+        # Good solar: either exporting, or importing less than threshold
+        has_good_solar = pv > 1500 and (is_exporting or p1 < max_grid_import_for_ev)
+
+        if has_good_solar:
+            # Calculate available power for EV
+            # If exporting: we can use export + allowed import
+            # If importing < threshold: we can use (threshold - current import)
+            if is_exporting:
+                # Exporting = can use all export + allowed import buffer
+                available_power = abs(p1) + max_grid_import_for_ev
+            else:
+                # Already importing, but under threshold
+                available_power = max_grid_import_for_ev - p1
+
+            # When EV is already charging, add back its consumption
+            current_ev_watts = ctx['ev_limit'] * config.ev.watts_per_amp if ctx['ev_charging'] else 0
+            total_for_ev = available_power + current_ev_watts - hyst
+
+            available_amps = int(total_for_ev / config.ev.watts_per_amp)
             target_amps = max(config.ev.min_amps, min(available_amps, config.ev.max_amps))
 
             if ctx['ev_ready'] and target_amps >= config.ev.min_amps:
                 if can_switch('ev', True):
                     decisions.ev.action = 'on'
                     decisions.ev.amps = target_amps
-                    plan.append(f"EV: SOLAR START at {target_amps}A")
+                    solar_pct = int((pv / (target_amps * config.ev.watts_per_amp)) * 100)
+                    plan.append(f"EV: SOLAR START {target_amps}A (~{solar_pct}% solar)")
             elif ctx['ev_charging']:
                 amp_diff = abs(target_amps - ctx['ev_limit'])
                 if amp_diff >= config.ev.amp_change_threshold:
@@ -528,11 +672,11 @@ def _apply_summer_logic(decisions: Decisions, plan: list, ctx: dict):
                     else:
                         decisions.ev.action = 'off'
                         plan.append("EV: STOP (insufficient solar)")
-        elif ctx['ev_charging'] and not is_exporting:
-            # No longer exporting, stop charging
+        elif ctx['ev_charging'] and p1 > max_grid_import_for_ev:
+            # Importing too much from grid, stop or reduce
             if can_switch('ev', False):
                 decisions.ev.action = 'off'
-                plan.append("EV: STOP (no surplus)")
+                plan.append("EV: STOP (grid import too high)")
 
     # Boiler - use solar surplus
     if ovr['boiler'] == 'auto' and not ctx['boiler_full']:
@@ -544,6 +688,10 @@ def _apply_summer_logic(decisions: Decisions, plan: list, ctx: dict):
             if can_switch('boiler', False):
                 decisions.boiler.action = 'off'
                 plan.append("Boiler: OFF (no surplus)")
+
+    # === DISHWASHER (smart scheduling) ===
+    # Same logic as winter - optimize for solar/cheap tariffs
+    _apply_dishwasher_logic(decisions, plan, ctx)
 
 
 def check_frost_protection(

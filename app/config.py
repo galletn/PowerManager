@@ -133,6 +133,10 @@ class EntitiesConfig:
     heater_right: str = "switch.livingroom_right_heater"
     heater_table: str = "switch.livingroom_table_heater_state"
 
+    # Dishwasher
+    dishwasher_switch: str = "switch.kitchen_dishwasher"
+    dishwasher_power: str = "sensor.kitchen_dishwasher_power"
+
     # AC Units
     ac_living: str = "climate.living"
     ac_mancave: str = "climate.mancave"
@@ -155,6 +159,7 @@ class EntitiesConfig:
     ovr_boiler: str = "input_select.pm_override_boiler"
     ovr_ev: str = "input_select.pm_override_ev"
     ovr_table_heater: str = "input_select.pm_override_table_heater"
+    ovr_dishwasher: str = "input_select.pm_override_dishwasher"
 
     # Status helpers
     status_text: str = "input_text.power_manager_status"
@@ -173,6 +178,18 @@ class EntitiesConfig:
     bmw_ix1_battery: str = "sensor.ix1_edrive20_battery_hv_state_of_charge"
     bmw_ix1_range: str = "sensor.ix1_edrive20_range_ev_remaining_range"
     bmw_ix1_location: str = "device_tracker.ix1_edrive20_location"
+
+    # Additional consumers for power tracking
+    media_power: str = "sensor.media_power"
+    server_power: str = "sensor.server_power"
+    desk_power: str = "sensor.desk_power"
+    storage_fridge_power: str = "sensor.storage_fridge_power"
+    kitchen_fridge_power: str = "sensor.kitchen_fridge_power"
+    washing_machine_power: str = "sensor.washing_machine_power"
+    tumble_dryer_power: str = "sensor.tumble_dryer_power"
+    serverroom_storage_power: str = "sensor.serverroom_storage_power"
+    pool_heater_power: str = "sensor.pool_heating_current_consumption"
+    table_heater_power: str = "sensor.livingroom_table_heater_power"
 
 
 @dataclass

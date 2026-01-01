@@ -297,6 +297,63 @@ function updateTimetable(timetable) {
     }
 }
 
+// Update consumers section
+function updateConsumers(consumers) {
+    if (!consumers) return;
+
+    // Update summary totals
+    const trackedEl = document.getElementById('consumers-tracked');
+    const untrackedEl = document.getElementById('consumers-untracked');
+    const importEl = document.getElementById('consumers-import');
+
+    if (trackedEl) trackedEl.textContent = formatWatts(consumers.total_tracked);
+    if (untrackedEl) untrackedEl.textContent = formatWatts(consumers.untracked);
+    if (importEl) importEl.textContent = formatWatts(consumers.total_import);
+
+    // Update grid with individual consumers
+    const grid = document.getElementById('consumers-grid');
+    if (!grid || !consumers.items) return;
+
+    // Sort by power (highest first), filter out zero values for cleaner display
+    const activeConsumers = consumers.items
+        .filter(c => c.power > 0)
+        .sort((a, b) => b.power - a.power);
+
+    const inactiveConsumers = consumers.items
+        .filter(c => c.power <= 0)
+        .sort((a, b) => a.name.localeCompare(b.name));
+
+    let html = '';
+
+    // Active consumers first
+    activeConsumers.forEach(consumer => {
+        html += `
+            <div class="consumer-item active">
+                <span class="consumer-icon">${consumer.icon}</span>
+                <span class="consumer-name">${consumer.name}</span>
+                <span class="consumer-power">${formatWatts(consumer.power)}</span>
+            </div>
+        `;
+    });
+
+    // Inactive consumers (collapsed by default)
+    if (inactiveConsumers.length > 0) {
+        html += `<div class="consumer-inactive-group">`;
+        inactiveConsumers.forEach(consumer => {
+            html += `
+                <div class="consumer-item inactive">
+                    <span class="consumer-icon">${consumer.icon}</span>
+                    <span class="consumer-name">${consumer.name}</span>
+                    <span class="consumer-power">0W</span>
+                </div>
+            `;
+        });
+        html += `</div>`;
+    }
+
+    grid.innerHTML = html;
+}
+
 // Update the dashboard with new data
 function updateDashboard(data) {
     // Power flow
@@ -434,6 +491,11 @@ function updateDashboard(data) {
     // Update timetable with estimates
     if (data.timetable) {
         updateTimetable(data.timetable);
+    }
+
+    // Update consumers
+    if (data.consumers) {
+        updateConsumers(data.consumers);
     }
 
     // Alerts

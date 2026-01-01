@@ -20,6 +20,33 @@ input_number:
     step: 1
     unit_of_measurement: W
 
+  pm_limit_peak:
+    name: Peak Limit
+    min: 1000
+    max: 10000
+    step: 100
+    initial: 2500
+    unit_of_measurement: W
+    icon: mdi:flash-alert
+
+  pm_limit_off_peak:
+    name: Off-Peak Limit
+    min: 1000
+    max: 10000
+    step: 100
+    initial: 5000
+    unit_of_measurement: W
+    icon: mdi:flash
+
+  pm_limit_super_off_peak:
+    name: Super Off-Peak Limit
+    min: 1000
+    max: 15000
+    step: 100
+    initial: 8000
+    unit_of_measurement: W
+    icon: mdi:flash-outline
+
 # === OVERRIDE CONTROLS ===
 # For manual control - PM respects these choices
 
@@ -99,3 +126,12 @@ input_select:
       - "Off"
     initial: "Auto"
     icon: mdi:radiator
+
+  pm_override_dishwasher:
+    name: Dishwasher
+    options:
+      - "Auto"
+      - "Run"
+      - "Off"
+    initial: "Auto"
+    icon: mdi:dishwasher

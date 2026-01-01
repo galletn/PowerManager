@@ -216,6 +216,10 @@ class HAClient:
             heater_right_switch=get_str(e.heater_right, "off"),
             heater_table_switch=get_str(e.heater_table, "off"),
 
+            # Dishwasher
+            dishwasher_switch=get_str(e.dishwasher_switch, "off"),
+            dishwasher_power=get_num(e.dishwasher_power, 0.0),
+
             # AC Units
             ac_living_state=get_str(e.ac_living, "off"),
             ac_mancave_state=get_str(e.ac_mancave, "off"),

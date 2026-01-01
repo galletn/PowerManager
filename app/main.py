@@ -240,6 +240,14 @@ async def execute_decisions(decisions: Decisions, inputs: PowerInputs):
             await ha_client.turn_off(config.entities.heater_table)
             logger.info("Table Heater: OFF")
 
+        # Dishwasher (smart scheduling)
+        if decisions.dishwasher.action == 'on':
+            await ha_client.turn_on(config.entities.dishwasher_switch)
+            logger.info(f"Dishwasher: ON ({decisions.dishwasher.reason})")
+        elif decisions.dishwasher.action == 'off':
+            await ha_client.turn_off(config.entities.dishwasher_switch)
+            logger.info(f"Dishwasher: PAUSED ({decisions.dishwasher.reason})")
+
     except Exception as e:
         logger.error(f"Failed to execute decisions: {e}", exc_info=True)
 
@@ -262,6 +270,7 @@ def _update_device_state(inputs: PowerInputs, decisions: Decisions):
     update_state('pool_pump', inputs.pool_pump_switch == 'on', decisions.pool_pump.action)
     update_state('heater_table', inputs.heater_table_switch == 'on',
                  decisions.heater_table.action)
+    update_state('dishwasher', inputs.dishwasher_switch == 'on', decisions.dishwasher.action)
 
 
 # === API Routes ===
@@ -283,6 +292,9 @@ async def get_status():
     """Get current power status for dashboard."""
     if last_inputs is None:
         return JSONResponse({"error": "No data yet"}, status_code=503)
+
+    # Get consumer power values
+    consumers = await _get_consumers_data()
 
     return {
         "grid_import": last_inputs.p1_power,
@@ -322,8 +334,15 @@ async def get_status():
                 "state": last_inputs.heater_table_switch,
                 "power": config.heaters.table_power if last_inputs.heater_table_switch == 'on' else 0,
                 "decision": last_decisions.heater_table.action if last_decisions else "none"
+            },
+            "dishwasher": {
+                "state": last_inputs.dishwasher_switch,
+                "power": last_inputs.dishwasher_power,
+                "decision": last_decisions.dishwasher.action if last_decisions else "none",
+                "reason": last_decisions.dishwasher.reason if last_decisions else ""
             }
         },
+        "consumers": consumers,
         "plan": last_plan,
         "alerts": last_alerts,
         "last_update": last_update.isoformat() if last_update else None,
@@ -335,6 +354,76 @@ async def get_status():
             "super_off_peak": config.max_import.super_off_peak
         }
     }
+
+
+async def _get_consumers_data():
+    """Get power consumption data for all tracked consumers."""
+    if config is None or ha_client is None:
+        return None
+
+    try:
+        states = await ha_client.get_all_states()
+
+        def get_power(entity_id):
+            state = states.get(entity_id, {})
+            val = state.get("state")
+            if val in (None, "unavailable", "unknown", ""):
+                return 0
+            try:
+                return float(val)
+            except (ValueError, TypeError):
+                return 0
+
+        # Define all consumers with display names and icons
+        consumers = [
+            {"id": "boiler", "name": "Boiler", "icon": "🔥",
+             "power": get_power(config.entities.boiler_power)},
+            {"id": "ev", "name": "EV Charger", "icon": "🚗",
+             "power": get_power(config.entities.ev_power)},
+            {"id": "pool_pump", "name": "Pool Pump", "icon": "🌊",
+             "power": get_power(config.entities.pool_pump_power)},
+            {"id": "pool_heater", "name": "Pool Heater", "icon": "♨️",
+             "power": get_power(config.entities.pool_heater_power)},
+            {"id": "table_heater", "name": "Table Heater", "icon": "🪑",
+             "power": get_power(config.entities.table_heater_power)},
+            {"id": "ac_living", "name": "AC Living", "icon": "❄️",
+             "power": get_power(config.entities.ac_living_power)},
+            {"id": "ac_office", "name": "AC Office", "icon": "❄️",
+             "power": get_power(config.entities.ac_office_power)},
+            {"id": "media", "name": "Media", "icon": "📺",
+             "power": get_power(config.entities.media_power)},
+            {"id": "server", "name": "Server", "icon": "🖥️",
+             "power": get_power(config.entities.server_power)},
+            {"id": "desk", "name": "Desk", "icon": "💻",
+             "power": get_power(config.entities.desk_power)},
+            {"id": "storage_fridge", "name": "Fridge (Storage)", "icon": "🧊",
+             "power": get_power(config.entities.storage_fridge_power)},
+            {"id": "kitchen_fridge", "name": "Fridge (Kitchen)", "icon": "🧊",
+             "power": get_power(config.entities.kitchen_fridge_power)},
+            {"id": "washing_machine", "name": "Washing Machine", "icon": "🧺",
+             "power": get_power(config.entities.washing_machine_power)},
+            {"id": "dishwasher", "name": "Dishwasher", "icon": "🍽️",
+             "power": get_power(config.entities.dishwasher_power)},  # kitchen_dishwasher_power
+            {"id": "tumble_dryer", "name": "Tumble Dryer", "icon": "👕",
+             "power": get_power(config.entities.tumble_dryer_power)},
+            {"id": "serverroom_storage", "name": "Serverroom Storage", "icon": "💾",
+             "power": get_power(config.entities.serverroom_storage_power)},
+        ]
+
+        # Calculate totals
+        total_tracked = sum(c["power"] for c in consumers)
+        total_import = last_inputs.p1_power if last_inputs else 0
+        untracked = max(0, total_import - total_tracked)
+
+        return {
+            "items": consumers,
+            "total_tracked": total_tracked,
+            "total_import": total_import,
+            "untracked": untracked
+        }
+    except Exception as e:
+        logger.error(f"Failed to get consumers data: {e}")
+        return None
 
 
 def _get_timetable_data():
@@ -359,7 +448,7 @@ def _get_timetable_data():
 @app.post("/api/override/{device}")
 async def set_override(device: str, mode: str):
     """Set manual override for a device."""
-    valid_devices = ['ev', 'boiler', 'pool', 'table_heater',
+    valid_devices = ['ev', 'boiler', 'pool', 'table_heater', 'dishwasher',
                      'ac_living', 'ac_bedroom', 'ac_office', 'ac_mancave']
     valid_modes = ['auto', 'on', 'off']
 
@@ -374,6 +463,7 @@ async def set_override(device: str, mode: str):
         'boiler': config.entities.ovr_boiler,
         'pool': config.entities.ovr_pool,
         'table_heater': config.entities.ovr_table_heater,
+        'dishwasher': config.entities.ovr_dishwasher,
         'ac_living': config.entities.ovr_ac_living,
         'ac_bedroom': config.entities.ovr_ac_bedroom,
         'ac_office': config.entities.ovr_ac_office,
@@ -387,6 +477,7 @@ async def set_override(device: str, mode: str):
         'boiler': {'auto': 'Auto', 'on': 'On', 'off': 'Off'},
         'pool': {'auto': 'Auto', 'on': 'Heat', 'off': 'Off'},
         'table_heater': {'auto': 'Auto', 'on': 'On', 'off': 'Off'},
+        'dishwasher': {'auto': 'Auto', 'on': 'Run', 'off': 'Off'},
         'ac_living': {'auto': 'Auto', 'on': 'Heat', 'off': 'Off'},
         'ac_bedroom': {'auto': 'Auto', 'on': 'Heat', 'off': 'Off'},
         'ac_office': {'auto': 'Auto', 'on': 'Heat', 'off': 'Off'},
