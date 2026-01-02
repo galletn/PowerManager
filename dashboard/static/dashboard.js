@@ -1,7 +1,16 @@
 /**
  * Power Manager Dashboard JavaScript
  * Home Assistant themed dashboard with 24-hour schedule
+ *
+ * STANDALONE MODE: To use this dashboard from HA's www folder or another host,
+ * set window.POWER_MANAGER_API before loading this script:
+ *   <script>window.POWER_MANAGER_API = 'https://192.168.68.78:8081';</script>
+ *   <script src="dashboard.js"></script>
  */
+
+// API base URL - empty for relative URLs (when served by Power Manager),
+// or set window.POWER_MANAGER_API for standalone deployments
+const API_BASE_URL = window.POWER_MANAGER_API || '';
 
 const REFRESH_INTERVAL = 10000; // 10 seconds - matches well with 30s decision loop
 
@@ -432,7 +441,7 @@ function updateTimetable(timetable) {
 }
 
 // Update consumers section
-function updateConsumers(consumers) {
+function updateConsumers(consumers, gridImport) {
     if (!consumers) return;
 
     // Update summary totals
@@ -442,7 +451,7 @@ function updateConsumers(consumers) {
 
     if (trackedEl) trackedEl.textContent = formatWatts(consumers.total_tracked);
     if (untrackedEl) untrackedEl.textContent = formatWatts(consumers.untracked);
-    if (importEl) importEl.textContent = formatWatts(consumers.total_home);
+    if (importEl) importEl.textContent = formatWatts(gridImport || 0);
 
     // Update grid with individual consumers
     const grid = document.getElementById('consumers-grid');
@@ -677,7 +686,7 @@ function updateDashboard(data) {
 
     // Update consumers
     if (data.consumers) {
-        updateConsumers(data.consumers);
+        updateConsumers(data.consumers, data.grid_import);
     }
 
     // Alerts - always clear first, then build list
@@ -747,7 +756,7 @@ function updateDashboard(data) {
 // Fetch status from API
 async function fetchStatus() {
     try {
-        const response = await fetch('/api/status');
+        const response = await fetch(`${API_BASE_URL}/api/status`);
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}`);
         }
@@ -763,7 +772,7 @@ async function fetchStatus() {
 // Set override
 async function setOverride(device, mode) {
     try {
-        const response = await fetch(`/api/override/${device}?mode=${mode}`, {
+        const response = await fetch(`${API_BASE_URL}/api/override/${device}?mode=${mode}`, {
             method: 'POST'
         });
         if (!response.ok) {
@@ -815,7 +824,7 @@ async function saveLimits() {
         params.append('off_peak', offPeak);
         params.append('super_off_peak', superOffPeak);
 
-        const response = await fetch(`/api/limits?${params.toString()}`, {
+        const response = await fetch(`${API_BASE_URL}/api/limits?${params.toString()}`, {
             method: 'POST'
         });
 
