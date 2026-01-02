@@ -269,7 +269,24 @@ def generate_schedule(
             ))
 
     # Boiler - HIGHEST priority after frost protection (no hot water = no shower!)
-    if boiler_estimate.get('needed'):
+    # Check if boiler is currently heating (show immediately on timeline)
+    boiler_currently_heating = (inputs and
+                                inputs.boiler_switch == 'on' and
+                                inputs.boiler_power >= config.boiler.idle_threshold)
+
+    if boiler_currently_heating:
+        # Boiler is actively heating NOW - show on timeline from current time
+        # Estimate remaining heating time based on typical 2.5h total cycle
+        devices.append(DeviceNeed(
+            name='boiler',
+            power=int(inputs.boiler_power),
+            hours_needed=1.5,  # Assume ~1.5h remaining when actively heating
+            priority=2,
+            can_run_during_peak=True,  # If it's running now, let it continue
+            start_now=True  # Show from current time
+        ))
+    elif boiler_estimate.get('needed'):
+        # Boiler needs heating later - schedule during cheap tariff
         deadline_hour = int(config.boiler.deadline_winter if not summer else config.boiler.deadline_summer)
         deadline_min = int(((config.boiler.deadline_winter if not summer else config.boiler.deadline_summer) % 1) * 60)
         boiler_deadline = now.replace(hour=deadline_hour, minute=deadline_min, second=0)
