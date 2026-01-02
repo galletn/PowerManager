@@ -309,9 +309,23 @@ def generate_schedule(
             can_run_during_peak=False
         ))
 
-    # EV charging - use effective power limited by grid, not max charger power
-    if ev_estimate.get('needed'):
-        # Use the same effective power calculation as the estimate
+    # EV charging - check if actively charging NOW or needs scheduling later
+    ev_currently_charging = inputs and inputs.ev_power > 500
+
+    if ev_currently_charging:
+        # EV is actively charging NOW - show on timeline from current time
+        # Estimate remaining hours based on battery level if available
+        remaining_hours = ev_estimate.get('hours_needed', 2) if ev_estimate.get('needed') else 1
+        devices.append(DeviceNeed(
+            name='ev',
+            power=int(inputs.ev_power),
+            hours_needed=max(remaining_hours, 0.5),  # At least 30 min shown
+            priority=3,
+            can_run_during_peak=True,  # If it's running now, let it continue
+            start_now=True  # Show from current time
+        ))
+    elif ev_estimate.get('needed'):
+        # EV needs charging later - schedule during cheap tariff
         ev_power = int(ev_estimate.get('charging_power_kw', 7.5) * 1000)
         devices.append(DeviceNeed(
             name='ev',
