@@ -336,12 +336,14 @@ def generate_schedule(
             can_run_during_peak=False
         ))
 
-    # Table heater - lower priority, comfort device
+    # Table heater - LOWEST priority, only scheduled in leftover capacity
+    # Priority 10 ensures it's processed AFTER boiler (2) and EV (3)
+    # So it only gets slots where those devices aren't using capacity
     devices.append(DeviceNeed(
         name='table_heater',
         power=config.heaters.table_power,
-        hours_needed=4,  # Target 4 hours of heating
-        priority=4,
+        hours_needed=4,  # Target 4 hours
+        priority=10,  # Very low - gets leftover capacity only
         can_run_during_peak=False
     ))
 
