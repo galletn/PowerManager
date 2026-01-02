@@ -24,6 +24,40 @@ MAX_GRID_IMPORT_FOR_EV = 1000
 DW_RUNNING_THRESHOLD = 50
 
 
+def calculate_ev_hours_needed(inputs: PowerInputs, config: Config) -> float:
+    """Calculate hours needed for EV to reach 80% SoC.
+
+    Uses the BMW battery level and charging power to estimate time needed.
+    Returns 0 if no EV connected or battery level unknown.
+    """
+    # Determine which car is at home
+    car_battery = None
+    car_capacity = 84  # Default BMW i5 capacity in kWh
+
+    if inputs.bmw_i5_location == 'home' and inputs.bmw_i5_battery is not None:
+        car_battery = inputs.bmw_i5_battery
+        car_capacity = 84  # BMW i5 eDrive40
+    elif inputs.bmw_ix1_location == 'home' and inputs.bmw_ix1_battery is not None:
+        car_battery = inputs.bmw_ix1_battery
+        car_capacity = 65  # BMW iX1 eDrive20
+
+    if car_battery is None or car_battery >= 80:
+        return 0.0
+
+    # Calculate kWh needed
+    kwh_needed = (80 - car_battery) / 100 * car_capacity
+
+    # Calculate effective charging power (limited by grid)
+    charger_max_kw = config.ev.max_amps * config.ev.watts_per_amp / 1000
+    grid_limit_kw = config.max_import.super_off_peak / 1000
+    base_load_buffer_kw = 0.5
+    effective_charging_kw = min(charger_max_kw, grid_limit_kw - base_load_buffer_kw)
+
+    # Hours needed
+    hours_needed = kwh_needed / effective_charging_kw
+    return round(hours_needed, 1)
+
+
 def fmt_w(watts: float) -> str:
     """Format watts for display."""
     if abs(watts) >= 1000:
@@ -353,6 +387,9 @@ def calculate_decisions(
     plan.extend(boiler_deadline_result['plan_entries'])
     alerts.extend(boiler_deadline_result['alerts'])
 
+    # Calculate EV hours needed for scheduling optimization
+    ev_hours_needed = calculate_ev_hours_needed(inputs, config)
+
     # === SEASONAL LOGIC ===
     if not summer:
         _apply_winter_logic(decisions, plan, {
@@ -362,6 +399,7 @@ def calculate_decisions(
             'ev_ready': ev_ready,
             'ev_charging': ev_charging,
             'ev_limit': ev_limit,
+            'ev_hours_needed': ev_hours_needed,  # For off-peak scheduling optimization
             'boiler_on': boiler_on,
             'boiler_full': boiler_full,
             'boiler_force': boiler_force,
@@ -670,8 +708,43 @@ def _handle_ev_winter(
                 plan.append(f"EV: START at {target_amps}A (super-off-peak)")
 
     elif tariff == 'off-peak':
-        # Off-peak (5kW limit) - only charge if boiler not needed
-        if boiler_will_use == 0 and not ctx['boiler_on']:
+        # Off-peak (5kW limit) - WAIT for super-off-peak unless we need more time
+        # Super-off-peak is 01:00-07:00 = 6 hours available
+        # Only charge during off-peak if EV needs more than 6 hours to reach target
+        now = ctx.get('date')
+        current_hour = now.hour + now.minute / 60 if now else 23.0
+
+        # Calculate hours of super-off-peak available (01:00 to 07:00)
+        super_off_peak_hours = 6.0
+
+        # Estimate hours needed based on schedule (passed via context)
+        ev_hours_needed = ctx.get('ev_hours_needed', 0)
+
+        # Need to start during off-peak if we can't fit in super-off-peak
+        must_start_now = ev_hours_needed > super_off_peak_hours
+
+        if ctx['ev_charging']:
+            # Already charging - let it continue if boiler doesn't need power
+            if boiler_will_use == 0 and not ctx['boiler_on']:
+                total_for_ev = effective_headroom + current_ev_watts - hyst
+                available_amps = calculate_available_amps(
+                    total_for_ev, config.ev.watts_per_amp
+                )
+                target_amps = max(
+                    config.ev.min_amps, min(available_amps, config.ev.max_amps)
+                )
+                amp_diff = abs(target_amps - ctx['ev_limit'])
+                if amp_diff >= config.ev.amp_change_threshold:
+                    decisions.ev.action = 'adjust'
+                    decisions.ev.amps = target_amps
+                    plan.append(f"EV: adjust to {target_amps}A")
+            else:
+                # Boiler needs power - stop EV
+                if can_switch('ev', False):
+                    decisions.ev.action = 'off'
+                    plan.append("EV: PAUSE (boiler priority)")
+        elif ctx['ev_ready'] and must_start_now and boiler_will_use == 0 and not ctx['boiler_on']:
+            # Need to start now because not enough super-off-peak hours
             total_for_ev = effective_headroom + current_ev_watts - hyst
             available_amps = calculate_available_amps(
                 total_for_ev, config.ev.watts_per_amp
@@ -679,24 +752,16 @@ def _handle_ev_winter(
             target_amps = max(
                 config.ev.min_amps, min(available_amps, config.ev.max_amps)
             )
-
-            if ctx['ev_charging']:
-                amp_diff = abs(target_amps - ctx['ev_limit'])
-                if amp_diff >= config.ev.amp_change_threshold:
-                    decisions.ev.action = 'adjust'
-                    decisions.ev.amps = target_amps
-                    plan.append(f"EV: adjust to {target_amps}A")
-            elif ctx['ev_ready'] and target_amps >= config.ev.min_amps:
+            if target_amps >= config.ev.min_amps:
                 if can_switch('ev', True):
                     decisions.ev.action = 'on'
                     decisions.ev.amps = target_amps
                     effective_headroom -= target_amps * config.ev.watts_per_amp
-                    plan.append(f"EV: START {target_amps}A (off-peak)")
-        elif ctx['ev_charging']:
-            # EV already charging but boiler needs power - stop EV
-            if can_switch('ev', False):
-                decisions.ev.action = 'off'
-                plan.append("EV: PAUSE (boiler priority)")
+                    plan.append(f"EV: START {target_amps}A (off-peak, needs {ev_hours_needed:.1f}h)")
+        elif ctx['ev_ready'] and not must_start_now:
+            # Can wait for super-off-peak - cheaper!
+            hours_until_super = max(0, 1.0 - current_hour) if current_hour < 1 else (25.0 - current_hour)
+            plan.append(f"EV: WAIT for super-off-peak ({hours_until_super:.1f}h)")
 
     elif tariff == 'peak' and ctx['ev_charging']:
         # Stop charging during peak
