@@ -322,29 +322,49 @@ def generate_schedule(
         ))
     elif ev_estimate.get('needed'):
         # EV needs charging later - schedule during cheap tariff
-        ev_power = int(ev_estimate.get('charging_power_kw', 7.5) * 1000)
+        # Calculate EV power that can run alongside boiler (both start at 01:00)
+        # This allows EV+boiler to run together during super-off-peak
+        winter_limit = get_max_import('super-off-peak', config, now)
+        boiler_power = config.boiler.power if boiler_estimate.get('needed') else 0
+        buffer = 500  # 500W for base load
+        # EV power when running alongside boiler
+        ev_power_with_boiler = winter_limit - boiler_power - buffer
+        # Clamp to charger limits (6A-16A)
+        min_ev_power = config.ev.min_amps * config.ev.watts_per_amp
+        max_ev_power = config.ev.max_amps * config.ev.watts_per_amp
+        ev_power = max(min_ev_power, min(ev_power_with_boiler, max_ev_power))
+
+        # Recalculate hours needed at this power
+        kwh_needed = ev_estimate.get('kwh_needed', 30)
+        hours_needed = kwh_needed / (ev_power / 1000) if ev_power > 0 else 6
+
+        # Check if super-off-peak (6 hours) is enough, otherwise allow off-peak too
+        super_off_peak_hours = 6.0
+        needs_off_peak = hours_needed > super_off_peak_hours
+
         devices.append(DeviceNeed(
             name='ev',
-            power=ev_power,
-            hours_needed=ev_estimate['hours_needed'],
+            power=int(ev_power),
+            hours_needed=hours_needed,
             priority=3,
             deadline=now.replace(hour=7, minute=0, second=0) + timedelta(days=1 if now.hour >= 7 else 0),
-            can_run_during_peak=False
+            # Allow off-peak charging if super-off-peak isn't enough
+            can_run_during_peak=False,
+            # Note: off-peak slots will be considered after super-off-peak due to tariff preference
         ))
 
-    # Table heater - LOWEST priority, only when EV doesn't need the capacity
-    # Don't schedule table heater during super-off-peak when EV is connected
-    # because we want all cheap capacity to go to boiler + EV first
-    ev_needs_super_off_peak = ev_estimate.get('needed', False)
-    if not ev_needs_super_off_peak:
-        # EV doesn't need charging, table heater can use super-off-peak
-        devices.append(DeviceNeed(
-            name='table_heater',
-            power=config.heaters.table_power,
-            hours_needed=4,  # Target 4 hours
-            priority=10,  # Very low - gets leftover capacity only
-            can_run_during_peak=False
-        ))
+    # Table heater - LOWEST priority, gets scheduled into leftover capacity
+    # With priority 10, it will only fill slots after boiler (2) and EV (3)
+    # The capacity algorithm will fit it where there's room:
+    # - Alongside boiler (2.5kW + 4.1kW = 6.6kW < 9kW) ✓
+    # - After EV finishes (if super-off-peak time remains)
+    devices.append(DeviceNeed(
+        name='table_heater',
+        power=config.heaters.table_power,
+        hours_needed=4,  # Target 4 hours
+        priority=10,  # Very low - gets leftover capacity only
+        can_run_during_peak=False
+    ))
 
     # Dishwasher - only show when CURRENTLY running (power > 50W)
     # Don't try to predict "waiting" state - switch may stay on after cycle finishes
