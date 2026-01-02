@@ -358,6 +358,7 @@ def calculate_decisions(
             'boiler_on': boiler_on,
             'boiler_full': boiler_full,
             'boiler_force': boiler_force,
+            'boiler_power': boiler_power,
             'hr_on': hr_on,
             'ht_on': ht_on,
             'dw_switch_on': dw_switch_on,
@@ -391,6 +392,7 @@ def calculate_decisions(
             'ev_limit': ev_limit,
             'boiler_on': boiler_on,
             'boiler_full': boiler_full,
+            'boiler_power': boiler_power,
             'dw_switch_on': dw_switch_on,
             'dw_power': dw_power,
             'dw_running': dw_running,
@@ -588,6 +590,7 @@ def _handle_boiler_winter(
             # Boiler already on, reserve its power
             boiler_will_use = config.boiler.power
             effective_headroom -= boiler_will_use
+            plan.append(f"Boiler: HEATING ({int(ctx.get('boiler_power', 0))}W)")
         elif not wants_to_heat and not ctx['boiler_on']:
             # Boiler is off and we don't want to heat - explain why
             if tariff == 'peak':
