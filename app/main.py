@@ -37,6 +37,19 @@ logger = logging.getLogger(__name__)
 ALERT_COOLDOWN_MINUTES = 30  # Don't repeat same alert for 30 minutes
 ALERT_COOLDOWN_CLEANUP_MINUTES = 60  # Clean up cooldown entries older than 1 hour
 
+# Retry backoff intervals in seconds: 1min, 5min, 15min, 30min, 60min
+RETRY_BACKOFF_SECONDS = [60, 300, 900, 1800, 3600]
+
+
+@dataclass
+class PendingCommand:
+    """Tracks a command waiting for state verification."""
+    entity_id: str
+    expected_state: str  # 'on' or 'off'
+    command_time: datetime
+    last_retry: datetime
+    retry_count: int = 0
+
 
 @dataclass
 class AppState:
@@ -71,6 +84,7 @@ class AppState:
     last_ha_states: Optional[dict] = None
     running: bool = False
     alert_cooldowns: dict[str, datetime] = field(default_factory=dict)
+    pending_commands: dict[str, PendingCommand] = field(default_factory=dict)
 
     def cleanup_alert_cooldowns(self) -> None:
         """Remove alert cooldown entries older than ALERT_COOLDOWN_CLEANUP_MINUTES."""
@@ -94,6 +108,98 @@ class AppState:
 
 # Single application state instance
 app_state = AppState()
+
+
+def get_entity_state(states: dict, entity_id: str) -> Optional[str]:
+    """Get current state of an entity from HA states dict."""
+    entity_data = states.get(entity_id, {})
+    return entity_data.get("state")
+
+
+async def verify_and_retry_pending_commands(states: dict) -> None:
+    """Verify pending commands succeeded and retry with exponential backoff if not.
+
+    This function checks each pending command to see if the device reached
+    the expected state. If not, and enough time has passed since the last
+    retry, it will retry the command with exponential backoff.
+
+    Backoff schedule: 1min, 5min, 15min, 30min, 60min (then repeats 60min)
+    """
+    now = datetime.now()
+    config = app_state.config
+    ha_client = app_state.ha_client
+    commands_to_remove = []
+
+    for entity_id, cmd in app_state.pending_commands.items():
+        current_state = get_entity_state(states, entity_id)
+
+        # Normalize state comparison (HA uses various formats)
+        if current_state:
+            current_state = current_state.lower()
+
+        state_matches = current_state == cmd.expected_state
+
+        if state_matches:
+            # Command succeeded - remove from pending
+            elapsed = (now - cmd.command_time).total_seconds()
+            if cmd.retry_count > 0:
+                logger.info(
+                    f"Command verified after {cmd.retry_count} retries: "
+                    f"{entity_id} is now {current_state} "
+                    f"(took {elapsed:.0f}s total)"
+                )
+            commands_to_remove.append(entity_id)
+            continue
+
+        # State doesn't match - check if we should retry
+        backoff_index = min(cmd.retry_count, len(RETRY_BACKOFF_SECONDS) - 1)
+        backoff_seconds = RETRY_BACKOFF_SECONDS[backoff_index]
+        time_since_retry = (now - cmd.last_retry).total_seconds()
+
+        if time_since_retry >= backoff_seconds:
+            # Time to retry
+            cmd.retry_count += 1
+            cmd.last_retry = now
+
+            logger.warning(
+                f"State verification failed for {entity_id}: "
+                f"expected '{cmd.expected_state}', got '{current_state}'. "
+                f"Retry {cmd.retry_count} (next in {RETRY_BACKOFF_SECONDS[min(cmd.retry_count, len(RETRY_BACKOFF_SECONDS) - 1)]}s)"
+            )
+
+            try:
+                if cmd.expected_state == 'on':
+                    await ha_client.turn_on(entity_id)
+                else:
+                    await ha_client.turn_off(entity_id)
+                logger.info(f"Retry command sent: {entity_id} -> {cmd.expected_state}")
+            except Exception as e:
+                logger.error(f"Retry failed for {entity_id}: {e}")
+
+        # Check for stale commands (over 2 hours old)
+        total_elapsed = (now - cmd.command_time).total_seconds()
+        if total_elapsed > 7200:  # 2 hours
+            logger.error(
+                f"Giving up on {entity_id} after {total_elapsed:.0f}s and "
+                f"{cmd.retry_count} retries"
+            )
+            commands_to_remove.append(entity_id)
+
+    # Clean up completed/stale commands
+    for entity_id in commands_to_remove:
+        del app_state.pending_commands[entity_id]
+
+
+def add_pending_command(entity_id: str, expected_state: str) -> None:
+    """Add a command to pending verification queue."""
+    now = datetime.now()
+    app_state.pending_commands[entity_id] = PendingCommand(
+        entity_id=entity_id,
+        expected_state=expected_state,
+        command_time=now,
+        last_retry=now,
+        retry_count=0
+    )
 
 
 @asynccontextmanager
@@ -208,6 +314,9 @@ async def decision_loop():
             inputs = app_state.ha_client.parse_inputs(states)
             app_state.last_inputs = inputs
 
+            # Verify pending commands and retry if failed
+            await verify_and_retry_pending_commands(states)
+
             # Calculate decisions
             result = calculate_decisions(
                 inputs, app_state.config, app_state.device_state
@@ -312,11 +421,13 @@ async def execute_decisions(
             success = await ha_client.turn_on(config.entities.ev_switch)
             if success:
                 confirmed_states['ev'] = True
+                add_pending_command(config.entities.ev_switch, 'on')
             logger.info(f"EV: Started at {decisions.ev.amps}A")
         elif decisions.ev.action == 'off':
             success = await ha_client.turn_off(config.entities.ev_switch)
             if success:
                 confirmed_states['ev'] = False
+                add_pending_command(config.entities.ev_switch, 'off')
             logger.info("EV: Stopped")
         elif decisions.ev.action == 'adjust':
             await ha_client.set_number(
@@ -329,11 +440,13 @@ async def execute_decisions(
             success = await ha_client.turn_on(config.entities.boiler_switch)
             if success:
                 confirmed_states['boiler'] = True
+                add_pending_command(config.entities.boiler_switch, 'on')
             logger.info("Boiler: ON")
         elif decisions.boiler.action == 'off':
             success = await ha_client.turn_off(config.entities.boiler_switch)
             if success:
                 confirmed_states['boiler'] = False
+                add_pending_command(config.entities.boiler_switch, 'off')
             logger.info("Boiler: OFF")
 
         # Pool Pump (frost protection)
@@ -341,11 +454,13 @@ async def execute_decisions(
             success = await ha_client.turn_on(config.entities.pool_pump)
             if success:
                 confirmed_states['pool_pump'] = True
+                add_pending_command(config.entities.pool_pump, 'on')
             logger.info("Pool Pump: ON (frost protection)")
         elif decisions.pool_pump.action == 'off':
             success = await ha_client.turn_off(config.entities.pool_pump)
             if success:
                 confirmed_states['pool_pump'] = False
+                add_pending_command(config.entities.pool_pump, 'off')
             logger.info("Pool Pump: OFF")
 
         # Pool Heat Pump
@@ -355,6 +470,7 @@ async def execute_decisions(
             )
             if success:
                 confirmed_states['pool'] = True
+                add_pending_command(config.entities.pool_climate, 'heat')
             logger.info("Pool Heat: ON")
         elif decisions.pool.action == 'off':
             success = await ha_client.set_climate(
@@ -362,6 +478,7 @@ async def execute_decisions(
             )
             if success:
                 confirmed_states['pool'] = False
+                add_pending_command(config.entities.pool_climate, 'off')
             logger.info("Pool Heat: OFF")
 
         # Table Heater
@@ -369,11 +486,13 @@ async def execute_decisions(
             success = await ha_client.turn_on(config.entities.heater_table)
             if success:
                 confirmed_states['heater_table'] = True
+                add_pending_command(config.entities.heater_table, 'on')
             logger.info("Table Heater: ON")
         elif decisions.heater_table.action == 'off':
             success = await ha_client.turn_off(config.entities.heater_table)
             if success:
                 confirmed_states['heater_table'] = False
+                add_pending_command(config.entities.heater_table, 'off')
             logger.info("Table Heater: OFF")
 
         # Dishwasher (smart scheduling)
@@ -381,11 +500,13 @@ async def execute_decisions(
             success = await ha_client.turn_on(config.entities.dishwasher_switch)
             if success:
                 confirmed_states['dishwasher'] = True
+                add_pending_command(config.entities.dishwasher_switch, 'on')
             logger.info(f"Dishwasher: ON ({decisions.dishwasher.reason})")
         elif decisions.dishwasher.action == 'off':
             success = await ha_client.turn_off(config.entities.dishwasher_switch)
             if success:
                 confirmed_states['dishwasher'] = False
+                add_pending_command(config.entities.dishwasher_switch, 'off')
             logger.info(f"Dishwasher: PAUSED ({decisions.dishwasher.reason})")
 
     except Exception as e:
