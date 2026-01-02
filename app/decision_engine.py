@@ -213,13 +213,18 @@ def calculate_decisions(
 
     # Calculate power values (default to 0 if None during HA startup)
     p1 = inputs.p1_power if inputs.p1_power is not None else 0  # Grid import (W)
-    pv = inputs.pv_power if inputs.pv_power is not None else 0  # Solar production (W)
+    p1_return = inputs.p1_return if inputs.p1_return is not None else 0  # Export (W)
+    pv = inputs.pv_power if inputs.pv_power is not None else 0  # Solar (W)
 
-    # Available power = max_import - current_import + solar
-    # But we calculate based on actual consumption
-    avail = max_import - p1
+    # Net power: positive = importing, negative = exporting
+    # P1 meter has separate import/export sensors, both always >= 0
+    net_p1 = p1 - p1_return
 
-    is_exporting = p1 < 0
+    # Available power = max_import - net_import (or + net_export)
+    avail = max_import - net_p1
+
+    # Exporting when export > import
+    is_exporting = p1_return > p1
     hyst = config.timing.hysteresis
 
     # Parse overrides
@@ -300,8 +305,10 @@ def calculate_decisions(
 
     # Build status line
     tariff_label = tariff.upper().replace('-', ' ')
-    grid_icon = grid_indicator(p1, max_import)
-    plan.append(f"{tariff_label} {grid_icon} | Grid: {fmt_w(p1)} | PV: {fmt_w(pv)} | Avail: {fmt_w(avail)}")
+    grid_icon = grid_indicator(net_p1, max_import)
+    # Show net grid power (negative = exporting)
+    grid_label = f"Export: {fmt_w(abs(net_p1))}" if is_exporting else f"Import: {fmt_w(net_p1)}"
+    plan.append(f"{tariff_label} {grid_icon} | {grid_label} | PV: {fmt_w(pv)} | Avail: {fmt_w(avail)}")
     plan.append(f"{'Summer' if summer else 'Winter'} | EV: {ev_status_text}")
 
     # Track available headroom
@@ -371,6 +378,8 @@ def calculate_decisions(
             'is_exporting': is_exporting,
             'pv': pv,
             'p1': p1,
+            'p1_return': p1_return,  # Export power
+            'net_p1': net_p1,        # Net grid (neg = export)
         })
     else:
         _apply_summer_logic(decisions, plan, {
@@ -399,6 +408,8 @@ def calculate_decisions(
             'is_exporting': is_exporting,
             'pv': pv,
             'p1': p1,
+            'p1_return': p1_return,  # Export power
+            'net_p1': net_p1,        # Net grid (neg = export)
         })
 
     # Calculate final headroom
@@ -419,6 +430,8 @@ def calculate_decisions(
         meta={
             'tariff': tariff,
             'p1': p1,
+            'p1_return': p1_return,
+            'net_p1': net_p1,
             'pv': pv,
             'avail': avail,
             'is_summer': summer,
@@ -536,9 +549,8 @@ def _handle_boiler_winter(
         enough_power = effective_headroom > config.boiler.power + hyst
 
         # Solar surplus logic: if exporting significant power, use boiler
-        p1 = ctx.get('p1', 0)
-        export_power = abs(p1) if is_exporting else 0
-        has_solar_surplus = is_exporting and export_power > MIN_EXPORT_FOR_BOILER
+        p1_return = ctx.get('p1_return', 0)  # Actual export power
+        has_solar_surplus = is_exporting and p1_return > MIN_EXPORT_FOR_BOILER
 
         # Determine if boiler should heat (conditions regardless of power):
         # 1. Super off-peak (cheapest rate, 01:00-07:00)
@@ -552,7 +564,7 @@ def _handle_boiler_winter(
             reason = "super-off-peak"
         elif has_solar_surplus:
             wants_to_heat = True
-            reason = f"solar ({int(export_power)}W export)"
+            reason = f"solar ({int(p1_return)}W export)"
         elif approaching_deadline and tariff in ('off-peak', 'super-off-peak'):
             wants_to_heat = True
             reason = "approaching deadline"
@@ -835,6 +847,7 @@ def _apply_dishwasher_logic(decisions: Decisions, plan: list, ctx: dict):
 
     # Minimum solar export to consider "solar surplus"
     # MIN_SOLAR_SURPLUS = 500W export = good solar
+    p1_return = ctx.get('p1_return', 0)  # Actual export power
 
     # If dishwasher is running (drawing power), NEVER interrupt
     if dw_running:
@@ -850,7 +863,7 @@ def _apply_dishwasher_logic(decisions: Decisions, plan: list, ctx: dict):
     # waiting for the smart scheduling to release it
 
     if dw_waiting:
-        has_solar_surplus = is_exporting and abs(p1) > MIN_SOLAR_SURPLUS
+        has_solar_surplus = is_exporting and p1_return > MIN_SOLAR_SURPLUS
         is_cheap_tariff = tariff in ('off-peak', 'super-off-peak')
 
         # Check if we have enough headroom for the dishwasher
@@ -868,7 +881,7 @@ def _apply_dishwasher_logic(decisions: Decisions, plan: list, ctx: dict):
             # Solar covers the consumption, no grid limit concern
             decisions.dishwasher.action = 'on'
             decisions.dishwasher.reason = 'solar surplus'
-            plan.append(f"Dishwasher: RUN (solar surplus {abs(p1):.0f}W)")
+            plan.append(f"Dishwasher: RUN (solar surplus {p1_return:.0f}W)")
         elif is_cheap_tariff and has_enough_power:
             # Off-peak or super-off-peak with enough headroom - allow run
             decisions.dishwasher.action = 'on'
@@ -907,7 +920,8 @@ def _apply_summer_logic(decisions: Decisions, plan: list, ctx: dict):
 
     # EV Charging - solar-assisted charging
     # Allow up to 1kW grid import when solar is good (better than exporting all)
-    p1 = ctx.get('p1', 0)
+    p1 = ctx.get('p1', 0)         # Import power
+    p1_return = ctx.get('p1_return', 0)  # Export power
 
     if ovr['ev'] == 'auto' and ctx['ev_plugged'] and not ctx['ev_done']:
         # Good solar: either exporting, or importing less than threshold
@@ -919,7 +933,7 @@ def _apply_summer_logic(decisions: Decisions, plan: list, ctx: dict):
             # If importing < threshold: we can use (threshold - current import)
             if is_exporting:
                 # Exporting = can use all export + allowed import buffer
-                available_power = abs(p1) + MAX_GRID_IMPORT_FOR_EV
+                available_power = p1_return + MAX_GRID_IMPORT_FOR_EV
             else:
                 # Already importing, but under threshold
                 available_power = MAX_GRID_IMPORT_FOR_EV - p1

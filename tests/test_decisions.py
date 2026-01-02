@@ -89,7 +89,8 @@ class TestCalculateDecisions:
         inputs = replace(base_inputs, p1_power=1500, pv_power=200)
         result = calculate_decisions(inputs, config, device_state, winter_evening)
 
-        assert any('Grid' in entry for entry in result.plan)
+        # Status line shows Import/Export and PV
+        assert any('Import' in entry or 'Export' in entry for entry in result.plan)
         assert any('PV' in entry for entry in result.plan)
 
 

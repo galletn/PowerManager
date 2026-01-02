@@ -662,12 +662,17 @@ async def get_status():
     if last_inputs.boiler_switch == "off":
         boiler_last_heated = boiler_state_data.get("last_changed")
 
+    # Net power: positive = importing, negative = exporting
+    net_power = p1_power - p1_return
+    # is_exporting: true when export > import (net is negative)
+    is_exporting = p1_return > p1_power
+
     return {
         "grid_import": p1_power,
         "grid_export": p1_return,
         "pv_production": pv_power,
-        "net_power": p1_power - p1_return,
-        "is_exporting": p1_power < 0,
+        "net_power": net_power,
+        "is_exporting": is_exporting,
         "devices": {
             "boiler": {
                 "state": last_inputs.boiler_switch,
