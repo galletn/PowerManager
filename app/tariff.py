@@ -140,10 +140,11 @@ def get_max_import(tariff: str, config) -> int:
         return config.max_import.peak
 
 
-def get_ev_status_text(ev_state: int) -> str:
+def get_ev_status_text(ev_state: int, ev_power: float = 0) -> str:
     """Get human-readable EV charger status."""
     from .models import EVState
 
+    # ABB custom states
     if ev_state == EVState.NO_CAR:
         return "No car"
     elif ev_state == EVState.READY:
@@ -152,6 +153,27 @@ def get_ev_status_text(ev_state: int) -> str:
         return "Full"
     elif ev_state == EVState.CHARGING:
         return "Charging"
+
+    # OCPP standard states
+    elif ev_state == EVState.OCPP_AVAILABLE:
+        return "Available"
+    elif ev_state == EVState.OCPP_PREPARING:
+        return "Preparing"
+    elif ev_state == EVState.OCPP_CHARGING:
+        return "Charging"
+    elif ev_state == EVState.OCPP_SUSPENDED_EV:
+        # If power > 500W, it's actually charging despite state
+        if ev_power > 500:
+            return f"Charging ({int(ev_power)}W)"
+        return "Suspended (EV)"
+    elif ev_state == EVState.OCPP_SUSPENDED_EVSE:
+        return "Suspended (EVSE)"
+    elif ev_state == EVState.OCPP_FINISHING:
+        return "Finishing"
+
+    # Unknown state - check if charging by power
+    elif ev_power > 500:
+        return f"Charging ({int(ev_power)}W)"
     else:
         return f"Unknown ({ev_state})"
 

@@ -206,9 +206,16 @@ def generate_schedule(
     boiler_estimate = {'needed': False, 'hours_needed': 0}
 
     if inputs:
-        # EV needs
+        # EV needs - check both OCPP and ABB custom states, plus power draw
         from .models import EVState
-        if inputs.ev_state in (EVState.READY, EVState.CHARGING):
+        ev_connected = (
+            inputs.ev_state in (
+                EVState.READY, EVState.CHARGING,
+                EVState.OCPP_PREPARING, EVState.OCPP_CHARGING,
+                EVState.OCPP_SUSPENDED_EV, EVState.OCPP_SUSPENDED_EVSE
+            ) or inputs.ev_power > 500
+        )
+        if ev_connected:
             # Determine which car is plugged in based on location
             car_battery = None
             car_capacity = 84  # Default BMW i5

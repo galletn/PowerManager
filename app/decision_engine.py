@@ -256,12 +256,19 @@ def calculate_decisions(
         confirm_seconds=config.boiler.full_confirm_seconds
     )
 
-    # EV states
-    ev_plugged = ev_state in (EVState.READY, EVState.CHARGING, EVState.FULL)
-    ev_ready = ev_state == EVState.READY
-    ev_charging = ev_state == EVState.CHARGING
-    ev_done = ev_state == EVState.FULL
-    ev_status_text = get_ev_status_text(ev_state)
+    # EV states - handle both OCPP (1-6) and ABB custom (128+) state formats
+    # Also detect charging by power if state is ambiguous
+    ev_power = inputs.ev_power
+    ev_plugged = ev_state in (
+        EVState.READY, EVState.CHARGING, EVState.FULL,
+        EVState.OCPP_PREPARING, EVState.OCPP_CHARGING,
+        EVState.OCPP_SUSPENDED_EV, EVState.OCPP_SUSPENDED_EVSE, EVState.OCPP_FINISHING
+    )
+    ev_ready = ev_state in (EVState.READY, EVState.OCPP_PREPARING)
+    # Charging: either state says charging OR significant power draw
+    ev_charging = ev_state in (EVState.CHARGING, EVState.OCPP_CHARGING) or ev_power > 500
+    ev_done = ev_state in (EVState.FULL, EVState.OCPP_FINISHING)
+    ev_status_text = get_ev_status_text(ev_state, ev_power)
 
     # Heaters and AC
     hr_on = inputs.heater_right_switch == 'on'
@@ -1202,7 +1209,12 @@ def check_bmw_low_battery(
 
     threshold = bmw_config.battery_threshold
     ev_state = inputs.ev_state
-    ev_plugged_in = ev_state in (EVState.READY, EVState.CHARGING)
+    ev_power = inputs.ev_power
+    ev_plugged_in = ev_state in (
+        EVState.READY, EVState.CHARGING,
+        EVState.OCPP_PREPARING, EVState.OCPP_CHARGING,
+        EVState.OCPP_SUSPENDED_EV, EVState.OCPP_SUSPENDED_EVSE
+    ) or ev_power > 500
 
     # Check BMW i5
     i5_battery = inputs.bmw_i5_battery

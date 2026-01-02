@@ -7,7 +7,20 @@ from typing import Optional
 
 
 class EVState(IntEnum):
-    """ABB Terra AC charger states."""
+    """ABB Terra AC charger states.
+
+    The charger can report either OCPP states (1-6) or custom states (128+).
+    We handle both formats.
+    """
+    # OCPP standard states
+    OCPP_AVAILABLE = 1
+    OCPP_PREPARING = 2
+    OCPP_CHARGING = 3
+    OCPP_SUSPENDED_EV = 4  # Car connected, charging suspended by EV
+    OCPP_SUSPENDED_EVSE = 5  # Charging suspended by charger
+    OCPP_FINISHING = 6
+
+    # ABB custom states (seen in some firmware versions)
     NO_CAR = 128
     READY = 129
     FULL = 130
