@@ -161,11 +161,25 @@ async def verify_and_retry_pending_commands(states: dict) -> None:
             cmd.retry_count += 1
             cmd.last_retry = now
 
+            # Get friendly device name from entity_id
+            device_name = entity_id.split(".")[-1].replace("_", " ").title()
+
             logger.warning(
                 f"State verification failed for {entity_id}: "
                 f"expected '{cmd.expected_state}', got '{current_state}'. "
                 f"Retry {cmd.retry_count} (next in {RETRY_BACKOFF_SECONDS[min(cmd.retry_count, len(RETRY_BACKOFF_SECONDS) - 1)]}s)"
             )
+
+            # Send notification on first retry to alert user
+            if cmd.retry_count == 1 and config:
+                try:
+                    await ha_client.send_notification(
+                        config.frost_protection.notify_entity,
+                        "Power Manager: Command Failed",
+                        f"{device_name} failed to turn {cmd.expected_state}. Retrying..."
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to send retry notification: {e}")
 
             try:
                 if cmd.expected_state == 'on':
@@ -179,10 +193,21 @@ async def verify_and_retry_pending_commands(states: dict) -> None:
         # Check for stale commands (over 2 hours old)
         total_elapsed = (now - cmd.command_time).total_seconds()
         if total_elapsed > 7200:  # 2 hours
+            device_name = entity_id.split(".")[-1].replace("_", " ").title()
             logger.error(
                 f"Giving up on {entity_id} after {total_elapsed:.0f}s and "
                 f"{cmd.retry_count} retries"
             )
+            # Send critical notification when giving up
+            if config:
+                try:
+                    await ha_client.send_notification(
+                        config.frost_protection.notify_entity,
+                        "Power Manager: CRITICAL",
+                        f"FAILED to turn {cmd.expected_state} {device_name} after {cmd.retry_count} retries over 2 hours!"
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to send give-up notification: {e}")
             commands_to_remove.append(entity_id)
 
     # Clean up completed/stale commands
