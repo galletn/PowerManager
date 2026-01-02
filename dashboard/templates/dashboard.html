@@ -216,37 +216,37 @@
                         <!-- Device Activity Rows -->
                         <div class="device-timelines" id="device-timelines">
                             <div class="device-timeline-row">
-                                <span class="device-label">🚗 EV</span>
+                                <span class="device-label"><span class="schedule-status-dot" id="schedule-ev-dot"></span>🚗 EV</span>
                                 <div class="device-bar" id="ev-timeline"></div>
                                 <span class="device-power-label" id="ev-power-label">11kW</span>
                             </div>
                             <div class="device-timeline-row">
-                                <span class="device-label">🔥 Boiler</span>
+                                <span class="device-label"><span class="schedule-status-dot" id="schedule-boiler-dot"></span>🔥 Boiler</span>
                                 <div class="device-bar" id="boiler-timeline"></div>
                                 <span class="device-power-label" id="boiler-power-label">2.5kW</span>
                             </div>
                             <div class="device-timeline-row">
-                                <span class="device-label">🪑 Heater</span>
+                                <span class="device-label"><span class="schedule-status-dot" id="schedule-heater-dot"></span>🪑 Heater</span>
                                 <div class="device-bar" id="heater-timeline"></div>
                                 <span class="device-power-label" id="heater-power-label">4.1kW</span>
                             </div>
                             <div class="device-timeline-row">
-                                <span class="device-label">🌊 Pool</span>
+                                <span class="device-label"><span class="schedule-status-dot" id="schedule-pool-dot"></span>🌊 Pool</span>
                                 <div class="device-bar" id="pool-timeline"></div>
                                 <span class="device-power-label" id="pool-power-label">0.5kW</span>
                             </div>
                             <div class="device-timeline-row">
-                                <span class="device-label">🍽️ Dish</span>
+                                <span class="device-label"><span class="schedule-status-dot" id="schedule-dishwasher-dot"></span>🍽️ Dish</span>
                                 <div class="device-bar" id="dishwasher-timeline"></div>
                                 <span class="device-power-label" id="dishwasher-power-label">1.9kW</span>
                             </div>
                             <div class="device-timeline-row">
-                                <span class="device-label">🧺 Wash</span>
+                                <span class="device-label"><span class="schedule-status-dot" id="schedule-washing-dot"></span>🧺 Wash</span>
                                 <div class="device-bar" id="washing-machine-timeline"></div>
                                 <span class="device-power-label" id="washing-machine-power-label">2kW</span>
                             </div>
                             <div class="device-timeline-row">
-                                <span class="device-label">👕 Dryer</span>
+                                <span class="device-label"><span class="schedule-status-dot" id="schedule-dryer-dot"></span>👕 Dryer</span>
                                 <div class="device-bar" id="tumble-dryer-timeline"></div>
                                 <span class="device-power-label" id="tumble-dryer-power-label">2.5kW</span>
                             </div>
@@ -257,9 +257,11 @@
                             </div>
                         </div>
                         <div class="timeline-legend">
-                            <div class="legend-item"><span class="legend-color peak"></span> Peak (expensive)</div>
+                            <div class="legend-item"><span class="legend-color status-on"></span> On</div>
+                            <div class="legend-item"><span class="legend-color status-off"></span> Off</div>
+                            <div class="legend-item"><span class="legend-color peak"></span> Peak</div>
                             <div class="legend-item"><span class="legend-color off-peak"></span> Off-Peak</div>
-                            <div class="legend-item"><span class="legend-color super-off-peak"></span> Super Off-Peak (cheapest)</div>
+                            <div class="legend-item"><span class="legend-color super-off-peak"></span> Super Off-Peak</div>
                         </div>
                     </div>
 

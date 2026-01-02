@@ -585,6 +585,37 @@ h2 {
     background: var(--ha-success);
 }
 
+.legend-color.status-on {
+    background: #4CAF50;
+    border-radius: 50%;
+}
+
+.legend-color.status-off {
+    background: #9E9E9E;
+    border-radius: 50%;
+}
+
+/* Schedule Status Dots - shows current on/off state */
+.schedule-status-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #9E9E9E;
+    margin-right: 3px;
+    vertical-align: middle;
+}
+
+.schedule-status-dot.on {
+    background: #4CAF50;
+    box-shadow: 0 0 4px #4CAF50;
+}
+
+.schedule-status-dot.charging {
+    background: #2196F3;
+    box-shadow: 0 0 4px #2196F3;
+}
+
 /* Schedule Cards */
 .schedule-cards {
     display: grid;

@@ -290,6 +290,69 @@ function buildDeviceTimelines(timetable, limits) {
     }
 }
 
+// Update status dots in the 24h schedule to show current device on/off state
+function updateScheduleStatusDots(devices, consumers) {
+    if (!devices) return;
+
+    // Helper to get consumer power by id
+    function getConsumerPower(id) {
+        if (!consumers || !consumers.items) return 0;
+        const item = consumers.items.find(c => c.id === id);
+        return item ? item.power : 0;
+    }
+
+    // EV - check if charging (state 132)
+    const evDot = document.getElementById('schedule-ev-dot');
+    if (evDot && devices.ev) {
+        const isCharging = devices.ev.state === 132;
+        evDot.className = 'schedule-status-dot' + (isCharging ? ' on charging' : '');
+    }
+
+    // Boiler
+    const boilerDot = document.getElementById('schedule-boiler-dot');
+    if (boilerDot && devices.boiler) {
+        const isOn = devices.boiler.state === 'on';
+        boilerDot.className = 'schedule-status-dot' + (isOn ? ' on' : '');
+    }
+
+    // Table Heater
+    const heaterDot = document.getElementById('schedule-heater-dot');
+    if (heaterDot && devices.table_heater) {
+        const isOn = devices.table_heater.state === 'on';
+        heaterDot.className = 'schedule-status-dot' + (isOn ? ' on' : '');
+    }
+
+    // Pool Pump
+    const poolDot = document.getElementById('schedule-pool-dot');
+    if (poolDot && devices.pool_pump) {
+        const isOn = devices.pool_pump.state === 'on';
+        poolDot.className = 'schedule-status-dot' + (isOn ? ' on' : '');
+    }
+
+    // Dishwasher
+    const dishwasherDot = document.getElementById('schedule-dishwasher-dot');
+    if (dishwasherDot && devices.dishwasher) {
+        const isOn = devices.dishwasher.state === 'on';
+        dishwasherDot.className = 'schedule-status-dot' + (isOn ? ' on' : '');
+    }
+
+    // Washing machine (check by power > threshold since it's not a switch)
+    const washingDot = document.getElementById('schedule-washing-dot');
+    if (washingDot) {
+        const washingPower = getConsumerPower('washing_machine');
+        const isOn = washingPower > 10;
+        washingDot.className = 'schedule-status-dot' + (isOn ? ' on' : '');
+    }
+
+    // Tumble dryer (check by power > threshold)
+    const dryerDot = document.getElementById('schedule-dryer-dot');
+    if (dryerDot) {
+        const dryerPower = getConsumerPower('tumble_dryer');
+        const isOn = dryerPower > 10;
+        dryerDot.className = 'schedule-status-dot' + (isOn ? ' on' : '');
+    }
+}
+
 // Update timetable with estimates
 function updateTimetable(timetable) {
     if (!timetable) return;
@@ -597,6 +660,9 @@ function updateDashboard(data) {
             setTextIfExists('bmw-ix1-battery', data.devices.bmw_ix1.battery !== null ? `${Math.round(data.devices.bmw_ix1.battery)}%` : '--%');
             setTextIfExists('bmw-ix1-range', data.devices.bmw_ix1.range !== null ? `${Math.round(data.devices.bmw_ix1.range)}km` : '--km');
         }
+
+        // Update schedule status dots (shows current on/off state in 24h schedule)
+        updateScheduleStatusDots(data.devices, data.consumers);
     }
 
     // Update 24-hour schedule
