@@ -336,16 +336,19 @@ def generate_schedule(
             can_run_during_peak=False
         ))
 
-    # Table heater - LOWEST priority, only scheduled in leftover capacity
-    # Priority 10 ensures it's processed AFTER boiler (2) and EV (3)
-    # So it only gets slots where those devices aren't using capacity
-    devices.append(DeviceNeed(
-        name='table_heater',
-        power=config.heaters.table_power,
-        hours_needed=4,  # Target 4 hours
-        priority=10,  # Very low - gets leftover capacity only
-        can_run_during_peak=False
-    ))
+    # Table heater - LOWEST priority, only when EV doesn't need the capacity
+    # Don't schedule table heater during super-off-peak when EV is connected
+    # because we want all cheap capacity to go to boiler + EV first
+    ev_needs_super_off_peak = ev_estimate.get('needed', False)
+    if not ev_needs_super_off_peak:
+        # EV doesn't need charging, table heater can use super-off-peak
+        devices.append(DeviceNeed(
+            name='table_heater',
+            power=config.heaters.table_power,
+            hours_needed=4,  # Target 4 hours
+            priority=10,  # Very low - gets leftover capacity only
+            can_run_during_peak=False
+        ))
 
     # Dishwasher - only show when CURRENTLY running (power > 50W)
     # Don't try to predict "waiting" state - switch may stay on after cycle finishes
