@@ -11,7 +11,7 @@ Creates an optimized timetable for the next 24 hours that:
 from datetime import datetime, timedelta
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict
-from .tariff import get_tariff, is_summer
+from .tariff import get_tariff, get_max_import, is_summer
 
 
 @dataclass
@@ -186,12 +186,7 @@ def generate_schedule(
 
     while current < end_time:
         tariff, _ = get_tariff(current)
-        if tariff == 'super-off-peak':
-            limit = config.max_import.super_off_peak
-        elif tariff == 'off-peak':
-            limit = config.max_import.off_peak
-        else:
-            limit = config.max_import.peak
+        limit = get_max_import(tariff, config, current)
 
         slots.append(ScheduleSlot(
             start=current,
@@ -232,7 +227,8 @@ def generate_schedule(
                 # 1. EV charger max power (max_amps × watts_per_amp)
                 # 2. Grid limit during super-off-peak minus buffer for other loads
                 charger_max_kw = config.ev.max_amps * config.ev.watts_per_amp / 1000
-                grid_limit_kw = config.max_import.super_off_peak / 1000
+                # Use winter limit (9kW) or summer limit (8kW)
+                grid_limit_kw = get_max_import('super-off-peak', config, now) / 1000
                 base_load_buffer_kw = 0.5  # 500W for house base load
                 # Effective = min of charger capability and grid headroom
                 # e.g., min(11kW, 8kW - 0.5kW) = 7.5kW

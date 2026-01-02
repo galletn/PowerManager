@@ -130,10 +130,20 @@ def get_tariff(dt: datetime) -> Tuple[str, dict]:
             return "off-peak", {"reason": "evening", "next_change": 24}
 
 
-def get_max_import(tariff: str, config) -> int:
-    """Get maximum import power for tariff."""
+def get_max_import(tariff: str, config, dt: datetime = None) -> int:
+    """Get maximum import power for tariff.
+
+    During winter (Nov-Feb), super-off-peak uses a higher limit
+    to allow boiler + EV to run together for heating.
+    """
     if tariff == "super-off-peak":
-        return config.max_import.super_off_peak
+        # Use winter limit if not summer (higher limit for heating)
+        if dt is None:
+            dt = datetime.now()
+        if is_summer(dt):
+            return config.max_import.super_off_peak
+        else:
+            return config.max_import.super_off_peak_winter
     elif tariff == "off-peak":
         return config.max_import.off_peak
     else:

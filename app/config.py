@@ -25,6 +25,7 @@ class GridConfig:
     peak: int = 2500
     off_peak: int = 5000
     super_off_peak: int = 8000
+    super_off_peak_winter: int = 9000  # Higher limit in winter for heating
 
 
 @dataclass

@@ -49,7 +49,8 @@ def calculate_ev_hours_needed(inputs: PowerInputs, config: Config) -> float:
 
     # Calculate effective charging power (limited by grid)
     charger_max_kw = config.ev.max_amps * config.ev.watts_per_amp / 1000
-    grid_limit_kw = config.max_import.super_off_peak / 1000
+    # Use winter limit (9kW) or summer limit (8kW) for super-off-peak
+    grid_limit_kw = get_max_import('super-off-peak', config) / 1000
     base_load_buffer_kw = 0.5
     effective_charging_kw = min(charger_max_kw, grid_limit_kw - base_load_buffer_kw)
 
@@ -242,7 +243,7 @@ def calculate_decisions(
 
     # Get tariff info
     tariff, tariff_info = get_tariff(now)
-    max_import = get_max_import(tariff, config)
+    max_import = get_max_import(tariff, config, now)
     summer = is_summer(now)
 
     # Calculate power values (default to 0 if None during HA startup)

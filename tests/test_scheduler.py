@@ -73,13 +73,15 @@ class TestScheduleRespectsLimits:
     def test_super_offpeak_slots_have_correct_limit(self, config):
         """Super off-peak tariff slots should have the super off-peak power limit."""
         # Use 3:00 AM which is super-off-peak
+        # January is winter, so we use the higher winter limit
         super_offpeak_time = datetime(2024, 1, 15, 3, 0, 0)
         result = generate_schedule(super_offpeak_time, config)
 
         super_offpeak_slots = [s for s in result.slots if s.tariff == 'super-off-peak']
         assert len(super_offpeak_slots) > 0, "Should have super-off-peak slots"
+        # Winter (Nov-Feb) uses higher limit for heating
         for slot in super_offpeak_slots:
-            assert slot.power_limit == config.max_import.super_off_peak
+            assert slot.power_limit == config.max_import.super_off_peak_winter
 
 
 class TestSchedulePriorityOrder:
