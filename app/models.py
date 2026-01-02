@@ -146,6 +146,12 @@ class AllDeviceStates:
     # Boiler "full" detection: timestamp when power first dropped below threshold
     # 0.0 means power is above threshold (not low)
     boiler_low_power_since: float = 0.0
+    # Boiler heating tracking: when boiler last actively heated (power > threshold)
+    # Used to detect if boiler has heated tonight before deadline
+    boiler_last_heating_time: float = 0.0
+    # Track total heating time in current night cycle (resets at midnight)
+    boiler_heating_tonight_seconds: float = 0.0
+    boiler_heating_night_date: str = ''  # Date string to detect day rollover
 
 
 @dataclass

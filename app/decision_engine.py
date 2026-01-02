@@ -332,6 +332,13 @@ def calculate_decisions(
     plan.extend(bmw_result['plan_entries'])
     alerts.extend(bmw_result['alerts'])
 
+    # === BOILER DEADLINE CHECK ===
+    boiler_deadline_result = check_boiler_deadline(
+        inputs, config, device_state, now, now_ts
+    )
+    plan.extend(boiler_deadline_result['plan_entries'])
+    alerts.extend(boiler_deadline_result['alerts'])
+
     # === SEASONAL LOGIC ===
     if not summer:
         _apply_winter_logic(decisions, plan, {
@@ -533,33 +540,54 @@ def _handle_boiler_winter(
         export_power = abs(p1) if is_exporting else 0
         has_solar_surplus = is_exporting and export_power > MIN_EXPORT_FOR_BOILER
 
-        # Only heat during:
+        # Determine if boiler should heat (conditions regardless of power):
         # 1. Super off-peak (cheapest rate, 01:00-07:00)
         # 2. Solar surplus (better to use than sell)
         # 3. Approaching deadline (need hot water by morning)
-        should_heat = False
+        wants_to_heat = False
         reason = ""
 
-        if tariff == 'super-off-peak' and enough_power:
-            should_heat = True
+        if tariff == 'super-off-peak':
+            wants_to_heat = True
             reason = "super-off-peak"
         elif has_solar_surplus:
-            should_heat = True
+            wants_to_heat = True
             reason = f"solar ({int(export_power)}W export)"
         elif approaching_deadline and tariff in ('off-peak', 'super-off-peak'):
-            should_heat = True
+            wants_to_heat = True
             reason = "approaching deadline"
 
-        if should_heat and not ctx['boiler_on']:
+        # BOILER HAS #1 PRIORITY - if it wants to heat but not enough power,
+        # we'll turn off other devices later (EV, table heater)
+        if wants_to_heat and not ctx['boiler_on']:
             if can_switch('boiler', True):
                 decisions.boiler.action = 'on'
                 boiler_will_use = config.boiler.power
                 effective_headroom -= boiler_will_use
-                plan.append(f"Boiler: ON ({reason})")
+                if not enough_power:
+                    # We're turning on despite low headroom - will shed load later
+                    plan.append(f"Boiler: ON ({reason}, shedding load)")
+                else:
+                    plan.append(f"Boiler: ON ({reason})")
+            else:
+                # Hysteresis blocking - log it
+                plan.append("Boiler: BLOCKED (hysteresis)")
         elif ctx['boiler_on']:
             # Boiler already on, reserve its power
             boiler_will_use = config.boiler.power
             effective_headroom -= boiler_will_use
+        elif not wants_to_heat and not ctx['boiler_on']:
+            # Boiler is off and we don't want to heat - explain why
+            if tariff == 'peak':
+                plan.append("Boiler: OFF (peak tariff)")
+            elif tariff == 'off-peak' and not approaching_deadline:
+                plan.append("Boiler: OFF (waiting for super-off-peak)")
+    else:
+        # Boiler is full
+        if ctx['boiler_on']:
+            plan.append("Boiler: FULL (switch still on)")
+        else:
+            plan.append("Boiler: FULL")
 
     return boiler_will_use, effective_headroom
 
@@ -623,8 +651,12 @@ def _handle_ev_winter(
         # Off-peak (5kW limit) - only charge if boiler not needed
         if boiler_will_use == 0 and not ctx['boiler_on']:
             total_for_ev = effective_headroom + current_ev_watts - hyst
-            available_amps = calculate_available_amps(total_for_ev, config.ev.watts_per_amp)
-            target_amps = max(config.ev.min_amps, min(available_amps, config.ev.max_amps))
+            available_amps = calculate_available_amps(
+                total_for_ev, config.ev.watts_per_amp
+            )
+            target_amps = max(
+                config.ev.min_amps, min(available_amps, config.ev.max_amps)
+            )
 
             if ctx['ev_charging']:
                 amp_diff = abs(target_amps - ctx['ev_limit'])
@@ -637,9 +669,9 @@ def _handle_ev_winter(
                     decisions.ev.action = 'on'
                     decisions.ev.amps = target_amps
                     effective_headroom -= target_amps * config.ev.watts_per_amp
-                    plan.append(f"EV: START at {target_amps}A (off-peak, boiler idle)")
+                    plan.append(f"EV: START {target_amps}A (off-peak)")
         elif ctx['ev_charging']:
-            # EV already charging but boiler needs power - reduce or stop EV
+            # EV already charging but boiler needs power - stop EV
             if can_switch('ev', False):
                 decisions.ev.action = 'off'
                 plan.append("EV: PAUSE (boiler priority)")
@@ -1012,6 +1044,123 @@ def check_frost_protection(
                 plan_entries.append(f"Frost: OK, pump {pump_power:.0f}W ({ambient_temp:.1f}C)")
 
     return {'alerts': alerts, 'pool_pump_decision': pool_pump_decision, 'plan_entries': plan_entries}
+
+
+def check_boiler_deadline(
+    inputs: PowerInputs,
+    config: Config,
+    device_state: AllDeviceStates,
+    now: datetime,
+    now_ts: float
+) -> dict:
+    """Check if boiler is at risk of missing hot water deadline.
+
+    This function monitors boiler heating activity and raises alerts if:
+    1. It's within 1 hour of deadline and boiler hasn't heated tonight (warning)
+    2. It's at/past deadline and boiler hasn't heated enough (critical)
+
+    The "night cycle" runs from 22:00 to the deadline (e.g., 06:30).
+    Heating time is tracked and alerts are sent to Nicolas's phone.
+
+    Args:
+        inputs: Current power readings from Home Assistant
+        config: Configuration with boiler settings and notify entity
+        device_state: Persistent state tracking boiler heating history
+        now: Current datetime
+        now_ts: Current timestamp in milliseconds
+
+    Returns:
+        Dict with 'alerts' list and 'plan_entries' list
+    """
+    alerts: list[Alert] = []
+    plan_entries: list[str] = []
+
+    boiler_on = inputs.boiler_switch == 'on'
+    boiler_power = inputs.boiler_power
+    idle_threshold = config.boiler.idle_threshold
+    is_heating = boiler_on and boiler_power >= idle_threshold
+
+    # Get deadline hour (e.g., 6.5 = 06:30)
+    deadline_hour = config.boiler.deadline_winter
+    current_hour = now.hour + now.minute / 60
+
+    # Night cycle: 22:00 previous day to deadline
+    # Reset tracking at 22:00
+    today_str = now.strftime('%Y-%m-%d')
+    night_cycle_start = 22.0  # 22:00
+
+    # Check if we need to reset the night tracking
+    if current_hour >= night_cycle_start:
+        # After 22:00, this is a new night cycle
+        expected_date = today_str
+    else:
+        # Before 22:00, we're still in the night cycle that started yesterday
+        from datetime import timedelta
+        yesterday = now - timedelta(days=1)
+        expected_date = yesterday.strftime('%Y-%m-%d')
+
+    # Reset if date changed (new night cycle)
+    if device_state.boiler_heating_night_date != expected_date:
+        device_state.boiler_heating_night_date = expected_date
+        device_state.boiler_heating_tonight_seconds = 0.0
+        device_state.boiler_last_heating_time = 0.0
+
+    # Track heating time
+    polling_interval = config.polling_interval  # typically 30 seconds
+    if is_heating:
+        device_state.boiler_heating_tonight_seconds += polling_interval
+        device_state.boiler_last_heating_time = now_ts
+
+    # Calculate heating stats
+    heating_minutes = device_state.boiler_heating_tonight_seconds / 60
+    min_heating_minutes = 60  # Need at least 1 hour of heating for hot water
+
+    # Determine if we're in the warning/critical window
+    # Warning: 1 hour before deadline (e.g., 05:30 for 06:30 deadline)
+    # Critical: at or past deadline
+    warning_hour = deadline_hour - 1.0
+    is_warning_window = current_hour >= warning_hour and current_hour < deadline_hour
+    is_critical_window = current_hour >= deadline_hour and current_hour < deadline_hour + 0.5
+
+    # Only check during the morning approach (00:00 to deadline + 30min)
+    is_check_window = current_hour < deadline_hour + 0.5 or current_hour >= night_cycle_start
+
+    if is_check_window and not is_heating:
+        if is_critical_window and heating_minutes < min_heating_minutes:
+            # CRITICAL: Past deadline and boiler hasn't heated enough
+            message = (
+                f"CRITICAL: Boiler only heated {heating_minutes:.0f}min tonight! "
+                f"Hot water deadline ({deadline_hour:.1f}h) passed. Cold water risk!"
+            )
+            alerts.append(Alert(
+                level='critical',
+                message=message,
+                notify_entity=config.frost_protection.notify_entity  # Use same notify entity
+            ))
+            plan_entries.append(f"Boiler: DEADLINE MISSED ({heating_minutes:.0f}min heated)")
+
+        elif is_warning_window and heating_minutes < min_heating_minutes:
+            # WARNING: Approaching deadline and boiler hasn't heated enough
+            message = (
+                f"Warning: Boiler only heated {heating_minutes:.0f}min tonight. "
+                f"Deadline in {(deadline_hour - current_hour) * 60:.0f}min. "
+                f"Check override settings!"
+            )
+            alerts.append(Alert(
+                level='warning',
+                message=message,
+                notify_entity=config.frost_protection.notify_entity
+            ))
+            plan_entries.append(f"Boiler: LOW HEAT WARNING ({heating_minutes:.0f}min)")
+
+    # Add heating status to plan during night hours
+    if is_check_window:
+        if is_heating:
+            plan_entries.append(f"Boiler: heating ({heating_minutes:.0f}min tonight)")
+        elif heating_minutes > 0:
+            plan_entries.append(f"Boiler: {heating_minutes:.0f}min heated tonight")
+
+    return {'alerts': alerts, 'plan_entries': plan_entries}
 
 
 def check_bmw_low_battery(
