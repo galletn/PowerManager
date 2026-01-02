@@ -724,8 +724,9 @@ def _handle_ev_winter(
         must_start_now = ev_hours_needed > super_off_peak_hours
 
         if ctx['ev_charging']:
-            # Already charging - let it continue if boiler doesn't need power
-            if boiler_will_use == 0 and not ctx['boiler_on']:
+            # EV is charging during off-peak - should we continue or stop?
+            if must_start_now and boiler_will_use == 0 and not ctx['boiler_on']:
+                # Must charge now (needs >6h) and boiler doesn't need power - continue
                 total_for_ev = effective_headroom + current_ev_watts - hyst
                 available_amps = calculate_available_amps(
                     total_for_ev, config.ev.watts_per_amp
@@ -737,12 +738,18 @@ def _handle_ev_winter(
                 if amp_diff >= config.ev.amp_change_threshold:
                     decisions.ev.action = 'adjust'
                     decisions.ev.amps = target_amps
-                    plan.append(f"EV: adjust to {target_amps}A")
-            else:
+                    plan.append(f"EV: adjust to {target_amps}A (needs {ev_hours_needed:.1f}h)")
+            elif boiler_will_use > 0 or ctx['boiler_on']:
                 # Boiler needs power - stop EV
                 if can_switch('ev', False):
                     decisions.ev.action = 'off'
                     plan.append("EV: PAUSE (boiler priority)")
+            else:
+                # Can wait for super-off-peak - STOP to save money!
+                if can_switch('ev', False):
+                    decisions.ev.action = 'off'
+                    hours_until_super = max(0, 1.0 - current_hour) if current_hour < 1 else (25.0 - current_hour)
+                    plan.append(f"EV: STOP (wait for super-off-peak in {hours_until_super:.1f}h)")
         elif ctx['ev_ready'] and must_start_now and boiler_will_use == 0 and not ctx['boiler_on']:
             # Need to start now because not enough super-off-peak hours
             total_for_ev = effective_headroom + current_ev_watts - hyst
