@@ -579,11 +579,11 @@ def _handle_boiler_winter(
             if can_switch('boiler', True):
                 decisions.boiler.action = 'on'
                 boiler_will_use = config.boiler.power
-                effective_headroom -= boiler_will_use
+                effective_headroom -= boiler_will_use  # Subtract - turning ON
                 plan.append("Boiler: ON (force heat)")
         else:
-            boiler_will_use = config.boiler.power
-            effective_headroom -= boiler_will_use
+            # Already on - power is already in import reading, don't subtract
+            boiler_will_use = ctx.get('boiler_power', config.boiler.power)
         return boiler_will_use, effective_headroom
 
     if tariff == 'peak' and ctx['boiler_on'] and not boiler_force:
@@ -825,9 +825,12 @@ def _handle_heater_winter(
     ht_on = ctx['ht_on']
 
     # Calculate remaining capacity
+    # Note: if EV is already charging, its power is already in import reading,
+    # so effective_headroom already accounts for it. Don't subtract again!
+    # Only subtract if we're about to TURN ON the EV.
     remaining = effective_headroom
-    if ctx['ev_charging'] and decisions.ev.action == 'none':
-        remaining -= ctx['ev_limit'] * config.ev.watts_per_amp
+    if decisions.ev.action == 'on':
+        remaining -= decisions.ev.amps * config.ev.watts_per_amp
     enough_power = remaining > table_power + hyst
 
     # Check if EV will use most of super-off-peak capacity
@@ -1351,24 +1354,23 @@ def _calculate_final_headroom(
     config: Config,
     current_states: dict
 ) -> float:
-    """Calculate final headroom after all decisions."""
+    """Calculate final headroom after all decisions.
+
+    Note: avail = max_import - net_p1, where net_p1 already includes power
+    from running devices. Only subtract power for devices being TURNED ON,
+    not devices that are already running (that would be double-counting).
+    """
     headroom = avail
 
-    # Subtract power for devices that will be/are on
-    if decisions.ev.action in ('on', 'adjust'):
+    # Only subtract power for devices being TURNED ON
+    # (already-running devices are included in net_p1)
+    if decisions.ev.action == 'on':
         headroom -= decisions.ev.amps * config.ev.watts_per_amp
-    elif current_states.get('ev_charging'):
-        headroom -= current_states['ev_limit'] * config.ev.watts_per_amp
 
-    if decisions.boiler.action == 'on' or (
-        decisions.boiler.action == 'none' and current_states.get('boiler_on')
-    ):
+    if decisions.boiler.action == 'on':
         headroom -= config.boiler.power
 
-    # Table heater
-    if decisions.heater_table.action == 'on' or (
-        decisions.heater_table.action == 'none' and current_states.get('ht_on')
-    ):
+    if decisions.heater_table.action == 'on':
         headroom -= config.heaters.table_power
 
     return headroom
