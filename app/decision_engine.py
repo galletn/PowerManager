@@ -830,17 +830,12 @@ def _handle_heater_winter(
                 plan.append("Table heater: OFF (capacity needed)")
 
     elif tariff == 'off-peak':
-        # Use off-peak if EV will need the super-off-peak capacity
-        if ev_needs_capacity and enough_power:
-            if not ht_on:
-                if can_switch('heater_table', True):
-                    decisions.heater_table.action = 'on'
-                    plan.append("Table heater: ON (off-peak, EV needs super-off-peak)")
-        elif ht_on and not ev_needs_capacity:
-            # No EV charging needed, save for super-off-peak
+        # Off-peak: table heater should wait for super-off-peak (cheapest)
+        # Turn off if running - save capacity for night super-off-peak
+        if ht_on:
             if can_switch('heater_table', False):
                 decisions.heater_table.action = 'off'
-                plan.append("Table heater: OFF (save for super-off-peak)")
+                plan.append("Table heater: OFF (wait for super-off-peak)")
 
     elif tariff == 'peak' and ht_on:
         if can_switch('heater_table', False):
