@@ -635,18 +635,17 @@ def _handle_boiler_winter(
                 # Hysteresis blocking - log it
                 plan.append("Boiler: BLOCKED (hysteresis)")
         elif ctx['boiler_on']:
-            # Boiler already on - use ACTUAL power consumption
-            # If boiler is idle (low power), don't reserve full capacity
+            # Boiler already on - its power is already in the grid import reading
+            # so headroom already accounts for it. DON'T subtract again!
             actual_power = ctx.get('boiler_power', 0)
             if actual_power < config.boiler.idle_threshold:
-                # Boiler is idle (low power) - don't reserve extra
-                # Its actual consumption is already in the import reading
+                # Boiler is idle (low power) - not consuming much
                 boiler_will_use = 0
                 plan.append(f"Boiler: IDLE ({int(actual_power)}W)")
             else:
-                # Boiler is actively heating - reserve full capacity
-                boiler_will_use = config.boiler.power
-                effective_headroom -= boiler_will_use
+                # Boiler is actively heating - use actual consumption for info
+                # (don't subtract - power already in import reading)
+                boiler_will_use = actual_power
                 plan.append(f"Boiler: HEATING ({int(actual_power)}W)")
         elif not wants_to_heat and not ctx['boiler_on']:
             # Boiler is off and we don't want to heat - explain why
