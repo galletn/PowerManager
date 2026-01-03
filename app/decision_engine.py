@@ -909,7 +909,7 @@ def _apply_winter_logic(decisions: Decisions, plan: list, ctx: dict):
     # Update headroom in context for dishwasher to see reduced capacity
     # from devices being turned ON in this cycle
     if decisions.heater_table.action == 'on':
-        effective_headroom -= config.heaters.table_power
+        effective_headroom -= ctx['config'].heaters.table_power
 
     # === DISHWASHER (Priority 5 - smart scheduling) ===
     # Never interrupt running cycles, optimize start time for tariffs/solar
