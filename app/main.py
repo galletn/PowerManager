@@ -23,7 +23,7 @@ from .config import Config, load_config
 from .ha_client import HAClient
 from .decision_engine import calculate_decisions
 from .models import PowerInputs, AllDeviceStates, Decisions
-from .tariff import generate_24h_schedule, format_24h_plan_text
+from .tariff import generate_24h_schedule, format_24h_plan_text, get_max_import
 from .scheduler import generate_schedule, format_timetable_text
 
 # Configure logging
@@ -739,9 +739,9 @@ async def get_status():
         "schedule_24h": generate_24h_schedule(datetime.now(), config, last_inputs),
         "timetable": _get_timetable_data(),
         "limits": {
-            "peak": config.max_import.peak,
-            "off_peak": config.max_import.off_peak,
-            "super_off_peak": config.max_import.super_off_peak
+            "peak": get_max_import("peak", config),
+            "off_peak": get_max_import("off-peak", config),
+            "super_off_peak": get_max_import("super-off-peak", config)
         },
         "environment": _get_environment_data()
     }
