@@ -906,8 +906,14 @@ def _apply_winter_logic(decisions: Decisions, plan: list, ctx: dict):
     # === TABLE HEATER (Priority 4 - lowest, use remaining capacity) ===
     _handle_heater_winter(decisions, plan, ctx, effective_headroom)
 
+    # Update headroom in context for dishwasher to see reduced capacity
+    # from devices being turned ON in this cycle
+    if decisions.heater_table.action == 'on':
+        effective_headroom -= config.heaters.table_power
+
     # === DISHWASHER (Priority 5 - smart scheduling) ===
     # Never interrupt running cycles, optimize start time for tariffs/solar
+    ctx['headroom'] = effective_headroom  # Use updated headroom
     _apply_dishwasher_logic(decisions, plan, ctx)
 
 
@@ -1006,7 +1012,7 @@ def _apply_dishwasher_logic(decisions: Decisions, plan: list, ctx: dict):
 def _apply_summer_logic(decisions: Decisions, plan: list, ctx: dict):
     """Apply summer solar optimization logic."""
     ovr = ctx['ovr']
-    headroom = ctx['headroom']
+    effective_headroom = ctx['headroom']  # Track as we make decisions
     hyst = ctx['hyst']
     config = ctx['config']
     can_switch = ctx['can_switch']
@@ -1044,6 +1050,7 @@ def _apply_summer_logic(decisions: Decisions, plan: list, ctx: dict):
                 if can_switch('ev', True):
                     decisions.ev.action = 'on'
                     decisions.ev.amps = target_amps
+                    effective_headroom -= target_amps * config.ev.watts_per_amp
                     solar_pct = int((pv / (target_amps * config.ev.watts_per_amp)) * 100)
                     plan.append(f"EV: SOLAR START {target_amps}A (~{solar_pct}% solar)")
             elif ctx['ev_charging']:
@@ -1067,6 +1074,7 @@ def _apply_summer_logic(decisions: Decisions, plan: list, ctx: dict):
         if is_exporting and pv > config.boiler.power:
             if not ctx['boiler_on'] and can_switch('boiler', True):
                 decisions.boiler.action = 'on'
+                effective_headroom -= config.boiler.power
                 plan.append("Boiler: ON (solar surplus)")
         elif ctx['boiler_on'] and not is_exporting:
             if can_switch('boiler', False):
@@ -1075,6 +1083,7 @@ def _apply_summer_logic(decisions: Decisions, plan: list, ctx: dict):
 
     # === DISHWASHER (smart scheduling) ===
     # Same logic as winter - optimize for solar/cheap tariffs
+    ctx['headroom'] = effective_headroom  # Use updated headroom
     _apply_dishwasher_logic(decisions, plan, ctx)
 
 
