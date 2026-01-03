@@ -441,6 +441,7 @@ class HAClient:
             # Heaters
             heater_right_switch=get_str(e.heater_right, "off"),
             heater_table_switch=get_str(e.heater_table, "off"),
+            heater_table_power=get_num(e.table_heater_power, 0.0),
 
             # Dishwasher
             dishwasher_switch=get_str(e.dishwasher_switch, "off"),

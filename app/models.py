@@ -57,6 +57,7 @@ class PowerInputs:
     # Heaters
     heater_right_switch: str = 'off'
     heater_table_switch: str = 'off'
+    heater_table_power: float = 0.0
 
     # Dishwasher
     dishwasher_switch: str = 'off'

@@ -308,6 +308,7 @@ def calculate_decisions(
     # Heaters and AC
     hr_on = inputs.heater_right_switch == 'on'
     ht_on = inputs.heater_table_switch == 'on'
+    ht_power = inputs.heater_table_power
 
     # Dishwasher
     dw_switch_on = inputs.dishwasher_switch == 'on'
@@ -407,6 +408,7 @@ def calculate_decisions(
             'boiler_power': boiler_power,
             'hr_on': hr_on,
             'ht_on': ht_on,
+            'ht_power': ht_power,
             'dw_switch_on': dw_switch_on,
             'dw_power': dw_power,
             'dw_running': dw_running,
@@ -633,10 +635,19 @@ def _handle_boiler_winter(
                 # Hysteresis blocking - log it
                 plan.append("Boiler: BLOCKED (hysteresis)")
         elif ctx['boiler_on']:
-            # Boiler already on, reserve its power
-            boiler_will_use = config.boiler.power
-            effective_headroom -= boiler_will_use
-            plan.append(f"Boiler: HEATING ({int(ctx.get('boiler_power', 0))}W)")
+            # Boiler already on - use ACTUAL power consumption
+            # If boiler is idle (low power), don't reserve full capacity
+            actual_power = ctx.get('boiler_power', 0)
+            if actual_power < config.boiler.idle_threshold:
+                # Boiler is idle (low power) - don't reserve extra
+                # Its actual consumption is already in the import reading
+                boiler_will_use = 0
+                plan.append(f"Boiler: IDLE ({int(actual_power)}W)")
+            else:
+                # Boiler is actively heating - reserve full capacity
+                boiler_will_use = config.boiler.power
+                effective_headroom -= boiler_will_use
+                plan.append(f"Boiler: HEATING ({int(actual_power)}W)")
         elif not wants_to_heat and not ctx['boiler_on']:
             # Boiler is off and we don't want to heat - explain why
             if tariff == 'peak':
@@ -690,7 +701,11 @@ def _handle_ev_winter(
     current_ev_watts = ctx['ev_limit'] * config.ev.watts_per_amp if ctx['ev_charging'] else 0
 
     if tariff == 'super-off-peak':
-        # Super off-peak (8kW limit) - plenty of room for EV
+        # Super off-peak (9kW winter limit) - dynamic capacity sharing
+        # When boiler/heater are actively consuming, their power is already
+        # in the import reading, so effective_headroom already accounts for it.
+        # EV takes whatever headroom is left.
+        # When they ramp down, headroom increases and EV can take more.
         total_for_ev = effective_headroom + current_ev_watts - hyst
         available_amps = calculate_available_amps(total_for_ev, config.ev.watts_per_amp)
         target_amps = max(config.ev.min_amps, min(available_amps, config.ev.max_amps))
