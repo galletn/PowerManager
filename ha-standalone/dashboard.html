@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Power Manager</title>
-    <link rel="stylesheet" href="style.css">
+    <!-- Load CSS directly from Power Manager server for auto-updates -->
+    <link rel="stylesheet" href="https://gallet.duckdns.org:8081/static/style.css">
 </head>
 <body>
     <div class="dashboard">
@@ -318,6 +319,7 @@
         // Using hostname so SSL certificate matches
         window.POWER_MANAGER_API = 'https://gallet.duckdns.org:8081';
     </script>
-    <script src="dashboard.js?v=20260104-cars"></script>
+    <!-- Load JS directly from Power Manager server for auto-updates -->
+    <script src="https://gallet.duckdns.org:8081/static/dashboard.js"></script>
 </body>
 </html>
