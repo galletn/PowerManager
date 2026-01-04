@@ -862,9 +862,10 @@ def _handle_heaters_winter(
     # Right heater only turns on when exporting enough power to cover it
     # This is the lowest priority device - only uses excess solar
     # Turns off when importing > 500W
+    RIGHT_HEATER_ON_THRESHOLD = 2200  # Turn on when exporting > 2200W
     if ovr.get('right_heater', 'auto') == 'auto':
         p1 = ctx.get('p1', 0)  # Import power
-        has_solar_for_right = is_exporting and p1_return > right_power + hyst
+        has_solar_for_right = is_exporting and p1_return > RIGHT_HEATER_ON_THRESHOLD
         importing_too_much = not is_exporting and p1 > 500
 
         if has_solar_for_right:
