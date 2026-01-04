@@ -64,104 +64,6 @@
                     </div>
                 </section>
 
-                <!-- Cars Section -->
-                <section class="cars-section">
-                    <h2>Electric Vehicles</h2>
-                    <div class="cars-grid">
-                        <!-- BMW i5 -->
-                        <div class="car-card" id="car-i5">
-                            <div class="car-image-container">
-                                <img src="https://gallet.duckdns.org:8123/local/i540%20cartoon.jpg" alt="BMW i5" class="car-image" onerror="this.style.display='none'">
-                                <div class="car-location-badge" id="i5-location-badge">
-                                    <span class="location-icon">📍</span>
-                                    <span id="bmw-i5-location">Away</span>
-                                </div>
-                            </div>
-                            <div class="car-info">
-                                <div class="car-header">
-                                    <h3>BMW i5</h3>
-                                    <span class="car-mileage" id="bmw-i5-mileage">-- km</span>
-                                </div>
-                                <div class="car-battery-section">
-                                    <div class="battery-visual">
-                                        <div class="battery-bar">
-                                            <div class="battery-fill" id="i5-battery-fill" style="width: 0%"></div>
-                                            <div class="battery-target" id="i5-battery-target" style="left: 80%"></div>
-                                        </div>
-                                        <div class="battery-info">
-                                            <span class="battery-percent" id="bmw-i5-battery">--%</span>
-                                            <span class="battery-target-label">Target: <span id="bmw-i5-target-soc">--%</span></span>
-                                        </div>
-                                    </div>
-                                    <div class="range-display">
-                                        <span class="range-icon">🔋</span>
-                                        <span class="range-value" id="bmw-i5-range">--</span>
-                                        <span class="range-unit">km</span>
-                                    </div>
-                                </div>
-                                <div class="car-charging-status" id="i5-charging-section">
-                                    <div class="charging-state" id="i5-charging-state">
-                                        <span class="plug-icon" id="i5-plug-icon">🔌</span>
-                                        <span class="charging-text" id="bmw-i5-charging-state">Not plugged</span>
-                                    </div>
-                                    <div class="charging-power" id="i5-charging-power-section" style="display: none;">
-                                        <span class="power-icon">⚡</span>
-                                        <span class="power-value" id="bmw-i5-charging-power">0</span>
-                                        <span class="power-unit">kW</span>
-                                        <span class="time-remaining" id="bmw-i5-time-to-full"></span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- BMW iX1 -->
-                        <div class="car-card" id="car-ix1">
-                            <div class="car-image-container">
-                                <img src="https://gallet.duckdns.org:8123/local/ix120%20cartoon.jpg" alt="BMW iX1" class="car-image" onerror="this.style.display='none'">
-                                <div class="car-location-badge" id="ix1-location-badge">
-                                    <span class="location-icon">📍</span>
-                                    <span id="bmw-ix1-location">Away</span>
-                                </div>
-                            </div>
-                            <div class="car-info">
-                                <div class="car-header">
-                                    <h3>BMW iX1</h3>
-                                    <span class="car-mileage" id="bmw-ix1-mileage">-- km</span>
-                                </div>
-                                <div class="car-battery-section">
-                                    <div class="battery-visual">
-                                        <div class="battery-bar">
-                                            <div class="battery-fill" id="ix1-battery-fill" style="width: 0%"></div>
-                                            <div class="battery-target" id="ix1-battery-target" style="left: 100%"></div>
-                                        </div>
-                                        <div class="battery-info">
-                                            <span class="battery-percent" id="bmw-ix1-battery">--%</span>
-                                            <span class="battery-target-label">Target: <span id="bmw-ix1-target-soc">--%</span></span>
-                                        </div>
-                                    </div>
-                                    <div class="range-display">
-                                        <span class="range-icon">🔋</span>
-                                        <span class="range-value" id="bmw-ix1-range">--</span>
-                                        <span class="range-unit">km</span>
-                                    </div>
-                                </div>
-                                <div class="car-charging-status" id="ix1-charging-section">
-                                    <div class="charging-state" id="ix1-charging-state">
-                                        <span class="plug-icon" id="ix1-plug-icon">🔌</span>
-                                        <span class="charging-text" id="bmw-ix1-charging-state">Not plugged</span>
-                                    </div>
-                                    <div class="charging-power" id="ix1-charging-power-section" style="display: none;">
-                                        <span class="power-icon">⚡</span>
-                                        <span class="power-value" id="bmw-ix1-charging-power">0</span>
-                                        <span class="power-unit">kW</span>
-                                        <span class="time-remaining" id="bmw-ix1-time-to-full"></span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
                 <!-- Live Consumers -->
                 <section class="consumers-section">
                     <h2>Live Consumers</h2>
@@ -259,44 +161,107 @@
                         </div>
                     </div>
 
-                    <!-- Time Estimates -->
-                    <div class="estimates-section" id="estimates-section">
-                        <div class="estimate-item" id="ev-estimate">
-                            <span class="estimate-icon">⚡</span>
-                            <span class="estimate-text">EV: Loading...</span>
-                        </div>
-                        <div class="estimate-item" id="boiler-estimate">
-                            <span class="estimate-icon">🔥</span>
-                            <span class="estimate-text">Boiler: Loading...</span>
-                        </div>
-                    </div>
-
-                    <!-- Schedule Cards -->
-                    <div class="schedule-cards">
-                        <div class="schedule-card ev-schedule">
-                            <div class="card-header">
-                                <span class="card-icon">⚡</span>
-                                <span class="card-title">EV Charging Windows</span>
-                            </div>
-                            <div class="card-content" id="ev-schedule-list">
-                                <div class="schedule-item">Loading...</div>
-                            </div>
-                        </div>
-
-                        <div class="schedule-card boiler-schedule">
-                            <div class="card-header">
-                                <span class="card-icon">🔥</span>
-                                <span class="card-title">Boiler Heating Plan</span>
-                            </div>
-                            <div class="card-content" id="boiler-schedule-list">
-                                <div class="schedule-item">Loading...</div>
-                            </div>
-                        </div>
-                    </div>
-
                     <!-- Current Status Summary -->
                     <div class="status-summary" id="status-summary">
                         <div class="summary-item">Loading...</div>
+                    </div>
+                </section>
+
+                <!-- Cars Section -->
+                <section class="cars-section">
+                    <h2>Electric Vehicles</h2>
+                    <div class="cars-grid">
+                        <!-- BMW i5 -->
+                        <div class="car-card" id="car-i5">
+                            <div class="car-image-container">
+                                <img src="https://gallet.duckdns.org:8123/local/i540%20cartoon.jpg" alt="BMW i5" class="car-image" onerror="this.style.display='none'">
+                                <div class="car-location-badge" id="i5-location-badge">
+                                    <span class="location-icon">📍</span>
+                                    <span id="bmw-i5-location">Away</span>
+                                </div>
+                            </div>
+                            <div class="car-info">
+                                <div class="car-header">
+                                    <h3>BMW i5</h3>
+                                    <span class="car-mileage" id="bmw-i5-mileage">-- km</span>
+                                </div>
+                                <div class="car-battery-section">
+                                    <div class="battery-visual">
+                                        <div class="battery-bar">
+                                            <div class="battery-fill" id="i5-battery-fill" style="width: 0%"></div>
+                                            <div class="battery-target" id="i5-battery-target" style="left: 80%"></div>
+                                        </div>
+                                        <div class="battery-info">
+                                            <span class="battery-percent" id="bmw-i5-battery">--%</span>
+                                            <span class="battery-target-label">Target: <span id="bmw-i5-target-soc">--%</span></span>
+                                        </div>
+                                    </div>
+                                    <div class="range-display">
+                                        <span class="range-icon">🔋</span>
+                                        <span class="range-value" id="bmw-i5-range">--</span>
+                                        <span class="range-unit">km</span>
+                                    </div>
+                                </div>
+                                <div class="car-charging-status" id="i5-charging-section">
+                                    <div class="charging-state" id="i5-charging-state">
+                                        <span class="plug-icon" id="i5-plug-icon">🔌</span>
+                                        <span class="charging-text" id="bmw-i5-charging-state">Not plugged</span>
+                                    </div>
+                                    <div class="charging-power" id="i5-charging-power-section" style="display: none;">
+                                        <span class="power-icon">⚡</span>
+                                        <span class="power-value" id="bmw-i5-charging-power">0</span>
+                                        <span class="power-unit">kW</span>
+                                        <span class="time-remaining" id="bmw-i5-time-to-full"></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- BMW iX1 -->
+                        <div class="car-card" id="car-ix1">
+                            <div class="car-image-container">
+                                <img src="https://gallet.duckdns.org:8123/local/ix120%20cartoon.jpg" alt="BMW iX1" class="car-image" onerror="this.style.display='none'">
+                                <div class="car-location-badge" id="ix1-location-badge">
+                                    <span class="location-icon">📍</span>
+                                    <span id="bmw-ix1-location">Away</span>
+                                </div>
+                            </div>
+                            <div class="car-info">
+                                <div class="car-header">
+                                    <h3>BMW iX1</h3>
+                                    <span class="car-mileage" id="bmw-ix1-mileage">-- km</span>
+                                </div>
+                                <div class="car-battery-section">
+                                    <div class="battery-visual">
+                                        <div class="battery-bar">
+                                            <div class="battery-fill" id="ix1-battery-fill" style="width: 0%"></div>
+                                            <div class="battery-target" id="ix1-battery-target" style="left: 100%"></div>
+                                        </div>
+                                        <div class="battery-info">
+                                            <span class="battery-percent" id="bmw-ix1-battery">--%</span>
+                                            <span class="battery-target-label">Target: <span id="bmw-ix1-target-soc">--%</span></span>
+                                        </div>
+                                    </div>
+                                    <div class="range-display">
+                                        <span class="range-icon">🔋</span>
+                                        <span class="range-value" id="bmw-ix1-range">--</span>
+                                        <span class="range-unit">km</span>
+                                    </div>
+                                </div>
+                                <div class="car-charging-status" id="ix1-charging-section">
+                                    <div class="charging-state" id="ix1-charging-state">
+                                        <span class="plug-icon" id="ix1-plug-icon">🔌</span>
+                                        <span class="charging-text" id="bmw-ix1-charging-state">Not plugged</span>
+                                    </div>
+                                    <div class="charging-power" id="ix1-charging-power-section" style="display: none;">
+                                        <span class="power-icon">⚡</span>
+                                        <span class="power-value" id="bmw-ix1-charging-power">0</span>
+                                        <span class="power-unit">kW</span>
+                                        <span class="time-remaining" id="bmw-ix1-time-to-full"></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </section>
 
