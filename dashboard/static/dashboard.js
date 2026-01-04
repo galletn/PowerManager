@@ -505,21 +505,23 @@ function setTextIfExists(id, text) {
 
 // Update the dashboard with new data
 function updateDashboard(data) {
-    // Power flow
-    const gridPower = data.grid_import || 0;
+    // Power flow - use net_power (negative = exporting, positive = importing)
+    // Fall back to grid_import - grid_export if net_power not available
+    const gridPower = data.net_power !== undefined ? data.net_power :
+                      (data.grid_import || 0) - (data.grid_export || 0);
     const pvPower = data.pv_production || 0;
-    const netPower = gridPower + pvPower;
+    const isExporting = gridPower < 0 || data.is_exporting;
 
+    // Display absolute value for power reading
     setTextIfExists('grid-power', formatWatts(Math.abs(gridPower)));
     setTextIfExists('pv-power', formatWatts(pvPower));
-    setTextIfExists('net-power', formatWatts(netPower));
+    setTextIfExists('net-power', formatWatts(Math.abs(gridPower)));
 
     // Grid direction and styling - support both full and compact dashboard class names
     const gridNode = document.querySelector('.power-node.grid') || document.querySelector('.power-node-large.grid');
     const gridLabel = document.getElementById('grid-direction');
     const gridArrow = document.getElementById('arrow-grid');
     const solarArrow = document.getElementById('arrow-solar');
-    const isExporting = gridPower < 0 || data.is_exporting;
 
     if (gridLabel) {
         if (isExporting) {
