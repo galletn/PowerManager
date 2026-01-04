@@ -64,104 +64,98 @@
                     </div>
                 </section>
 
-                <!-- Devices Grid -->
-                <section class="devices-section">
-                    <h2>Devices</h2>
-                    <div class="devices-grid">
-                        <!-- Boiler -->
-                        <div class="device" id="device-boiler">
-                            <div class="device-icon" aria-hidden="true">🔥</div>
-                            <div class="device-info">
-                                <div class="device-name">Boiler</div>
-                                <div class="device-status">
-                                    <span class="status-dot" id="boiler-dot" role="status" aria-label="Boiler status: off"><span class="visually-hidden">OFF</span></span>
-                                    <span id="boiler-state">OFF</span>
-                                </div>
-                                <div class="device-power" id="boiler-power" aria-live="polite">0W</div>
-                                <div class="device-last-activity" id="boiler-last-heated"></div>
-                            </div>
-                            <div class="device-controls" role="group" aria-label="Boiler override controls">
-                                <button onclick="setOverride('boiler', 'auto')" class="btn auto" aria-label="Set boiler to auto mode" data-device="boiler" data-mode="auto">A</button>
-                                <button onclick="setOverride('boiler', 'on')" class="btn on" aria-label="Turn boiler on" data-device="boiler" data-mode="on">On</button>
-                                <button onclick="setOverride('boiler', 'off')" class="btn off" aria-label="Turn boiler off" data-device="boiler" data-mode="off">Off</button>
-                            </div>
-                        </div>
-
-                        <!-- EV Charger -->
-                        <div class="device" id="device-ev">
-                            <div class="device-icon" aria-hidden="true">🚗</div>
-                            <div class="device-info">
-                                <div class="device-name">EV Charger</div>
-                                <div class="device-status">
-                                    <span class="status-dot" id="ev-dot" role="status" aria-label="EV charger status: no car"><span class="visually-hidden">No car</span></span>
-                                    <span id="ev-state">No car</span>
-                                </div>
-                                <div class="device-power"><span id="ev-power" aria-live="polite">0W</span> <span id="ev-amps" class="small">(0A)</span></div>
-                                <div class="device-last-activity" id="ev-last-charged"></div>
-                            </div>
-                            <div class="device-controls" role="group" aria-label="EV charger override controls">
-                                <button onclick="setOverride('ev', 'auto')" class="btn auto" aria-label="Set EV charger to auto mode" data-device="ev" data-mode="auto">A</button>
-                                <button onclick="setOverride('ev', 'on')" class="btn on" aria-label="Turn EV charger on" data-device="ev" data-mode="on">On</button>
-                                <button onclick="setOverride('ev', 'off')" class="btn off" aria-label="Turn EV charger off" data-device="ev" data-mode="off">Off</button>
-                            </div>
-                        </div>
-
-                        <!-- Pool Pump -->
-                        <div class="device" id="device-pool">
-                            <div class="device-icon" aria-hidden="true">🌊</div>
-                            <div class="device-info">
-                                <div class="device-name">Pool Pump</div>
-                                <div class="device-status">
-                                    <span class="status-dot" id="pool-dot" role="status" aria-label="Pool pump status: off"><span class="visually-hidden">OFF</span></span>
-                                    <span id="pool-pump-state">OFF</span>
-                                </div>
-                                <div class="device-power"><span id="pool-pump-power" aria-live="polite">0W</span> <span id="pool-ambient-temp" class="temp"></span></div>
-                            </div>
-                        </div>
-
-                        <!-- Table Heater -->
-                        <div class="device" id="device-table-heater">
-                            <div class="device-icon" aria-hidden="true">🔥</div>
-                            <div class="device-info">
-                                <div class="device-name">Table Heater</div>
-                                <div class="device-status">
-                                    <span class="status-dot" id="table-heater-dot" role="status" aria-label="Table heater status: off"><span class="visually-hidden">OFF</span></span>
-                                    <span id="table-heater-state">OFF</span>
-                                </div>
-                                <div class="device-power" id="table-heater-power" aria-live="polite">0W</div>
-                            </div>
-                            <div class="device-controls" role="group" aria-label="Table heater override controls">
-                                <button onclick="setOverride('table_heater', 'auto')" class="btn auto" aria-label="Set table heater to auto mode" data-device="table_heater" data-mode="auto">A</button>
-                                <button onclick="setOverride('table_heater', 'on')" class="btn on" aria-label="Turn table heater on" data-device="table_heater" data-mode="on">On</button>
-                                <button onclick="setOverride('table_heater', 'off')" class="btn off" aria-label="Turn table heater off" data-device="table_heater" data-mode="off">Off</button>
-                            </div>
-                        </div>
-
-                        <!-- Cars -->
-                        <div class="device car" id="device-i5">
-                            <div class="device-icon">🚘</div>
-                            <div class="device-info">
-                                <div class="device-name">BMW i5</div>
-                                <div class="device-status">
+                <!-- Cars Section -->
+                <section class="cars-section">
+                    <h2>Electric Vehicles</h2>
+                    <div class="cars-grid">
+                        <!-- BMW i5 -->
+                        <div class="car-card" id="car-i5">
+                            <div class="car-image-container">
+                                <img src="https://gallet.duckdns.org:8123/local/i540%20cartoon.jpg" alt="BMW i5" class="car-image" onerror="this.style.display='none'">
+                                <div class="car-location-badge" id="i5-location-badge">
+                                    <span class="location-icon">📍</span>
                                     <span id="bmw-i5-location">Away</span>
                                 </div>
-                                <div class="device-power">
-                                    <span id="bmw-i5-battery">--%</span>
-                                    <span class="small" id="bmw-i5-range">--km</span>
+                            </div>
+                            <div class="car-info">
+                                <div class="car-header">
+                                    <h3>BMW i5</h3>
+                                    <span class="car-mileage" id="bmw-i5-mileage">-- km</span>
+                                </div>
+                                <div class="car-battery-section">
+                                    <div class="battery-visual">
+                                        <div class="battery-bar">
+                                            <div class="battery-fill" id="i5-battery-fill" style="width: 0%"></div>
+                                            <div class="battery-target" id="i5-battery-target" style="left: 80%"></div>
+                                        </div>
+                                        <div class="battery-info">
+                                            <span class="battery-percent" id="bmw-i5-battery">--%</span>
+                                            <span class="battery-target-label">Target: <span id="bmw-i5-target-soc">--%</span></span>
+                                        </div>
+                                    </div>
+                                    <div class="range-display">
+                                        <span class="range-icon">🔋</span>
+                                        <span class="range-value" id="bmw-i5-range">--</span>
+                                        <span class="range-unit">km</span>
+                                    </div>
+                                </div>
+                                <div class="car-charging-status" id="i5-charging-section">
+                                    <div class="charging-state" id="i5-charging-state">
+                                        <span class="plug-icon" id="i5-plug-icon">🔌</span>
+                                        <span class="charging-text" id="bmw-i5-charging-state">Not plugged</span>
+                                    </div>
+                                    <div class="charging-power" id="i5-charging-power-section" style="display: none;">
+                                        <span class="power-icon">⚡</span>
+                                        <span class="power-value" id="bmw-i5-charging-power">0</span>
+                                        <span class="power-unit">kW</span>
+                                        <span class="time-remaining" id="bmw-i5-time-to-full"></span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
 
-                        <div class="device car" id="device-ix1">
-                            <div class="device-icon">🚘</div>
-                            <div class="device-info">
-                                <div class="device-name">BMW iX1</div>
-                                <div class="device-status">
+                        <!-- BMW iX1 -->
+                        <div class="car-card" id="car-ix1">
+                            <div class="car-image-container">
+                                <img src="https://gallet.duckdns.org:8123/local/ix120%20cartoon.jpg" alt="BMW iX1" class="car-image" onerror="this.style.display='none'">
+                                <div class="car-location-badge" id="ix1-location-badge">
+                                    <span class="location-icon">📍</span>
                                     <span id="bmw-ix1-location">Away</span>
                                 </div>
-                                <div class="device-power">
-                                    <span id="bmw-ix1-battery">--%</span>
-                                    <span class="small" id="bmw-ix1-range">--km</span>
+                            </div>
+                            <div class="car-info">
+                                <div class="car-header">
+                                    <h3>BMW iX1</h3>
+                                    <span class="car-mileage" id="bmw-ix1-mileage">-- km</span>
+                                </div>
+                                <div class="car-battery-section">
+                                    <div class="battery-visual">
+                                        <div class="battery-bar">
+                                            <div class="battery-fill" id="ix1-battery-fill" style="width: 0%"></div>
+                                            <div class="battery-target" id="ix1-battery-target" style="left: 100%"></div>
+                                        </div>
+                                        <div class="battery-info">
+                                            <span class="battery-percent" id="bmw-ix1-battery">--%</span>
+                                            <span class="battery-target-label">Target: <span id="bmw-ix1-target-soc">--%</span></span>
+                                        </div>
+                                    </div>
+                                    <div class="range-display">
+                                        <span class="range-icon">🔋</span>
+                                        <span class="range-value" id="bmw-ix1-range">--</span>
+                                        <span class="range-unit">km</span>
+                                    </div>
+                                </div>
+                                <div class="car-charging-status" id="ix1-charging-section">
+                                    <div class="charging-state" id="ix1-charging-state">
+                                        <span class="plug-icon" id="ix1-plug-icon">🔌</span>
+                                        <span class="charging-text" id="bmw-ix1-charging-state">Not plugged</span>
+                                    </div>
+                                    <div class="charging-power" id="ix1-charging-power-section" style="display: none;">
+                                        <span class="power-icon">⚡</span>
+                                        <span class="power-value" id="bmw-ix1-charging-power">0</span>
+                                        <span class="power-unit">kW</span>
+                                        <span class="time-remaining" id="bmw-ix1-time-to-full"></span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -297,14 +291,6 @@
                             <div class="card-content" id="boiler-schedule-list">
                                 <div class="schedule-item">Loading...</div>
                             </div>
-                        </div>
-                    </div>
-
-                    <!-- Hourly Timetable -->
-                    <div class="timetable-section" id="timetable-section">
-                        <h3>Hourly Timetable</h3>
-                        <div class="timetable-grid" id="timetable-grid">
-                            Loading...
                         </div>
                     </div>
 

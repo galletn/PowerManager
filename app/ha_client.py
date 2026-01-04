@@ -475,11 +475,25 @@ class HAClient:
             ovr_table_heater=get_str(e.ovr_table_heater, ""),
             ovr_dishwasher=get_str(e.ovr_dishwasher, ""),
 
-            # BMW Cars
+            # BMW Cars - i5 eDrive40
             bmw_i5_battery=get_num(e.bmw_i5_battery),
             bmw_i5_range=get_num(e.bmw_i5_range),
             bmw_i5_location=get_str(e.bmw_i5_location, "unknown"),
+            bmw_i5_charging_state=get_str(e.bmw_i5_charging_state, "unknown"),
+            bmw_i5_charging_power=get_num(e.bmw_i5_charging_power),
+            bmw_i5_plug_state=get_str(e.bmw_i5_plug_state, "unknown"),
+            bmw_i5_target_soc=get_int(e.bmw_i5_target_soc),
+            bmw_i5_mileage=get_int(e.bmw_i5_mileage),
+            bmw_i5_time_to_full=get_num(e.bmw_i5_time_to_full),
+
+            # BMW Cars - iX1 eDrive20
             bmw_ix1_battery=get_num(e.bmw_ix1_battery),
             bmw_ix1_range=get_num(e.bmw_ix1_range),
             bmw_ix1_location=get_str(e.bmw_ix1_location, "unknown"),
+            bmw_ix1_charging_state=get_str(e.bmw_ix1_charging_state, "unknown"),
+            bmw_ix1_charging_power=get_num(e.bmw_ix1_charging_power),
+            bmw_ix1_plug_state=get_str(e.bmw_ix1_plug_state, "unknown"),
+            bmw_ix1_target_soc=get_int(e.bmw_ix1_target_soc),
+            bmw_ix1_mileage=get_int(e.bmw_ix1_mileage),
+            bmw_ix1_time_to_full=get_num(e.bmw_ix1_time_to_full),
         )

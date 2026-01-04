@@ -176,13 +176,27 @@ class EntitiesConfig:
     limit_off_peak: str = "input_number.pm_limit_off_peak"
     limit_super_off_peak: str = "input_number.pm_limit_super_off_peak"
 
-    # BMW Cars
+    # BMW Cars - i5 eDrive40
     bmw_i5_battery: str = "sensor.i5_edrive40_battery_hv_state_of_charge"
     bmw_i5_range: str = "sensor.i5_edrive40_range_ev_remaining_range"
     bmw_i5_location: str = "device_tracker.i5_edrive40_location"
+    bmw_i5_charging_state: str = "sensor.i5_edrive40_charging_ev_charging_state"
+    bmw_i5_charging_power: str = "sensor.i5_edrive40_battery_ev_charging_power"
+    bmw_i5_plug_state: str = "sensor.i5_edrive40_charging_port_plug_state"
+    bmw_i5_target_soc: str = "sensor.i5_edrive40_battery_ev_target_state_of_charge"
+    bmw_i5_mileage: str = "sensor.i5_edrive40_vehicle_mileage"
+    bmw_i5_time_to_full: str = "sensor.i5_edrive40_charging_ev_time_to_full_charge"
+
+    # BMW Cars - iX1 eDrive20
     bmw_ix1_battery: str = "sensor.ix1_edrive20_battery_hv_state_of_charge"
     bmw_ix1_range: str = "sensor.ix1_edrive20_range_ev_remaining_range"
     bmw_ix1_location: str = "device_tracker.ix1_edrive20_location"
+    bmw_ix1_charging_state: str = "sensor.ix1_edrive20_charging_ev_charging_state"
+    bmw_ix1_charging_power: str = "sensor.ix1_edrive20_battery_ev_charging_power"
+    bmw_ix1_plug_state: str = "sensor.ix1_edrive20_charging_port_plug_state"
+    bmw_ix1_target_soc: str = "sensor.ix1_edrive20_battery_ev_target_state_of_charge"
+    bmw_ix1_mileage: str = "sensor.ix1_edrive20_vehicle_mileage"
+    bmw_ix1_time_to_full: str = "sensor.ix1_edrive20_charging_ev_time_to_full_charge"
 
     # Sun and weather for dashboard icons
     sun: str = "sun.sun"

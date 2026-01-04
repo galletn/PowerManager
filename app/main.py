@@ -716,12 +716,24 @@ async def get_status():
             "bmw_i5": {
                 "battery": last_inputs.bmw_i5_battery,
                 "range": last_inputs.bmw_i5_range,
-                "location": last_inputs.bmw_i5_location
+                "location": last_inputs.bmw_i5_location,
+                "charging_state": last_inputs.bmw_i5_charging_state,
+                "charging_power": last_inputs.bmw_i5_charging_power,
+                "plug_state": last_inputs.bmw_i5_plug_state,
+                "target_soc": last_inputs.bmw_i5_target_soc,
+                "mileage": last_inputs.bmw_i5_mileage,
+                "time_to_full": last_inputs.bmw_i5_time_to_full
             },
             "bmw_ix1": {
                 "battery": last_inputs.bmw_ix1_battery,
                 "range": last_inputs.bmw_ix1_range,
-                "location": last_inputs.bmw_ix1_location
+                "location": last_inputs.bmw_ix1_location,
+                "charging_state": last_inputs.bmw_ix1_charging_state,
+                "charging_power": last_inputs.bmw_ix1_charging_power,
+                "plug_state": last_inputs.bmw_ix1_plug_state,
+                "target_soc": last_inputs.bmw_ix1_target_soc,
+                "mileage": last_inputs.bmw_ix1_mileage,
+                "time_to_full": last_inputs.bmw_ix1_time_to_full
             },
             "table_heater": {
                 "state": last_inputs.heater_table_switch,

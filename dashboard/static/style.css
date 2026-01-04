@@ -1228,3 +1228,300 @@ h2 {
 .power-node-large.grid.exporting .node-value {
     color: var(--ha-success, #43a047) !important;
 }
+
+/* ===== Cars Section ===== */
+.cars-section {
+    background: var(--ha-card-background);
+    border-radius: var(--ha-border-radius);
+    padding: 16px;
+    box-shadow: var(--ha-card-shadow);
+}
+
+.cars-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 16px;
+}
+
+.car-card {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    border-radius: 16px;
+    overflow: hidden;
+    transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.car-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+}
+
+.car-image-container {
+    position: relative;
+    height: 160px;
+    overflow: hidden;
+    background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 100%);
+}
+
+.car-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    opacity: 0.9;
+}
+
+.car-location-badge {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(8px);
+    padding: 6px 12px;
+    border-radius: 20px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #fff;
+}
+
+.car-location-badge.home {
+    background: rgba(76, 175, 80, 0.8);
+}
+
+.car-location-badge.away {
+    background: rgba(255, 152, 0, 0.8);
+}
+
+.location-icon {
+    font-size: 14px;
+}
+
+.car-info {
+    padding: 16px;
+    color: #fff;
+}
+
+.car-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.car-header h3 {
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0;
+    color: #fff;
+}
+
+.car-mileage {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.car-battery-section {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.battery-visual {
+    flex: 1;
+}
+
+.battery-bar {
+    height: 12px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    position: relative;
+    overflow: visible;
+}
+
+.battery-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #4caf50 0%, #8bc34a 100%);
+    border-radius: 6px;
+    transition: width 0.5s ease;
+}
+
+.battery-fill.low {
+    background: linear-gradient(90deg, #f44336 0%, #ff9800 100%);
+}
+
+.battery-fill.medium {
+    background: linear-gradient(90deg, #ff9800 0%, #ffc107 100%);
+}
+
+.battery-fill.charging {
+    animation: battery-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes battery-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+.battery-target {
+    position: absolute;
+    top: -4px;
+    bottom: -4px;
+    width: 3px;
+    background: rgba(255, 255, 255, 0.8);
+    border-radius: 2px;
+    transform: translateX(-50%);
+}
+
+.battery-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 8px;
+}
+
+.battery-percent {
+    font-size: 24px;
+    font-weight: 700;
+    color: #fff;
+}
+
+.battery-target-label {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.range-display {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 12px 16px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    min-width: 80px;
+}
+
+.range-icon {
+    font-size: 18px;
+    margin-bottom: 4px;
+}
+
+.range-value {
+    font-size: 22px;
+    font-weight: 700;
+    color: #fff;
+}
+
+.range-unit {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.car-charging-status {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+}
+
+.charging-state {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.plug-icon {
+    font-size: 18px;
+    opacity: 0.6;
+}
+
+.plug-icon.connected {
+    opacity: 1;
+    color: #4caf50;
+}
+
+.plug-icon.charging {
+    opacity: 1;
+    color: #2196f3;
+    animation: plug-pulse 1s ease-in-out infinite;
+}
+
+@keyframes plug-pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+}
+
+.charging-text {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.charging-text.active {
+    color: #4caf50;
+    font-weight: 500;
+}
+
+.charging-power {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: rgba(33, 150, 243, 0.2);
+    border-radius: 8px;
+    border-left: 3px solid #2196f3;
+}
+
+.power-icon {
+    font-size: 16px;
+    color: #2196f3;
+}
+
+.power-value {
+    font-size: 18px;
+    font-weight: 600;
+    color: #fff;
+}
+
+.power-unit {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.time-remaining {
+    margin-left: auto;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.7);
+    padding: 4px 8px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+}
+
+/* Responsive adjustments for cars */
+@media (max-width: 768px) {
+    .cars-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .car-image-container {
+        height: 140px;
+    }
+
+    .car-battery-section {
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .range-display {
+        width: 100%;
+        flex-direction: row;
+        justify-content: center;
+        gap: 8px;
+        padding: 10px;
+    }
+
+    .range-icon {
+        margin-bottom: 0;
+    }
+}

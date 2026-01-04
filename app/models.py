@@ -91,13 +91,27 @@ class PowerInputs:
     ovr_table_heater: str = ''
     ovr_dishwasher: str = ''
 
-    # BMW Cars
+    # BMW Cars - i5 eDrive40
     bmw_i5_battery: Optional[float] = None
     bmw_i5_range: Optional[float] = None
     bmw_i5_location: str = 'unknown'
+    bmw_i5_charging_state: str = 'unknown'
+    bmw_i5_charging_power: Optional[float] = None
+    bmw_i5_plug_state: str = 'unknown'
+    bmw_i5_target_soc: Optional[int] = None
+    bmw_i5_mileage: Optional[int] = None
+    bmw_i5_time_to_full: Optional[float] = None
+
+    # BMW Cars - iX1 eDrive20
     bmw_ix1_battery: Optional[float] = None
     bmw_ix1_range: Optional[float] = None
     bmw_ix1_location: str = 'unknown'
+    bmw_ix1_charging_state: str = 'unknown'
+    bmw_ix1_charging_power: Optional[float] = None
+    bmw_ix1_plug_state: str = 'unknown'
+    bmw_ix1_target_soc: Optional[int] = None
+    bmw_ix1_mileage: Optional[int] = None
+    bmw_ix1_time_to_full: Optional[float] = None
 
 
 @dataclass

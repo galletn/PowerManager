@@ -99,6 +99,120 @@ function getEvStateText(state) {
     return states[state] || `Unknown`;
 }
 
+// Update car card with BMW data
+function updateCarCard(carId, carData) {
+    const prefix = carId === 'i5' ? 'bmw-i5' : 'bmw-ix1';
+
+    // Location badge
+    const locationBadge = document.getElementById(`${carId}-location-badge`);
+    const locationEl = document.getElementById(`${prefix}-location`);
+    const isHome = carData.location === 'home';
+    if (locationEl) locationEl.textContent = isHome ? 'Home' : 'Away';
+    if (locationBadge) {
+        locationBadge.classList.remove('home', 'away');
+        locationBadge.classList.add(isHome ? 'home' : 'away');
+    }
+
+    // Battery percentage and fill
+    const battery = carData.battery;
+    const batteryPercent = battery !== null ? Math.round(battery) : null;
+    setTextIfExists(`${prefix}-battery`, batteryPercent !== null ? `${batteryPercent}%` : '--%');
+
+    const batteryFill = document.getElementById(`${carId}-battery-fill`);
+    if (batteryFill && batteryPercent !== null) {
+        batteryFill.style.width = `${batteryPercent}%`;
+        // Update color based on level
+        batteryFill.classList.remove('low', 'medium', 'charging');
+        if (carData.charging_state === 'CHARGING') {
+            batteryFill.classList.add('charging');
+        } else if (batteryPercent < 20) {
+            batteryFill.classList.add('low');
+        } else if (batteryPercent < 40) {
+            batteryFill.classList.add('medium');
+        }
+    }
+
+    // Target SOC
+    const targetSoc = carData.target_soc;
+    setTextIfExists(`${prefix}-target-soc`, targetSoc !== null ? `${targetSoc}%` : '--%');
+    const batteryTarget = document.getElementById(`${carId}-battery-target`);
+    if (batteryTarget && targetSoc !== null) {
+        batteryTarget.style.left = `${targetSoc}%`;
+    }
+
+    // Range
+    const range = carData.range;
+    setTextIfExists(`${prefix}-range`, range !== null ? Math.round(range) : '--');
+
+    // Mileage
+    const mileage = carData.mileage;
+    setTextIfExists(`${prefix}-mileage`, mileage !== null ? `${mileage.toLocaleString()} km` : '-- km');
+
+    // Charging state and plug
+    const chargingState = carData.charging_state || 'unknown';
+    const plugState = carData.plug_state || 'unknown';
+    const isCharging = chargingState === 'CHARGING';
+    const isPlugged = plugState === 'CONNECTED' || isCharging;
+
+    // Update plug icon
+    const plugIcon = document.getElementById(`${carId}-plug-icon`);
+    if (plugIcon) {
+        plugIcon.classList.remove('connected', 'charging');
+        if (isCharging) {
+            plugIcon.classList.add('charging');
+            plugIcon.textContent = '⚡';
+        } else if (isPlugged) {
+            plugIcon.classList.add('connected');
+            plugIcon.textContent = '🔌';
+        } else {
+            plugIcon.textContent = '🔌';
+        }
+    }
+
+    // Update charging text
+    const chargingTextEl = document.getElementById(`${prefix}-charging-state`);
+    if (chargingTextEl) {
+        let chargingText = 'Not plugged';
+        if (isCharging) {
+            chargingText = 'Charging';
+            chargingTextEl.classList.add('active');
+        } else if (isPlugged) {
+            chargingText = 'Plugged in';
+            chargingTextEl.classList.remove('active');
+        } else {
+            chargingTextEl.classList.remove('active');
+        }
+        chargingTextEl.textContent = chargingText;
+    }
+
+    // Charging power section
+    const powerSection = document.getElementById(`${carId}-charging-power-section`);
+    if (powerSection) {
+        if (isCharging && carData.charging_power) {
+            powerSection.style.display = 'flex';
+            const powerKw = (carData.charging_power / 1000).toFixed(1);
+            setTextIfExists(`${prefix}-charging-power`, powerKw);
+
+            // Time to full
+            const timeToFull = carData.time_to_full;
+            const timeEl = document.getElementById(`${prefix}-time-to-full`);
+            if (timeEl && timeToFull !== null && timeToFull > 0) {
+                const hours = Math.floor(timeToFull / 60);
+                const mins = Math.round(timeToFull % 60);
+                if (hours > 0) {
+                    timeEl.textContent = `${hours}h ${mins}m left`;
+                } else {
+                    timeEl.textContent = `${mins}m left`;
+                }
+            } else if (timeEl) {
+                timeEl.textContent = '';
+            }
+        } else {
+            powerSection.style.display = 'none';
+        }
+    }
+}
+
 // Build the 24-hour tariff timeline
 function buildTimeline(schedule) {
     const timeline = document.getElementById('tariff-timeline');
@@ -658,18 +772,12 @@ function updateDashboard(data) {
 
         // BMW i5
         if (data.devices.bmw_i5) {
-            const i5Location = document.getElementById('bmw-i5-location');
-            if (i5Location) i5Location.textContent = data.devices.bmw_i5.location === 'home' ? 'Home' : 'Away';
-            setTextIfExists('bmw-i5-battery', data.devices.bmw_i5.battery !== null ? `${Math.round(data.devices.bmw_i5.battery)}%` : '--%');
-            setTextIfExists('bmw-i5-range', data.devices.bmw_i5.range !== null ? `${Math.round(data.devices.bmw_i5.range)}km` : '--km');
+            updateCarCard('i5', data.devices.bmw_i5);
         }
 
         // BMW iX1
         if (data.devices.bmw_ix1) {
-            const ix1Location = document.getElementById('bmw-ix1-location');
-            if (ix1Location) ix1Location.textContent = data.devices.bmw_ix1.location === 'home' ? 'Home' : 'Away';
-            setTextIfExists('bmw-ix1-battery', data.devices.bmw_ix1.battery !== null ? `${Math.round(data.devices.bmw_ix1.battery)}%` : '--%');
-            setTextIfExists('bmw-ix1-range', data.devices.bmw_ix1.range !== null ? `${Math.round(data.devices.bmw_ix1.range)}km` : '--km');
+            updateCarCard('ix1', data.devices.bmw_ix1);
         }
 
         // Update schedule status dots (shows current on/off state in 24h schedule)
