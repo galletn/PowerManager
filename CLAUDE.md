@@ -149,7 +149,10 @@ PowerManager/
 │   ├── templates/dashboard.html
 │   └── static/
 │       ├── style.css
-│       └── dashboard.js
+│       └── dashboard.js     # Supports standalone mode via window.POWER_MANAGER_API
+├── ha-standalone/           # Files for HA www folder deployment
+│   ├── dashboard.html       # HTML with API URL config
+│   └── README.txt           # Deployment instructions
 ├── tests/                   # Pytest tests
 ├── homeassistant/
 │   └── helpers/helpers.yaml # HA input_select entities
@@ -193,6 +196,32 @@ journalctl -u power-manager -f    # Follow logs
 - **Local**: http://localhost:8081
 - **Server**: http://192.168.68.78:8081
 - **HA Iframe**: Embedded in Home Assistant sidebar
+
+## Standalone Dashboard (HA www folder)
+
+The dashboard can be hosted in Home Assistant's www folder for embedding in HA apps without SSL certificate issues.
+
+**How it works**: `dashboard.js` detects `window.POWER_MANAGER_API` - if set, it uses that URL; otherwise uses relative URLs (for when served by Power Manager itself). This means there's only ONE dashboard.js to maintain.
+
+**Deployment**:
+
+```bash
+# On HA server, create folder and copy files:
+mkdir -p /config/www/power-manager
+cp ha-standalone/dashboard.html /config/www/power-manager/
+cp dashboard/static/dashboard.js /config/www/power-manager/
+cp dashboard/static/style.css /config/www/power-manager/
+```
+
+**Configuration**: Edit `dashboard.html` and set the API URL:
+
+```javascript
+window.POWER_MANAGER_API = 'https://192.168.68.78:8081';
+```
+
+**Access**: `https://gallet.duckdns.org:8123/local/power-manager/dashboard.html`
+
+**Maintenance**: When updating `dashboard/static/dashboard.js`, copy it to HA's www folder again.
 
 ## Notes
 

@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Power Flow</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        /* Compact styles for small display - with fallback colors for older browsers */
+        body {
+            margin: 0;
+            padding: 0;
+            background: #f5f5f5;
+            background: var(--ha-background, #f5f5f5);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        .dashboard-compact {
+            padding: 8px;
+            height: 100vh;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+        }
+        .compact-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 4px 8px;
+            background: #ffffff;
+            background: var(--ha-card-bg, #ffffff);
+            border-radius: 8px;
+            margin-bottom: 8px;
+        }
+        .compact-header h1 {
+            font-size: 14px;
+            margin: 0;
+            color: #212121;
+            color: var(--ha-text, #212121);
+        }
+        .compact-header .badges {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+        .power-section-compact {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            background: #ffffff;
+            background: var(--ha-card-bg, #ffffff);
+            border-radius: 12px;
+            padding: 16px;
+        }
+        .power-flow-large {
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            flex: 1;
+        }
+        .power-node-large {
+            text-align: center;
+            padding: 16px;
+        }
+        .power-node-large .node-icon {
+            font-size: 48px;
+            margin-bottom: 8px;
+        }
+        .power-node-large .node-value {
+            font-size: 32px;
+            font-weight: 700;
+            color: #212121;
+            color: var(--ha-text, #212121);
+        }
+        .power-node-large .node-label {
+            font-size: 14px;
+            color: #727272;
+            color: var(--ha-text-secondary, #727272);
+            margin-top: 4px;
+        }
+        .power-node-large.solar .node-value { color: #ffc107; color: var(--ha-solar, #ffc107); }
+        .power-node-large.grid .node-value.importing { color: #db4437; color: var(--ha-error, #db4437); }
+        .power-node-large.grid .node-value.exporting { color: #43a047; color: var(--ha-success, #43a047); }
+        .power-arrows-large {
+            display: flex;
+            flex-direction: column;
+            font-size: 32px;
+            color: #727272;
+            color: var(--ha-text-secondary, #727272);
+        }
+        .power-bar-large {
+            margin-top: 16px;
+        }
+        .power-bar-large .power-bar {
+            height: 24px;
+            border-radius: 12px;
+        }
+        .power-bar-large .power-bar-fill {
+            height: 100%;
+            border-radius: 12px;
+        }
+        .power-bar-large .power-bar-labels {
+            font-size: 16px;
+            margin-top: 8px;
+            text-align: center;
+        }
+        .compact-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 4px 8px;
+            font-size: 10px;
+            color: #727272;
+            color: var(--ha-text-secondary, #727272);
+            margin-top: 8px;
+        }
+        #status-indicator {
+            width: 8px;
+            height: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-compact">
+        <!-- Compact Header -->
+        <div class="compact-header">
+            <h1>Power Flow</h1>
+            <div class="badges">
+                <span class="tariff-badge" id="tariff-badge">PEAK</span>
+                <div id="status-indicator" class="status-ok" role="status"></div>
+            </div>
+        </div>
+
+        <!-- Power Flow Section -->
+        <section class="power-section-compact">
+            <div class="power-flow-large">
+                <div class="power-node-large solar">
+                    <div class="node-icon" aria-hidden="true">☀️</div>
+                    <div class="node-value" id="pv-power">0W</div>
+                    <div class="node-label">Solar</div>
+                </div>
+                <div class="power-arrows-large">
+                    <div class="arrow" id="arrow-solar">→</div>
+                </div>
+                <div class="power-node-large home">
+                    <div class="node-icon" aria-hidden="true">🏠</div>
+                    <div class="node-value" id="net-power">0W</div>
+                    <div class="node-label">Home</div>
+                </div>
+                <div class="power-arrows-large">
+                    <div class="arrow" id="arrow-grid">↔</div>
+                </div>
+                <div class="power-node-large grid">
+                    <div class="node-icon" aria-hidden="true">⚡</div>
+                    <div class="node-value" id="grid-power">0W</div>
+                    <div class="node-label" id="grid-direction">Import</div>
+                </div>
+            </div>
+            <div class="power-bar-large">
+                <div class="power-bar">
+                    <div class="power-bar-fill" id="power-bar-fill"></div>
+                    <div class="power-bar-limit" id="power-bar-limit"></div>
+                </div>
+                <div class="power-bar-labels">
+                    <span id="power-used">0W</span>
+                    <span id="power-limit">/ 2500W limit</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Compact Footer -->
+        <div class="compact-footer">
+            <span>Updated: <span id="last-update">--</span></span>
+            <span id="season-badge" style="display:none"></span>
+        </div>
+    </div>
+
+    <!-- STANDALONE CONFIG: Set API URL before loading dashboard.js -->
+    <script>
+        window.POWER_MANAGER_API = 'https://gallet.duckdns.org:8081';
+    </script>
+    <script src="dashboard.js"></script>
+</body>
+</html>

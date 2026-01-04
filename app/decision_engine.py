@@ -794,20 +794,20 @@ def _handle_ev_winter(
     return effective_headroom
 
 
-def _handle_heater_winter(
+def _handle_heaters_winter(
     decisions: Decisions,
     plan: list,
     ctx: dict,
     effective_headroom: float
 ) -> None:
-    """Handle table heater logic for winter mode.
+    """Handle table heater and right heater logic for winter mode.
 
-    The table heater has the lowest priority (4) and uses remaining capacity
-    after boiler and EV. Prefers super-off-peak but may use off-peak if EV
-    needs the super-off-peak capacity.
+    Heaters have the lowest priority and use remaining capacity after boiler and EV.
+    Priority: table_heater (4100W) first, then right_heater (2500W).
+    Also turns on with solar export to use free power.
 
     Args:
-        decisions: Decisions object to update with heater action.
+        decisions: Decisions object to update with heater actions.
         plan: List of strings to append decision rationale.
         ctx: Context dictionary with heater states, config, can_switch, etc.
         effective_headroom: Current available power capacity in watts.
@@ -817,47 +817,69 @@ def _handle_heater_winter(
     config = ctx['config']
     can_switch = ctx['can_switch']
     tariff = ctx['tariff']
-
-    if ovr['table_heater'] != 'auto':
-        return
+    is_exporting = ctx.get('is_exporting', False)
+    p1_return = ctx.get('p1_return', 0)  # Export power
 
     table_power = config.heaters.table_power
+    right_power = config.heaters.right_power
     ht_on = ctx['ht_on']
+    hr_on = ctx['hr_on']
 
     # Calculate remaining capacity
-    # Note: if EV is already charging, its power is already in import reading,
-    # so effective_headroom already accounts for it. Don't subtract again!
-    # Only subtract if we're about to TURN ON the EV.
     remaining = effective_headroom
     if decisions.ev.action == 'on':
         remaining -= decisions.ev.amps * config.ev.watts_per_amp
-    enough_power = remaining > table_power + hyst
 
-    # Check if EV will use most of super-off-peak capacity
-    ev_needs_capacity = ctx['ev_plugged'] and not ctx['ev_done']
+    # === TABLE HEATER (Priority 4, 4100W) ===
+    if ovr['table_heater'] == 'auto':
+        enough_for_table = remaining > table_power + hyst
+        has_solar_for_table = is_exporting and p1_return > table_power
 
-    if tariff == 'super-off-peak':
-        if not ht_on and enough_power:
-            if can_switch('heater_table', True):
-                decisions.heater_table.action = 'on'
-                plan.append("Table heater: ON (super-off-peak)")
-        elif ht_on and remaining < table_power - hyst:
-            if can_switch('heater_table', False):
-                decisions.heater_table.action = 'off'
-                plan.append("Table heater: OFF (capacity needed)")
-
-    elif tariff == 'off-peak':
-        # Off-peak: table heater should wait for super-off-peak (cheapest)
-        # Turn off if running - save capacity for night super-off-peak
-        if ht_on:
+        if tariff == 'super-off-peak' or has_solar_for_table:
+            if not ht_on and (enough_for_table or has_solar_for_table):
+                if can_switch('heater_table', True):
+                    decisions.heater_table.action = 'on'
+                    reason = "solar" if has_solar_for_table else "super-off-peak"
+                    plan.append(f"Table heater: ON ({reason})")
+            elif ht_on and remaining < table_power - hyst and not has_solar_for_table:
+                if can_switch('heater_table', False):
+                    decisions.heater_table.action = 'off'
+                    plan.append("Table heater: OFF (capacity needed)")
+        elif tariff == 'off-peak' and ht_on and not has_solar_for_table:
             if can_switch('heater_table', False):
                 decisions.heater_table.action = 'off'
                 plan.append("Table heater: OFF (wait for super-off-peak)")
+        elif tariff == 'peak' and ht_on and not has_solar_for_table:
+            if can_switch('heater_table', False):
+                decisions.heater_table.action = 'off'
+                plan.append("Table heater: OFF (peak tariff)")
 
-    elif tariff == 'peak' and ht_on:
-        if can_switch('heater_table', False):
-            decisions.heater_table.action = 'off'
-            plan.append("Table heater: OFF (peak tariff)")
+    # Update remaining after table heater decision
+    if decisions.heater_table.action == 'on':
+        remaining -= table_power
+
+    # === RIGHT HEATER (Priority 5, 2500W) - ONLY with solar surplus ===
+    # Right heater only turns on when exporting enough power to cover it
+    # This is the lowest priority device - only uses excess solar
+    # Turns off when importing > 500W
+    if ovr.get('right_heater', 'auto') == 'auto':
+        p1 = ctx.get('p1', 0)  # Import power
+        has_solar_for_right = is_exporting and p1_return > right_power + hyst
+        importing_too_much = not is_exporting and p1 > 500
+
+        if has_solar_for_right:
+            if not hr_on:
+                if can_switch('heater_right', True):
+                    decisions.heater_right.action = 'on'
+                    plan.append(f"Right heater: ON (solar {int(p1_return)}W)")
+        elif hr_on and (importing_too_much or not is_exporting):
+            # Turn off if importing > 500W or no longer exporting
+            if can_switch('heater_right', False):
+                decisions.heater_right.action = 'off'
+                if importing_too_much:
+                    plan.append(f"Right heater: OFF (importing {int(p1)}W)")
+                else:
+                    plan.append("Right heater: OFF (no solar surplus)")
 
 
 def _apply_winter_logic(decisions: Decisions, plan: list, ctx: dict):
@@ -904,7 +926,7 @@ def _apply_winter_logic(decisions: Decisions, plan: list, ctx: dict):
     )
 
     # === TABLE HEATER (Priority 4 - lowest, use remaining capacity) ===
-    _handle_heater_winter(decisions, plan, ctx, effective_headroom)
+    _handle_heaters_winter(decisions, plan, ctx, effective_headroom)
 
     # Update headroom in context for dishwasher to see reduced capacity
     # from devices being turned ON in this cycle
@@ -1381,5 +1403,8 @@ def _calculate_final_headroom(
 
     if decisions.heater_table.action == 'on':
         headroom -= config.heaters.table_power
+
+    if decisions.heater_right.action == 'on':
+        headroom -= config.heaters.right_power
 
     return headroom

@@ -520,6 +520,20 @@ async def execute_decisions(
                 add_pending_command(config.entities.heater_table, 'off')
             logger.info("Table Heater: OFF")
 
+        # Right Heater (solar surplus only)
+        if decisions.heater_right.action == 'on':
+            success = await ha_client.turn_on(config.entities.heater_right)
+            if success:
+                confirmed_states['heater_right'] = True
+                add_pending_command(config.entities.heater_right, 'on')
+            logger.info("Right Heater: ON")
+        elif decisions.heater_right.action == 'off':
+            success = await ha_client.turn_off(config.entities.heater_right)
+            if success:
+                confirmed_states['heater_right'] = False
+                add_pending_command(config.entities.heater_right, 'off')
+            logger.info("Right Heater: OFF")
+
         # Dishwasher (smart scheduling)
         if decisions.dishwasher.action == 'on':
             success = await ha_client.turn_on(config.entities.dishwasher_switch)
