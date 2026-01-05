@@ -657,36 +657,32 @@ def _handle_boiler_winter(
             # During off-peak (not super-off-peak), turn off if no reason to heat
             # BUT only after grace period to avoid ping-pong
             if tariff == 'off-peak' and not wants_to_heat and device_state:
-                # Was this boiler turned on due to solar surplus?
-                was_solar_surplus = device_state.boiler_solar_surplus_since > 0
+                # Start or continue tracking import time
+                if device_state.boiler_importing_since == 0:
+                    device_state.boiler_importing_since = now_ts
+                    elapsed = 0
+                else:
+                    elapsed = (now_ts - device_state.boiler_importing_since) / 1000
 
-                if was_solar_surplus:
-                    # Start or continue tracking import time
-                    if device_state.boiler_importing_since == 0:
-                        device_state.boiler_importing_since = now_ts
-                        elapsed = 0
-                    else:
-                        elapsed = (now_ts - device_state.boiler_importing_since) / 1000
+                grace_remaining = SOLAR_SURPLUS_GRACE_PERIOD - elapsed
 
-                    grace_remaining = SOLAR_SURPLUS_GRACE_PERIOD - elapsed
-
-                    if elapsed >= SOLAR_SURPLUS_GRACE_PERIOD:
-                        # Grace period expired - turn off
-                        if can_switch('boiler', False):
-                            decisions.boiler.action = 'off'
-                            # Reset tracking
-                            device_state.boiler_solar_surplus_since = 0
-                            device_state.boiler_importing_since = 0
-                            plan.append("Boiler: OFF (no surplus for 5min)")
-                            return boiler_will_use, effective_headroom
-                    else:
-                        # Still in grace period
-                        plan.append(
-                            f"Boiler: HEATING ({int(actual_power)}W, "
-                            f"grace {int(grace_remaining)}s)"
-                        )
-                        boiler_will_use = actual_power
+                if elapsed >= SOLAR_SURPLUS_GRACE_PERIOD:
+                    # Grace period expired - turn off
+                    if can_switch('boiler', False):
+                        decisions.boiler.action = 'off'
+                        # Reset tracking
+                        device_state.boiler_solar_surplus_since = 0
+                        device_state.boiler_importing_since = 0
+                        plan.append("Boiler: OFF (no surplus for 5min)")
                         return boiler_will_use, effective_headroom
+                else:
+                    # Still in grace period
+                    plan.append(
+                        f"Boiler: HEATING ({int(actual_power)}W, "
+                        f"grace {int(grace_remaining)}s)"
+                    )
+                    boiler_will_use = actual_power
+                    return boiler_will_use, effective_headroom
 
             # Reset import timer if we have solar surplus again
             if has_solar_surplus and device_state:
