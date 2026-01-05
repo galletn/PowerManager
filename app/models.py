@@ -180,6 +180,18 @@ class AllDeviceStates:
     # Track total heating time in current night cycle (resets at midnight)
     boiler_heating_tonight_seconds: float = 0.0
     boiler_heating_night_date: str = ''  # Date string to detect day rollover
+    # Solar surplus tracking: timestamp when device was turned on due to solar surplus
+    # Used to implement grace period before turning off (avoid ping-pong)
+    boiler_solar_surplus_since: float = 0.0
+    dishwasher_solar_surplus_since: float = 0.0
+    heater_right_solar_surplus_since: float = 0.0
+    heater_table_solar_surplus_since: float = 0.0
+    # Timestamp when we started importing (no solar surplus) while device is on
+    # Used to turn off device after grace period of sustained import
+    boiler_importing_since: float = 0.0
+    dishwasher_importing_since: float = 0.0
+    heater_right_importing_since: float = 0.0
+    heater_table_importing_since: float = 0.0
 
 
 @dataclass

@@ -23,6 +23,10 @@ MIN_SOLAR_SURPLUS = 500
 MAX_GRID_IMPORT_FOR_EV = 1000
 DW_RUNNING_THRESHOLD = 50
 
+# Grace period before turning off solar surplus devices (seconds)
+# Prevents ping-pong when solar output fluctuates
+SOLAR_SURPLUS_GRACE_PERIOD = 300  # 5 minutes
+
 
 def calculate_ev_hours_needed(inputs: PowerInputs, config: Config) -> float:
     """Calculate hours needed for EV to reach 80% SoC.
@@ -609,15 +613,23 @@ def _handle_boiler_winter(
         wants_to_heat = False
         reason = ""
 
+        # Track if turning on due to solar surplus (for grace period tracking)
+        is_solar_reason = False
+
         if tariff == 'super-off-peak':
             wants_to_heat = True
             reason = "super-off-peak"
         elif has_solar_surplus:
             wants_to_heat = True
             reason = f"solar ({int(p1_return)}W export)"
+            is_solar_reason = True
         elif approaching_deadline and tariff in ('off-peak', 'super-off-peak'):
             wants_to_heat = True
             reason = "approaching deadline"
+
+        # Get device_state for solar surplus tracking
+        device_state = ctx.get('device_state')
+        now_ts = ctx.get('now', 0)
 
         # BOILER HAS #1 PRIORITY - if it wants to heat but not enough power,
         # we'll turn off other devices later (EV, table heater)
@@ -626,6 +638,10 @@ def _handle_boiler_winter(
                 decisions.boiler.action = 'on'
                 boiler_will_use = config.boiler.power
                 effective_headroom -= boiler_will_use
+                # Track solar surplus turn-on for grace period
+                if is_solar_reason and device_state:
+                    device_state.boiler_solar_surplus_since = now_ts
+                    device_state.boiler_importing_since = 0  # Reset import timer
                 if not enough_power:
                     # We're turning on despite low headroom - will shed load later
                     plan.append(f"Boiler: ON ({reason}, shedding load)")
@@ -635,9 +651,49 @@ def _handle_boiler_winter(
                 # Hysteresis blocking - log it
                 plan.append("Boiler: BLOCKED (hysteresis)")
         elif ctx['boiler_on']:
-            # Boiler already on - its power is already in the grid import reading
-            # so headroom already accounts for it. DON'T subtract again!
+            # Boiler already on - check if we should turn it OFF
             actual_power = ctx.get('boiler_power', 0)
+
+            # During off-peak (not super-off-peak), turn off if no reason to heat
+            # BUT only after grace period to avoid ping-pong
+            if tariff == 'off-peak' and not wants_to_heat and device_state:
+                # Was this boiler turned on due to solar surplus?
+                was_solar_surplus = device_state.boiler_solar_surplus_since > 0
+
+                if was_solar_surplus:
+                    # Start or continue tracking import time
+                    if device_state.boiler_importing_since == 0:
+                        device_state.boiler_importing_since = now_ts
+                        elapsed = 0
+                    else:
+                        elapsed = (now_ts - device_state.boiler_importing_since) / 1000
+
+                    grace_remaining = SOLAR_SURPLUS_GRACE_PERIOD - elapsed
+
+                    if elapsed >= SOLAR_SURPLUS_GRACE_PERIOD:
+                        # Grace period expired - turn off
+                        if can_switch('boiler', False):
+                            decisions.boiler.action = 'off'
+                            # Reset tracking
+                            device_state.boiler_solar_surplus_since = 0
+                            device_state.boiler_importing_since = 0
+                            plan.append("Boiler: OFF (no surplus for 5min)")
+                            return boiler_will_use, effective_headroom
+                    else:
+                        # Still in grace period
+                        plan.append(
+                            f"Boiler: HEATING ({int(actual_power)}W, "
+                            f"grace {int(grace_remaining)}s)"
+                        )
+                        boiler_will_use = actual_power
+                        return boiler_will_use, effective_headroom
+
+            # Reset import timer if we have solar surplus again
+            if has_solar_surplus and device_state:
+                device_state.boiler_importing_since = 0
+
+            # Boiler staying on - its power is already in the grid import reading
+            # so headroom already accounts for it. DON'T subtract again!
             if actual_power < config.boiler.idle_threshold:
                 # Boiler is idle (low power) - not consuming much
                 boiler_will_use = 0
