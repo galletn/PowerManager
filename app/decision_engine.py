@@ -378,8 +378,11 @@ def calculate_decisions(
     _apply_manual_overrides(decisions, plan, ovr, {
         'ev_plugged': ev_plugged,
         'ev_limit': ev_limit,
+        'ev_charging': ev_charging,
+        'ev_power': ev_power,
         'boiler_on': boiler_on,
         'config': config,
+        'headroom': headroom,
     })
 
     # Force boiler
@@ -511,11 +514,22 @@ def calculate_decisions(
 
 def _apply_manual_overrides(decisions: Decisions, plan: list, ovr: dict, ctx: dict):
     """Apply manual override decisions."""
-    # EV override
+    # EV override - force ON but respect available headroom
     if ovr['ev'] == 'on' and ctx['ev_plugged']:
+        config = ctx['config']
+        headroom = ctx.get('headroom', 0)
+
+        # If already charging, current EV power is in p1, so add it back to headroom
+        current_ev_watts = ctx.get('ev_power', 0) if ctx.get('ev_charging') else 0
+        total_for_ev = headroom + current_ev_watts
+
+        # Calculate amps based on available headroom
+        available_amps = calculate_available_amps(total_for_ev, config.ev.watts_per_amp)
+        target_amps = max(config.ev.min_amps, min(available_amps, config.ev.max_amps))
+
         decisions.ev.action = 'on'
-        decisions.ev.amps = ctx['config'].ev.max_amps
-        plan.append(f"EV: OVERRIDE ON ({decisions.ev.amps}A)")
+        decisions.ev.amps = target_amps
+        plan.append(f"EV: OVERRIDE ON ({target_amps}A, headroom {int(total_for_ev)}W)")
     elif ovr['ev'] == 'off':
         decisions.ev.action = 'off'
         plan.append("EV: OVERRIDE OFF")
