@@ -973,18 +973,17 @@ async def set_override(device: str, mode: str):
         'ac_mancave': entities.ovr_ac_mancave,
     }
 
-    # Map API mode to HA input_select option (capitalized, device-specific)
-    # HA helpers use: "Auto", "On"/"Charge"/"Heat", "Off"
+    # Map API mode to HA input_select option (Dutch labels with emojis)
     mode_map = {
-        'ev': {'auto': 'Auto', 'on': 'Charge', 'off': 'Off'},
-        'boiler': {'auto': 'Auto', 'on': 'On', 'off': 'Off'},
-        'pool': {'auto': 'Auto', 'on': 'Heat', 'off': 'Off'},
-        'table_heater': {'auto': 'Auto', 'on': 'On', 'off': 'Off'},
-        'dishwasher': {'auto': 'Auto', 'on': 'Run', 'off': 'Off'},
-        'ac_living': {'auto': 'Auto', 'on': 'Heat', 'off': 'Off'},
-        'ac_bedroom': {'auto': 'Auto', 'on': 'Heat', 'off': 'Off'},
-        'ac_office': {'auto': 'Auto', 'on': 'Heat', 'off': 'Off'},
-        'ac_mancave': {'auto': 'Auto', 'on': 'Heat', 'off': 'Off'},
+        'ev': {'auto': '🤖 Auto', 'on': '⚡ Laden', 'off': '⏹️ Uit'},
+        'boiler': {'auto': '🤖 Auto', 'on': '🔥 Aan', 'off': '⏹️ Uit'},
+        'pool': {'auto': '🤖 Auto', 'on': '🔥 Aan', 'off': '⏹️ Uit'},
+        'table_heater': {'auto': '🤖 Auto', 'on': '🔥 Aan', 'off': '⏹️ Uit'},
+        'dishwasher': {'auto': '🤖 Auto', 'on': '▶️ Start', 'off': '⏹️ Uit'},
+        'ac_living': {'auto': '🤖 Auto', 'on': '🔥 Aan', 'off': '⏹️ Uit'},
+        'ac_bedroom': {'auto': '🤖 Auto', 'on': '🔥 Aan', 'off': '⏹️ Uit'},
+        'ac_office': {'auto': '🤖 Auto', 'on': '🔥 Aan', 'off': '⏹️ Uit'},
+        'ac_mancave': {'auto': '🤖 Auto', 'on': '🔥 Aan', 'off': '⏹️ Uit'},
     }
 
     ha_mode = mode_map.get(device, {}).get(mode, mode.capitalize())

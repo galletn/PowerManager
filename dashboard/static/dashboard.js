@@ -903,11 +903,11 @@ function updateEvOverrideButtons(overrideState) {
     const container = document.getElementById('ev-override-buttons');
     if (!container) return;
 
-    // Map HA state to button mode
+    // Map HA state (Dutch with emojis) to button mode
     const stateToMode = {
-        'Auto': 'auto',
-        'Charge': 'on',
-        'Off': 'off'
+        '🤖 Auto': 'auto',
+        '⚡ Laden': 'on',
+        '⏹️ Uit': 'off'
     };
 
     const activeMode = stateToMode[overrideState] || 'auto';
