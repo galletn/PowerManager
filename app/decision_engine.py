@@ -109,12 +109,25 @@ def can_switch_device(
 
 
 def parse_override(value: str) -> str:
-    """Parse override value to standard format."""
-    if not value or value.lower() in ('', 'auto', 'automatic'):
+    """Parse override value to standard format.
+
+    Handles various formats including Dutch labels with emojis:
+    - Auto: 'auto', '🤖 Auto', etc.
+    - On: 'on', 'aan', '🔥 Aan', '⚡ Laden', '▶️ Start', etc.
+    - Off: 'off', 'uit', '⏹️ Uit', etc.
+    """
+    if not value:
         return 'auto'
-    if value.lower() in ('on', 'aan', 'force_on', 'force on'):
+    v = value.lower().strip()
+    # Check for auto patterns
+    if v in ('', 'auto', 'automatic') or 'auto' in v:
+        return 'auto'
+    # Check for on/active patterns (includes Dutch: aan, laden, start)
+    if v in ('on', 'aan', 'force_on', 'force on', 'laden', 'start') or \
+       'aan' in v or 'laden' in v or 'start' in v:
         return 'on'
-    if value.lower() in ('off', 'uit', 'force_off', 'force off'):
+    # Check for off patterns (includes Dutch: uit)
+    if v in ('off', 'uit', 'force_off', 'force off') or 'uit' in v:
         return 'off'
     return 'auto'
 
