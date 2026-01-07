@@ -101,6 +101,8 @@ class PowerInputs:
     bmw_i5_target_soc: Optional[int] = None
     bmw_i5_mileage: Optional[int] = None
     bmw_i5_time_to_full: Optional[float] = None
+    bmw_i5_charging_soc: Optional[float] = None  # Only valid during charging
+    bmw_i5_charging_range: Optional[float] = None  # Only valid during charging
 
     # BMW Cars - iX1 eDrive20
     bmw_ix1_battery: Optional[float] = None
@@ -112,6 +114,8 @@ class PowerInputs:
     bmw_ix1_target_soc: Optional[int] = None
     bmw_ix1_mileage: Optional[int] = None
     bmw_ix1_time_to_full: Optional[float] = None
+    bmw_ix1_charging_soc: Optional[float] = None  # Only valid during charging
+    bmw_ix1_charging_range: Optional[float] = None  # Only valid during charging
 
 
 @dataclass

@@ -186,6 +186,9 @@ class EntitiesConfig:
     bmw_i5_target_soc: str = "sensor.i5_edrive40_battery_ev_target_state_of_charge"
     bmw_i5_mileage: str = "sensor.i5_edrive40_vehicle_mileage"
     bmw_i5_time_to_full: str = "sensor.i5_edrive40_charging_ev_time_to_full_charge"
+    # i5 charging-specific sensors (only valid during charging)
+    bmw_i5_charging_soc: str = "sensor.i5_edrive40_charging_ev_predicted_state_of_charge"
+    bmw_i5_charging_range: str = "sensor.i5_edrive40_range_ev_estimate_during_charging"
 
     # BMW Cars - iX1 eDrive20
     bmw_ix1_battery: str = "sensor.ix1_edrive20_battery_hv_state_of_charge"
@@ -197,6 +200,9 @@ class EntitiesConfig:
     bmw_ix1_target_soc: str = "sensor.ix1_edrive20_battery_ev_target_state_of_charge"
     bmw_ix1_mileage: str = "sensor.ix1_edrive20_vehicle_mileage"
     bmw_ix1_time_to_full: str = "sensor.ix1_edrive20_charging_ev_time_to_full_charge"
+    # iX1 charging-specific sensors (only valid during charging)
+    bmw_ix1_charging_soc: str = "sensor.ix1_edrive20_charging_ev_predicted_state_of_charge"
+    bmw_ix1_charging_range: str = "sensor.ix1_edrive20_range_ev_estimate_during_charging"
 
     # Sun and weather for dashboard icons
     sun: str = "sun.sun"

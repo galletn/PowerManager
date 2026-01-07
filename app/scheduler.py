@@ -221,14 +221,25 @@ def generate_schedule(
                           inputs.bmw_i5_charging_state == 'CHARGINGACTIVE')
             ix1_plugged = (inputs.bmw_ix1_plug_state == 'CONNECTED' or
                            inputs.bmw_ix1_charging_state == 'CHARGINGACTIVE')
+            i5_charging = inputs.bmw_i5_charging_state == 'CHARGINGACTIVE'
+            ix1_charging = inputs.bmw_ix1_charging_state == 'CHARGINGACTIVE'
 
             # Prefer the car that is actually plugged in
+            # Use charging-specific SOC sensors when actively charging (more accurate)
             if ix1_plugged and inputs.bmw_ix1_battery:
-                car_battery = inputs.bmw_ix1_battery
+                # Use charging SOC if available and charging, otherwise regular battery
+                if ix1_charging and inputs.bmw_ix1_charging_soc:
+                    car_battery = inputs.bmw_ix1_charging_soc
+                else:
+                    car_battery = inputs.bmw_ix1_battery
                 car_capacity = 65  # BMW iX1 eDrive20
                 car_target_soc = inputs.bmw_ix1_target_soc or 80
             elif i5_plugged and inputs.bmw_i5_battery:
-                car_battery = inputs.bmw_i5_battery
+                # Use charging SOC if available and charging, otherwise regular battery
+                if i5_charging and inputs.bmw_i5_charging_soc:
+                    car_battery = inputs.bmw_i5_charging_soc
+                else:
+                    car_battery = inputs.bmw_i5_battery
                 car_capacity = 84  # BMW i5 eDrive40
                 car_target_soc = inputs.bmw_i5_target_soc or 80
             # Fallback to location-based if no plug state detected

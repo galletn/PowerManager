@@ -485,6 +485,8 @@ class HAClient:
             bmw_i5_target_soc=get_int(e.bmw_i5_target_soc),
             bmw_i5_mileage=get_int(e.bmw_i5_mileage),
             bmw_i5_time_to_full=get_num(e.bmw_i5_time_to_full),
+            bmw_i5_charging_soc=get_num(e.bmw_i5_charging_soc),
+            bmw_i5_charging_range=get_num(e.bmw_i5_charging_range),
 
             # BMW Cars - iX1 eDrive20
             bmw_ix1_battery=get_num(e.bmw_ix1_battery),
@@ -496,4 +498,6 @@ class HAClient:
             bmw_ix1_target_soc=get_int(e.bmw_ix1_target_soc),
             bmw_ix1_mileage=get_int(e.bmw_ix1_mileage),
             bmw_ix1_time_to_full=get_num(e.bmw_ix1_time_to_full),
+            bmw_ix1_charging_soc=get_num(e.bmw_ix1_charging_soc),
+            bmw_ix1_charging_range=get_num(e.bmw_ix1_charging_range),
         )
