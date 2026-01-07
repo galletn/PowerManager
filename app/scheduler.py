@@ -211,11 +211,25 @@ def generate_schedule(
             ) or inputs.ev_power > 500
         )
         if ev_connected:
-            # Determine which car is plugged in based on location
+            # Determine which car is plugged in by checking plug_state/charging_state
+            # Priority: actually plugged in > actively charging > at home
             car_battery = None
             car_capacity = 84  # Default BMW i5
 
-            if inputs.bmw_i5_location == 'home' and inputs.bmw_i5_battery:
+            i5_plugged = (inputs.bmw_i5_plug_state == 'CONNECTED' or
+                          inputs.bmw_i5_charging_state == 'CHARGINGACTIVE')
+            ix1_plugged = (inputs.bmw_ix1_plug_state == 'CONNECTED' or
+                           inputs.bmw_ix1_charging_state == 'CHARGINGACTIVE')
+
+            # Prefer the car that is actually plugged in
+            if ix1_plugged and inputs.bmw_ix1_battery:
+                car_battery = inputs.bmw_ix1_battery
+                car_capacity = 65  # BMW iX1 eDrive20
+            elif i5_plugged and inputs.bmw_i5_battery:
+                car_battery = inputs.bmw_i5_battery
+                car_capacity = 84  # BMW i5 eDrive40
+            # Fallback to location-based if no plug state detected
+            elif inputs.bmw_i5_location == 'home' and inputs.bmw_i5_battery:
                 car_battery = inputs.bmw_i5_battery
                 car_capacity = 84  # BMW i5 eDrive40
             elif inputs.bmw_ix1_location == 'home' and inputs.bmw_ix1_battery:
