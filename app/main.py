@@ -703,7 +703,8 @@ async def get_status():
                 "decision": (
                     last_decisions.ev.action if last_decisions else "none"
                 ),
-                "last_charged": ev_last_charged
+                "last_charged": ev_last_charged,
+                "override": last_inputs.ovr_ev
             },
             "pool_pump": {
                 "state": last_inputs.pool_pump_switch,

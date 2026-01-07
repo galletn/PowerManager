@@ -223,6 +223,59 @@ window.POWER_MANAGER_API = 'https://192.168.68.78:8081';
 
 **Maintenance**: When updating `dashboard/static/dashboard.js`, copy it to HA's www folder again.
 
+## Solar Surplus & Ping-Pong Protection
+
+Devices can turn ON opportunistically when there's solar surplus (exporting to grid). To prevent rapid ON/OFF cycling when solar output fluctuates, the system implements multiple protection mechanisms.
+
+### Solar Surplus Detection
+
+A device is eligible for solar surplus activation when:
+- Grid is exporting power (`p1_return > 0`)
+- Export exceeds device-specific threshold (e.g., `MIN_EXPORT_FOR_BOILER = 500W`)
+
+### Grace Period (Turning OFF)
+
+When a device is ON due to solar surplus and the surplus disappears:
+- System starts tracking import time (`*_importing_since` timestamp)
+- Device stays ON for a **5-minute grace period** (`SOLAR_SURPLUS_GRACE_PERIOD = 300`)
+- If solar surplus returns within grace period, the timer resets
+- After 5 minutes of sustained import, device turns OFF
+- Dashboard shows countdown: `"Boiler: HEATING (2000W, grace 180s)"`
+
+### Hysteresis (Rapid Cycling Prevention)
+
+Additional protection via `config.yaml` hysteresis settings:
+
+| Setting | Value | Description |
+|---------|-------|-------------|
+| `min_on_time` | 300s (5 min) | Device must stay ON before it can turn OFF |
+| `min_off_time` | 180s (3 min) | Device must stay OFF before it can turn ON |
+
+### Combined Protection Table
+
+| Transition | Protection | Duration |
+|------------|------------|----------|
+| ON → OFF | Grace period | 5 minutes of sustained import |
+| OFF → ON | Hysteresis | 3 minutes minimum off time |
+| Stay ON | Hysteresis | 5 minutes minimum on time |
+
+### State Tracking Fields
+
+In `app/models.py`, `AllDeviceStates` tracks:
+```python
+# When device turned ON due to solar surplus
+boiler_solar_surplus_since: float = 0.0
+dishwasher_solar_surplus_since: float = 0.0
+heater_right_solar_surplus_since: float = 0.0
+heater_table_solar_surplus_since: float = 0.0
+
+# When device started importing (no surplus) while ON
+boiler_importing_since: float = 0.0
+dishwasher_importing_since: float = 0.0
+heater_right_importing_since: float = 0.0
+heater_table_importing_since: float = 0.0
+```
+
 ## Notes
 
 - The application uses no database - all state comes from Home Assistant

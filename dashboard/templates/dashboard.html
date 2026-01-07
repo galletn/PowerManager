@@ -169,7 +169,17 @@
 
                 <!-- Cars Section -->
                 <section class="cars-section">
-                    <h2>Electric Vehicles</h2>
+                    <div class="section-header">
+                        <h2>Electric Vehicles</h2>
+                        <div class="ev-override-control">
+                            <span class="override-label">Charger:</span>
+                            <div class="override-buttons" id="ev-override-buttons">
+                                <button class="override-btn" data-mode="auto" onclick="setOverride('ev', 'auto')">Auto</button>
+                                <button class="override-btn" data-mode="on" onclick="setOverride('ev', 'on')">Charge</button>
+                                <button class="override-btn" data-mode="off" onclick="setOverride('ev', 'off')">Off</button>
+                            </div>
+                        </div>
+                    </div>
                     <div class="cars-grid">
                         <!-- BMW i5 -->
                         <div class="car-card" id="car-i5">

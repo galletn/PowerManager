@@ -735,6 +735,9 @@ function updateDashboard(data) {
 
             const evDevice = document.getElementById('device-ev');
             if (evDevice) evDevice.classList.toggle('active', isCharging);
+
+            // Update EV override buttons
+            updateEvOverrideButtons(data.devices.ev.override);
         }
 
         // Pool Pump
@@ -893,6 +896,26 @@ async function setOverride(device, mode) {
         console.error('Failed to set override:', error);
         alert(`Failed to set ${device} to ${mode}: ${error.message}`);
     }
+}
+
+// Update EV override button states
+function updateEvOverrideButtons(overrideState) {
+    const container = document.getElementById('ev-override-buttons');
+    if (!container) return;
+
+    // Map HA state to button mode
+    const stateToMode = {
+        'Auto': 'auto',
+        'Charge': 'on',
+        'Off': 'off'
+    };
+
+    const activeMode = stateToMode[overrideState] || 'auto';
+
+    container.querySelectorAll('.override-btn').forEach(btn => {
+        const mode = btn.getAttribute('data-mode');
+        btn.classList.toggle('active', mode === activeMode);
+    });
 }
 
 // Toggle settings panel

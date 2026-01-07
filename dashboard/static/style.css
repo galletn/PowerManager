@@ -1239,7 +1239,61 @@ h2 {
 }
 
 .cars-section h2 {
+    margin-bottom: 0;
+}
+
+.cars-section .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     margin-bottom: 16px;
+}
+
+.ev-override-control {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.override-label {
+    font-size: 13px;
+    color: var(--ha-text-secondary);
+}
+
+.override-buttons {
+    display: flex;
+    gap: 4px;
+}
+
+.override-btn {
+    padding: 4px 12px;
+    border: 1px solid var(--ha-divider);
+    border-radius: 16px;
+    background: var(--ha-card-background);
+    color: var(--ha-text-secondary);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.override-btn:hover {
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.override-btn.active {
+    background: var(--ha-primary-color);
+    color: #fff;
+    border-color: var(--ha-primary-color);
+}
+
+.override-btn.active[data-mode="on"] {
+    background: var(--ha-success);
+    border-color: var(--ha-success);
+}
+
+.override-btn.active[data-mode="off"] {
+    background: var(--ha-state-off);
+    border-color: var(--ha-state-off);
 }
 
 .cars-grid {
