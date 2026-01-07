@@ -242,16 +242,18 @@ def generate_schedule(
                 car_target_soc = inputs.bmw_ix1_target_soc or 80
 
             if car_battery is not None:
-                # Calculate realistic charging power based on:
-                # 1. EV charger max power (max_amps × watts_per_amp)
-                # 2. Grid limit during super-off-peak minus buffer for other loads
-                charger_max_kw = config.ev.max_amps * config.ev.watts_per_amp / 1000
-                # Use winter limit (9kW) or summer limit (8kW)
-                grid_limit_kw = get_max_import('super-off-peak', config, now) / 1000
-                base_load_buffer_kw = 0.5  # 500W for house base load
-                # Effective = min of charger capability and grid headroom
-                # e.g., min(11kW, 8kW - 0.5kW) = 7.5kW
-                effective_charging_kw = min(charger_max_kw, grid_limit_kw - base_load_buffer_kw)
+                # Use actual current charging power if actively charging,
+                # otherwise estimate based on charger capability and grid limits
+                if inputs.ev_power and inputs.ev_power > 500:
+                    # Currently charging - use actual power for realistic estimate
+                    effective_charging_kw = inputs.ev_power / 1000
+                else:
+                    # Not charging - estimate based on super-off-peak limits
+                    charger_max_kw = config.ev.max_amps * config.ev.watts_per_amp / 1000
+                    grid_limit_kw = get_max_import('super-off-peak', config, now) / 1000
+                    base_load_buffer_kw = 0.5  # 500W for house base load
+                    effective_charging_kw = min(charger_max_kw, grid_limit_kw - base_load_buffer_kw)
+
                 ev_estimate = calculate_ev_charging_needs(
                     car_battery, car_target_soc, car_capacity, effective_charging_kw
                 )
