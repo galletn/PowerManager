@@ -329,17 +329,32 @@ def generate_schedule(
     # EV charging - check if actively charging NOW or needs scheduling later
     ev_currently_charging = inputs and inputs.ev_power > 500
 
-    if ev_currently_charging:
-        # EV is actively charging NOW - show on timeline from current time
-        # Estimate remaining hours based on battery level if available
+    # Check if EV override is set to 'on' (force charge)
+    # Parse override value (handles Dutch labels like "⚡ Laden")
+    ev_override_on = False
+    if inputs and inputs.ovr_ev:
+        ovr_val = inputs.ovr_ev.lower()
+        ev_override_on = 'aan' in ovr_val or 'laden' in ovr_val or ovr_val in ('on', 'charge')
+
+    if ev_currently_charging or ev_override_on:
+        # EV override is ON or actively charging - show continuous from current time
+        # Don't split across tariff zones when manually forcing charge
         remaining_hours = ev_estimate.get('hours_needed', 2) if ev_estimate.get('needed') else 1
+
+        # Use actual power if charging, otherwise estimate based on current headroom
+        if inputs.ev_power and inputs.ev_power > 500:
+            ev_power = int(inputs.ev_power)
+        else:
+            # Not charging yet - estimate power (will be at min amps during peak)
+            ev_power = config.ev.min_amps * config.ev.watts_per_amp
+
         devices.append(DeviceNeed(
             name='ev',
-            power=int(inputs.ev_power),
+            power=ev_power,
             hours_needed=max(remaining_hours, 0.5),  # At least 30 min shown
             priority=3,
-            can_run_during_peak=True,  # If it's running now, let it continue
-            start_now=True  # Show from current time
+            can_run_during_peak=True,  # Override allows any tariff
+            start_now=True  # Show continuous from current time
         ))
     elif ev_estimate.get('needed'):
         # EV needs charging later - schedule during cheap tariff
