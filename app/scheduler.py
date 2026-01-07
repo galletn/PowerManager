@@ -215,6 +215,7 @@ def generate_schedule(
             # Priority: actually plugged in > actively charging > at home
             car_battery = None
             car_capacity = 84  # Default BMW i5
+            car_target_soc = 80  # Default target
 
             i5_plugged = (inputs.bmw_i5_plug_state == 'CONNECTED' or
                           inputs.bmw_i5_charging_state == 'CHARGINGACTIVE')
@@ -225,16 +226,20 @@ def generate_schedule(
             if ix1_plugged and inputs.bmw_ix1_battery:
                 car_battery = inputs.bmw_ix1_battery
                 car_capacity = 65  # BMW iX1 eDrive20
+                car_target_soc = inputs.bmw_ix1_target_soc or 80
             elif i5_plugged and inputs.bmw_i5_battery:
                 car_battery = inputs.bmw_i5_battery
                 car_capacity = 84  # BMW i5 eDrive40
+                car_target_soc = inputs.bmw_i5_target_soc or 80
             # Fallback to location-based if no plug state detected
             elif inputs.bmw_i5_location == 'home' and inputs.bmw_i5_battery:
                 car_battery = inputs.bmw_i5_battery
                 car_capacity = 84  # BMW i5 eDrive40
+                car_target_soc = inputs.bmw_i5_target_soc or 80
             elif inputs.bmw_ix1_location == 'home' and inputs.bmw_ix1_battery:
                 car_battery = inputs.bmw_ix1_battery
                 car_capacity = 65  # BMW iX1 eDrive20
+                car_target_soc = inputs.bmw_ix1_target_soc or 80
 
             if car_battery is not None:
                 # Calculate realistic charging power based on:
@@ -248,7 +253,7 @@ def generate_schedule(
                 # e.g., min(11kW, 8kW - 0.5kW) = 7.5kW
                 effective_charging_kw = min(charger_max_kw, grid_limit_kw - base_load_buffer_kw)
                 ev_estimate = calculate_ev_charging_needs(
-                    car_battery, 80, car_capacity, effective_charging_kw
+                    car_battery, car_target_soc, car_capacity, effective_charging_kw
                 )
 
         # Boiler needs
