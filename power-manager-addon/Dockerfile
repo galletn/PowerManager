@@ -1,5 +1,4 @@
-ARG BUILD_FROM=python:3.12-alpine
-FROM ${BUILD_FROM}
+FROM python:3.12-alpine
 
 # Install git for cloning the repo
 RUN apk add --no-cache git
