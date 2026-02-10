@@ -10,8 +10,8 @@ __pycache__/
 *.pyo
 .pytest_cache/
 
-# Config
-config.yaml
+# Config (root only - contains HA token)
+/config.yaml
 
 # SSL certificates (never commit these!)
 ssl/
