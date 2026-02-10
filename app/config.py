@@ -276,6 +276,8 @@ def load_config(config_path: Optional[str] = None) -> Config:
         config.home_assistant.url = os.environ["HA_URL"]
     if os.environ.get("HA_TOKEN"):
         config.home_assistant.token = os.environ["HA_TOKEN"]
+    if os.environ.get("PORT"):
+        config.port = int(os.environ["PORT"])
 
     # Validate configuration
     if not config.home_assistant.token:
