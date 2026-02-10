@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/sh
 set -e
 
 # HA connection via Supervisor internal API (automatic in add-ons)
