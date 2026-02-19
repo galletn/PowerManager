@@ -920,10 +920,13 @@ def _handle_heaters_winter(
                     decisions.heater_table.action = 'on'
                     reason = "solar" if has_solar_for_table else "super-off-peak"
                     plan.append(f"Table heater: ON ({reason})")
-            elif ht_on and remaining < table_power - hyst and not has_solar_for_table:
+            elif ht_on and remaining < -hyst and not has_solar_for_table:
+                # Only shed table heater if we're actually over the grid limit.
+                # Table heater power is already in net_p1, so remaining < 0 means
+                # total consumption exceeds max_import.
                 if can_switch('heater_table', False):
                     decisions.heater_table.action = 'off'
-                    plan.append("Table heater: OFF (capacity needed)")
+                    plan.append("Table heater: OFF (grid limit exceeded)")
         elif tariff == 'off-peak' and ht_on and not has_solar_for_table:
             if can_switch('heater_table', False):
                 decisions.heater_table.action = 'off'
