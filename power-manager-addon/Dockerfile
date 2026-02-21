@@ -4,6 +4,8 @@ FROM python:3.12-alpine
 RUN apk add --no-cache git
 
 # Clone the Power Manager repository
+# Change CACHE_BUST value to force fresh clone (Docker caches RUN layers)
+ARG CACHE_BUST=1.0.6
 RUN git clone https://github.com/galletn/PowerManager.git /opt/power-manager
 
 WORKDIR /opt/power-manager
