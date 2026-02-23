@@ -7,6 +7,7 @@ Provides REST API, dashboard, and scheduled decision loop.
 
 import asyncio
 import logging
+import os
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -70,6 +71,8 @@ class AppState:
         last_alerts: List of alert dicts (level, message) for dashboard.
         last_update: Timestamp of last successful decision loop iteration.
         last_ha_states: Cached dict of all HA entity states for API endpoints.
+        last_schedule: Cached 24-hour schedule generated in decision loop.
+        last_timetable: Cached timetable data generated in decision loop.
         running: Flag to control the decision loop lifecycle.
         alert_cooldowns: Maps alert keys to timestamps to prevent spam.
     """
@@ -82,6 +85,8 @@ class AppState:
     last_alerts: list[dict] = field(default_factory=list)
     last_update: Optional[datetime] = None
     last_ha_states: Optional[dict] = None
+    last_schedule: Optional[list] = None
+    last_timetable: Optional[dict] = None
     running: bool = False
     alert_cooldowns: dict[str, datetime] = field(default_factory=dict)
     pending_commands: dict[str, PendingCommand] = field(default_factory=dict)
@@ -390,6 +395,13 @@ async def decision_loop():
             # Update device state using confirmed states from HA API
             _update_device_state(inputs, confirmed_states)
 
+            # Cache schedule and timetable for /api/status (avoid recomputing per request)
+            now = datetime.now()
+            app_state.last_schedule = generate_24h_schedule(
+                now, app_state.config, inputs
+            )
+            app_state.last_timetable = _get_timetable_data()
+
             if app_state.config.debug:
                 logger.debug(f"Plan: {result.plan}")
 
@@ -601,9 +613,13 @@ async def dashboard(request: Request):
     if templates is None:
         return HTMLResponse("<h1>Dashboard not configured</h1><p>Templates directory not found.</p>")
 
+    # Detect ingress mode: use relative URLs behind HA ingress proxy
+    is_ingress = bool(os.environ.get("SUPERVISOR_TOKEN"))
     return templates.TemplateResponse("dashboard.html", {
         "request": request,
-        "title": "Power Manager"
+        "title": "Power Manager",
+        "static_prefix": "static/" if is_ingress else "/static/",
+        "api_base": "." if is_ingress else "",
     })
 
 
@@ -648,8 +664,9 @@ async def get_status():
     if last_inputs is None:
         return JSONResponse({"error": "No data yet"}, status_code=503)
 
-    # Get consumer power values
-    consumers = await _get_consumers_data()
+    # Get consumer power values (use cached HA states, no extra API call)
+    ha_states = app_state.last_ha_states or {}
+    consumers = _get_consumers_data(states=ha_states)
 
     # Calculate table heater power
     table_heater_power = 0
@@ -661,8 +678,7 @@ async def get_status():
     p1_return = last_inputs.p1_return if last_inputs.p1_return is not None else 0
     pv_power = last_inputs.pv_power if last_inputs.pv_power is not None else 0
 
-    # Get last_changed timestamps from raw HA states
-    ha_states = app_state.last_ha_states or {}
+    # Get last_changed timestamps from raw HA states (ha_states set above)
     ev_state_data = ha_states.get(config.entities.ev_state, {})
     boiler_state_data = ha_states.get(config.entities.boiler_switch, {})
 
@@ -763,8 +779,8 @@ async def get_status():
             app_state.last_update.isoformat()
             if app_state.last_update else None
         ),
-        "schedule_24h": generate_24h_schedule(datetime.now(), config, last_inputs),
-        "timetable": _get_timetable_data(),
+        "schedule_24h": app_state.last_schedule,
+        "timetable": app_state.last_timetable,
         "limits": {
             "peak": get_max_import("peak", config),
             "off_peak": get_max_import("off-peak", config),
@@ -825,17 +841,24 @@ def _get_environment_data():
         return None
 
 
-async def _get_consumers_data():
-    """Get power consumption data for all tracked consumers."""
+def _get_consumers_data(states: Optional[dict] = None):
+    """Get power consumption data for all tracked consumers.
+
+    Args:
+        states: Optional dict of HA entity states. If not provided, uses
+            the cached states from app_state.last_ha_states.
+            Returns None if no states are available.
+    """
     config = app_state.config
-    ha_client = app_state.ha_client
     last_inputs = app_state.last_inputs
 
-    if config is None or ha_client is None:
+    if states is None:
+        states = app_state.last_ha_states
+
+    if config is None or states is None:
         return None
 
     try:
-        states = await ha_client.get_all_states()
 
         def get_power(entity_id):
             state = states.get(entity_id, {})
@@ -1023,7 +1046,6 @@ async def health():
 async def get_limits():
     """Get current power limits."""
     config = app_state.config
-    ha_client = app_state.ha_client
 
     if config is None:
         return JSONResponse({"error": "Not initialized"}, status_code=503)
@@ -1036,7 +1058,7 @@ async def get_limits():
     }
 
     try:
-        states = await ha_client.get_all_states()
+        states = app_state.last_ha_states or {}
         entities = config.entities
 
         peak_state = states.get(entities.limit_peak, {})

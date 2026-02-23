@@ -12,10 +12,25 @@
 // or set window.POWER_MANAGER_API for standalone deployments
 const API_BASE_URL = window.POWER_MANAGER_API || '';
 
-const REFRESH_INTERVAL = 10000; // 10 seconds - matches well with 30s decision loop
+const REFRESH_INTERVAL = 30000; // 30 seconds - matches decision loop
+const MAX_BACKOFF = 120000; // 2 minutes max backoff on errors
+const AUTO_RELOAD_MS = 3600000; // 1 hour - full page reload to reclaim memory
+
+let consecutiveErrors = 0;
+let pollDebounceTimer = null;
 
 // Moon phase emojis (8 phases)
 const MOON_PHASES = ['🌑', '🌒', '🌓', '🌔', '🌕', '🌖', '🌗', '🌘'];
+
+// Cached DOM references (only caches non-null elements)
+const _dom = {};
+function $(id) {
+    let el = _dom[id];
+    if (el) return el;
+    el = document.getElementById(id);
+    if (el) _dom[id] = el;
+    return el;
+}
 
 // Get solar icon based on environment data
 function getSolarIcon(env) {
@@ -104,8 +119,8 @@ function updateCarCard(carId, carData) {
     const prefix = carId === 'i5' ? 'bmw-i5' : 'bmw-ix1';
 
     // Location badge
-    const locationBadge = document.getElementById(`${carId}-location-badge`);
-    const locationEl = document.getElementById(`${prefix}-location`);
+    const locationBadge = $(`${carId}-location-badge`);
+    const locationEl = $(`${prefix}-location`);
     const isHome = carData.location === 'home';
     if (locationEl) locationEl.textContent = isHome ? 'Home' : 'Away';
     if (locationBadge) {
@@ -118,7 +133,7 @@ function updateCarCard(carId, carData) {
     const batteryPercent = battery !== null ? Math.round(battery) : null;
     setTextIfExists(`${prefix}-battery`, batteryPercent !== null ? `${batteryPercent}%` : '--%');
 
-    const batteryFill = document.getElementById(`${carId}-battery-fill`);
+    const batteryFill = $(`${carId}-battery-fill`);
     if (batteryFill && batteryPercent !== null) {
         batteryFill.style.width = `${batteryPercent}%`;
         // Update color based on level
@@ -135,7 +150,7 @@ function updateCarCard(carId, carData) {
     // Target SOC
     const targetSoc = carData.target_soc;
     setTextIfExists(`${prefix}-target-soc`, targetSoc !== null ? `${targetSoc}%` : '--%');
-    const batteryTarget = document.getElementById(`${carId}-battery-target`);
+    const batteryTarget = $(`${carId}-battery-target`);
     if (batteryTarget && targetSoc !== null) {
         batteryTarget.style.left = `${targetSoc}%`;
     }
@@ -155,7 +170,7 @@ function updateCarCard(carId, carData) {
     const isPlugged = plugState === 'CONNECTED' || isCharging;
 
     // Update plug icon
-    const plugIcon = document.getElementById(`${carId}-plug-icon`);
+    const plugIcon = $(`${carId}-plug-icon`);
     if (plugIcon) {
         plugIcon.classList.remove('connected', 'charging');
         if (isCharging) {
@@ -170,7 +185,7 @@ function updateCarCard(carId, carData) {
     }
 
     // Update charging text
-    const chargingTextEl = document.getElementById(`${prefix}-charging-state`);
+    const chargingTextEl = $(`${prefix}-charging-state`);
     if (chargingTextEl) {
         let chargingText = 'Not plugged';
         if (isCharging) {
@@ -186,7 +201,7 @@ function updateCarCard(carId, carData) {
     }
 
     // Charging power section
-    const powerSection = document.getElementById(`${carId}-charging-power-section`);
+    const powerSection = $(`${carId}-charging-power-section`);
     if (powerSection) {
         if (isCharging && carData.charging_power) {
             powerSection.style.display = 'flex';
@@ -195,7 +210,7 @@ function updateCarCard(carId, carData) {
 
             // Time to full
             const timeToFull = carData.time_to_full;
-            const timeEl = document.getElementById(`${prefix}-time-to-full`);
+            const timeEl = $(`${prefix}-time-to-full`);
             if (timeEl && timeToFull !== null && timeToFull > 0) {
                 const hours = Math.floor(timeToFull / 60);
                 const mins = Math.round(timeToFull % 60);
@@ -215,7 +230,7 @@ function updateCarCard(carId, carData) {
 
 // Build the 24-hour tariff timeline
 function buildTimeline(schedule) {
-    const timeline = document.getElementById('tariff-timeline');
+    const timeline = $('tariff-timeline');
     if (!timeline || !schedule || !schedule.tariff_periods) return;
 
     // Clear existing
@@ -250,13 +265,13 @@ function updateSchedule(schedule) {
     if (!schedule) return;
 
     // Update season badge
-    const seasonBadge = document.getElementById('season-badge');
+    const seasonBadge = $('season-badge');
     if (seasonBadge) {
         seasonBadge.textContent = schedule.season.toUpperCase();
     }
 
     // Update tariff badge
-    const tariffBadge = document.getElementById('tariff-badge');
+    const tariffBadge = $('tariff-badge');
     if (tariffBadge && schedule.summary && schedule.summary.length > 0) {
         const nowTariff = schedule.summary[0].replace('Now: ', '').replace(' tariff', '');
         tariffBadge.textContent = nowTariff;
@@ -264,7 +279,7 @@ function updateSchedule(schedule) {
     }
 
     // Update next tariff
-    const nextTariff = document.getElementById('next-tariff');
+    const nextTariff = $('next-tariff');
     if (nextTariff && schedule.summary && schedule.summary.length > 1) {
         nextTariff.textContent = schedule.summary[1];
     }
@@ -273,7 +288,7 @@ function updateSchedule(schedule) {
     buildTimeline(schedule);
 
     // Update EV schedule
-    const evSchedule = document.getElementById('ev-schedule-list');
+    const evSchedule = $('ev-schedule-list');
     if (evSchedule && schedule.ev_plan) {
         if (schedule.ev_plan.length > 0) {
             evSchedule.innerHTML = schedule.ev_plan.map(plan =>
@@ -288,7 +303,7 @@ function updateSchedule(schedule) {
     }
 
     // Update Boiler schedule
-    const boilerSchedule = document.getElementById('boiler-schedule-list');
+    const boilerSchedule = $('boiler-schedule-list');
     if (boilerSchedule && schedule.boiler_plan) {
         if (schedule.boiler_plan.length > 0) {
             boilerSchedule.innerHTML = schedule.boiler_plan.map(plan =>
@@ -303,7 +318,7 @@ function updateSchedule(schedule) {
     }
 
     // Update status summary
-    const statusSummary = document.getElementById('status-summary');
+    const statusSummary = $('status-summary');
     if (statusSummary && schedule.summary) {
         statusSummary.innerHTML = schedule.summary.slice(2).map(item =>
             `<div class="summary-item">${item}</div>`
@@ -321,13 +336,13 @@ function buildDeviceTimelines(timetable, limits) {
     const scheduledHours = timetable.scheduled_hours || {};
 
     const devices = {
-        'ev': { bar: document.getElementById('ev-timeline'), label: document.getElementById('ev-power-label'), power: evPowerKw * 1000 },
-        'boiler': { bar: document.getElementById('boiler-timeline'), label: document.getElementById('boiler-power-label'), power: devicePowers.boiler || 2500 },
-        'table_heater': { bar: document.getElementById('heater-timeline'), label: document.getElementById('heater-power-label'), power: devicePowers.table_heater || 4100 },
-        'pool_pump': { bar: document.getElementById('pool-timeline'), label: document.getElementById('pool-power-label'), power: devicePowers.pool_pump || 100 },
-        'dishwasher': { bar: document.getElementById('dishwasher-timeline'), label: document.getElementById('dishwasher-power-label'), power: devicePowers.dishwasher || 1900 },
-        'washing_machine': { bar: document.getElementById('washing-machine-timeline'), label: document.getElementById('washing-machine-power-label'), power: 2000 },
-        'tumble_dryer': { bar: document.getElementById('tumble-dryer-timeline'), label: document.getElementById('tumble-dryer-power-label'), power: 2500 }
+        'ev': { bar: $('ev-timeline'), label: $('ev-power-label'), power: evPowerKw * 1000 },
+        'boiler': { bar: $('boiler-timeline'), label: $('boiler-power-label'), power: devicePowers.boiler || 2500 },
+        'table_heater': { bar: $('heater-timeline'), label: $('heater-power-label'), power: devicePowers.table_heater || 4100 },
+        'pool_pump': { bar: $('pool-timeline'), label: $('pool-power-label'), power: devicePowers.pool_pump || 100 },
+        'dishwasher': { bar: $('dishwasher-timeline'), label: $('dishwasher-power-label'), power: devicePowers.dishwasher || 1900 },
+        'washing_machine': { bar: $('washing-machine-timeline'), label: $('washing-machine-power-label'), power: 2000 },
+        'tumble_dryer': { bar: $('tumble-dryer-timeline'), label: $('tumble-dryer-power-label'), power: 2500 }
     };
 
     const hours = timetable.hourly.slice(0, 24);
@@ -349,66 +364,69 @@ function buildDeviceTimelines(timetable, limits) {
         }
     });
 
-    // Build activity array for each device
+    // Build/update activity segments for each device (reuse DOM nodes)
+    const widthPercent = (1 / totalHours) * 100;
+    const widthStr = `${widthPercent}%`;
+
     Object.keys(devices).forEach(deviceKey => {
         const device = devices[deviceKey];
         if (!device.bar) return;
 
-        let html = '';
-        hours.forEach((entry, idx) => {
-            const isActive = entry.devices && entry.devices[deviceKey];
-            const widthPercent = (1 / totalHours) * 100;
-            const activeClass = isActive ? 'active' : 'inactive';
-            html += `<div class="device-bar-segment ${deviceKey} ${activeClass}" style="width:${widthPercent}%"></div>`;
-        });
+        const children = device.bar.children;
 
-        // Fill remaining hours if less than 24
-        for (let i = hours.length; i < 24; i++) {
-            const widthPercent = (1 / totalHours) * 100;
-            html += `<div class="device-bar-segment ${deviceKey} inactive" style="width:${widthPercent}%"></div>`;
+        // Create segments once, reuse on subsequent polls
+        if (children.length !== 24) {
+            let html = '';
+            for (let i = 0; i < 24; i++) {
+                html += `<div class="device-bar-segment ${deviceKey} inactive" style="width:${widthStr}"></div>`;
+            }
+            device.bar.innerHTML = html;
         }
 
-        device.bar.innerHTML = html;
+        // Update classes in-place
+        for (let i = 0; i < 24; i++) {
+            const seg = children[i];
+            const isActive = i < hours.length && hours[i].devices && hours[i].devices[deviceKey];
+            const want = `device-bar-segment ${deviceKey} ${isActive ? 'active' : 'inactive'}`;
+            if (seg.className !== want) seg.className = want;
+        }
     });
 
-    // Build total power row showing if we exceed limits
-    const totalBar = document.getElementById('total-timeline');
-    const totalLabel = document.getElementById('total-power-label');
+    // Build/update total power row (reuse DOM nodes)
+    const totalBar = $('total-timeline');
+    const totalLabel = $('total-power-label');
     if (totalBar) {
-        let html = '';
-        let maxPower = 0;
-
-        hours.forEach((entry, idx) => {
-            const totalPower = entry.total_power || 0;
-            const limit = entry.limit || 8000;
-            const widthPercent = (1 / totalHours) * 100;
-
-            // Color based on utilization
-            let colorClass = 'ok';
-            if (totalPower > limit) {
-                colorClass = 'over-limit';
-            } else if (totalPower > limit * 0.8) {
-                colorClass = 'warning';
-            } else if (totalPower > 0) {
-                colorClass = 'ok';
-            } else {
-                colorClass = 'inactive';
+        // Create segments once
+        if (totalBar.children.length !== 24) {
+            let html = '';
+            for (let i = 0; i < 24; i++) {
+                html += `<div class="device-bar-segment total inactive" style="width:${widthStr}"></div>`;
             }
-
-            maxPower = Math.max(maxPower, totalPower);
-            const title = `${entry.hour}: ${(totalPower/1000).toFixed(1)}kW / ${(limit/1000).toFixed(0)}kW limit`;
-            html += `<div class="device-bar-segment total ${colorClass}" style="width:${widthPercent}%" title="${title}"></div>`;
-        });
-
-        // Fill remaining hours
-        for (let i = hours.length; i < 24; i++) {
-            const widthPercent = (1 / totalHours) * 100;
-            html += `<div class="device-bar-segment total inactive" style="width:${widthPercent}%"></div>`;
+            totalBar.innerHTML = html;
         }
 
-        totalBar.innerHTML = html;
+        let maxPower = 0;
+        for (let i = 0; i < 24; i++) {
+            const seg = totalBar.children[i];
+            const entry = i < hours.length ? hours[i] : null;
+            const totalPower = entry ? (entry.total_power || 0) : 0;
+            const limit = entry ? (entry.limit || 8000) : 8000;
+
+            let colorClass = 'inactive';
+            if (totalPower > limit) colorClass = 'over-limit';
+            else if (totalPower > limit * 0.8) colorClass = 'warning';
+            else if (totalPower > 0) colorClass = 'ok';
+
+            maxPower = Math.max(maxPower, totalPower);
+            const want = `device-bar-segment total ${colorClass}`;
+            if (seg.className !== want) seg.className = want;
+            const title = entry ? `${entry.hour}: ${(totalPower/1000).toFixed(1)}kW / ${(limit/1000).toFixed(0)}kW limit` : '';
+            if (seg.title !== title) seg.title = title;
+        }
+
         if (totalLabel) {
-            totalLabel.textContent = maxPower > 0 ? `${(maxPower/1000).toFixed(1)}kW` : '';
+            const text = maxPower > 0 ? `${(maxPower/1000).toFixed(1)}kW` : '';
+            if (totalLabel.textContent !== text) totalLabel.textContent = text;
         }
     }
 }
@@ -425,42 +443,42 @@ function updateScheduleStatusDots(devices, consumers) {
     }
 
     // EV - check if charging (state 132)
-    const evDot = document.getElementById('schedule-ev-dot');
+    const evDot = $('schedule-ev-dot');
     if (evDot && devices.ev) {
         const isCharging = devices.ev.state === 132;
         evDot.className = 'schedule-status-dot' + (isCharging ? ' on charging' : '');
     }
 
     // Boiler
-    const boilerDot = document.getElementById('schedule-boiler-dot');
+    const boilerDot = $('schedule-boiler-dot');
     if (boilerDot && devices.boiler) {
         const isOn = devices.boiler.state === 'on';
         boilerDot.className = 'schedule-status-dot' + (isOn ? ' on' : '');
     }
 
     // Table Heater
-    const heaterDot = document.getElementById('schedule-heater-dot');
+    const heaterDot = $('schedule-heater-dot');
     if (heaterDot && devices.table_heater) {
         const isOn = devices.table_heater.state === 'on';
         heaterDot.className = 'schedule-status-dot' + (isOn ? ' on' : '');
     }
 
     // Pool Pump
-    const poolDot = document.getElementById('schedule-pool-dot');
+    const poolDot = $('schedule-pool-dot');
     if (poolDot && devices.pool_pump) {
         const isOn = devices.pool_pump.state === 'on';
         poolDot.className = 'schedule-status-dot' + (isOn ? ' on' : '');
     }
 
     // Dishwasher
-    const dishwasherDot = document.getElementById('schedule-dishwasher-dot');
+    const dishwasherDot = $('schedule-dishwasher-dot');
     if (dishwasherDot && devices.dishwasher) {
         const isOn = devices.dishwasher.state === 'on';
         dishwasherDot.className = 'schedule-status-dot' + (isOn ? ' on' : '');
     }
 
     // Washing machine (check by power > threshold since it's not a switch)
-    const washingDot = document.getElementById('schedule-washing-dot');
+    const washingDot = $('schedule-washing-dot');
     if (washingDot) {
         const washingPower = getConsumerPower('washing_machine');
         const isOn = washingPower > 10;
@@ -468,7 +486,7 @@ function updateScheduleStatusDots(devices, consumers) {
     }
 
     // Tumble dryer (check by power > threshold)
-    const dryerDot = document.getElementById('schedule-dryer-dot');
+    const dryerDot = $('schedule-dryer-dot');
     if (dryerDot) {
         const dryerPower = getConsumerPower('tumble_dryer');
         const isOn = dryerPower > 10;
@@ -484,7 +502,7 @@ function updateTimetable(timetable) {
     buildDeviceTimelines(timetable);
 
     // Update EV estimate
-    const evEstimateEl = document.getElementById('ev-estimate');
+    const evEstimateEl = $('ev-estimate');
     if (evEstimateEl && timetable.ev_estimate) {
         const ev = timetable.ev_estimate;
         let text;
@@ -497,7 +515,7 @@ function updateTimetable(timetable) {
     }
 
     // Update Boiler estimate
-    const boilerEstimateEl = document.getElementById('boiler-estimate');
+    const boilerEstimateEl = $('boiler-estimate');
     if (boilerEstimateEl && timetable.boiler_estimate) {
         const boiler = timetable.boiler_estimate;
         let text;
@@ -509,48 +527,64 @@ function updateTimetable(timetable) {
         boilerEstimateEl.querySelector('.estimate-text').innerHTML = text;
     }
 
-    // Update hourly timetable grid
-    const timetableGrid = document.getElementById('timetable-grid');
+    // Update hourly timetable grid (reuse DOM nodes)
+    const timetableGrid = $('timetable-grid');
     if (timetableGrid && timetable.hourly) {
-        // Show first 24 hours in a grid
-        let html = '';
         const hours = timetable.hourly.slice(0, 24);
 
-        hours.forEach(entry => {
-            const hasDevices = Object.keys(entry.devices || {}).length > 0;
-            const deviceIcons = [];
-            if (entry.devices) {
-                if (entry.devices.ev) deviceIcons.push('⚡');
-                if (entry.devices.boiler) deviceIcons.push('🔥');
-                if (entry.devices.table_heater) deviceIcons.push('🪑');
-                if (entry.devices.pool_pump) deviceIcons.push('🌊');
-                if (entry.devices.dishwasher) deviceIcons.push('🍽️');
-                if (entry.devices.washing_machine) deviceIcons.push('🧺');
-                if (entry.devices.tumble_dryer) deviceIcons.push('👕');
+        // Create cells once
+        if (timetableGrid.children.length !== hours.length) {
+            let html = '';
+            for (let i = 0; i < hours.length; i++) {
+                html += `<div class="timetable-hour"><div class="hour-label"></div><div class="hour-devices"></div></div>`;
             }
+            timetableGrid.innerHTML = html;
+        }
 
-            html += `<div class="timetable-hour ${entry.tariff}${hasDevices ? ' has-devices' : ''}">
-                <div class="hour-label">${entry.hour}</div>
-                <div class="hour-devices">${deviceIcons.join('') || '-'}</div>
-            </div>`;
-        });
+        // Update in-place
+        for (let i = 0; i < hours.length; i++) {
+            const entry = hours[i];
+            const cell = timetableGrid.children[i];
+            const hasDevices = Object.keys(entry.devices || {}).length > 0;
+            const wantClass = `timetable-hour ${entry.tariff}${hasDevices ? ' has-devices' : ''}`;
+            if (cell.className !== wantClass) cell.className = wantClass;
 
-        timetableGrid.innerHTML = html;
+            const label = cell.children[0];
+            if (label && label.textContent !== entry.hour) label.textContent = entry.hour;
+
+            const devicesEl = cell.children[1];
+            if (devicesEl) {
+                const icons = [];
+                if (entry.devices) {
+                    if (entry.devices.ev) icons.push('⚡');
+                    if (entry.devices.boiler) icons.push('🔥');
+                    if (entry.devices.table_heater) icons.push('🪑');
+                    if (entry.devices.pool_pump) icons.push('🌊');
+                    if (entry.devices.dishwasher) icons.push('🍽️');
+                    if (entry.devices.washing_machine) icons.push('🧺');
+                    if (entry.devices.tumble_dryer) icons.push('👕');
+                }
+                const text = icons.join('') || '-';
+                if (devicesEl.textContent !== text) devicesEl.textContent = text;
+            }
+        }
     }
 
     // Show warnings
-    const timetableSection = document.getElementById('timetable-section');
+    const timetableSection = $('timetable-section');
+    const existingWarnings = timetableSection ? timetableSection.querySelector('.timetable-warnings') : null;
     if (timetable.warnings && timetable.warnings.length > 0) {
         let warningsHtml = '<div class="timetable-warnings">';
         warningsHtml += timetable.warnings.map(w => `⚠️ ${w}`).join('<br>');
         warningsHtml += '</div>';
 
-        const existingWarnings = timetableSection.querySelector('.timetable-warnings');
         if (existingWarnings) {
             existingWarnings.outerHTML = warningsHtml;
-        } else {
+        } else if (timetableSection) {
             timetableSection.insertAdjacentHTML('beforeend', warningsHtml);
         }
+    } else if (existingWarnings) {
+        existingWarnings.remove();
     }
 }
 
@@ -559,16 +593,16 @@ function updateConsumers(consumers, gridImport) {
     if (!consumers) return;
 
     // Update summary totals
-    const trackedEl = document.getElementById('consumers-tracked');
-    const untrackedEl = document.getElementById('consumers-untracked');
-    const importEl = document.getElementById('consumers-import');
+    const trackedEl = $('consumers-tracked');
+    const untrackedEl = $('consumers-untracked');
+    const importEl = $('consumers-import');
 
     if (trackedEl) trackedEl.textContent = formatWatts(consumers.total_tracked);
     if (untrackedEl) untrackedEl.textContent = formatWatts(consumers.untracked);
     if (importEl) importEl.textContent = formatWatts(gridImport || 0);
 
     // Update grid with individual consumers
-    const grid = document.getElementById('consumers-grid');
+    const grid = $('consumers-grid');
     if (!grid || !consumers.items) return;
 
     // Sort by power (highest first), filter out zero values for cleaner display
@@ -611,10 +645,10 @@ function updateConsumers(consumers, gridImport) {
     grid.innerHTML = html;
 }
 
-// Safely set text content on element if it exists
+// Safely set text content on element if it exists (cached, guarded)
 function setTextIfExists(id, text) {
-    const el = document.getElementById(id);
-    if (el) el.textContent = text;
+    const el = $(id);
+    if (el && el.textContent !== text) el.textContent = text;
 }
 
 // Update the dashboard with new data
@@ -633,9 +667,9 @@ function updateDashboard(data) {
 
     // Grid direction and styling - support both full and compact dashboard class names
     const gridNode = document.querySelector('.power-node.grid') || document.querySelector('.power-node-large.grid');
-    const gridLabel = document.getElementById('grid-direction');
-    const gridArrow = document.getElementById('arrow-grid');
-    const solarArrow = document.getElementById('arrow-solar');
+    const gridLabel = $('grid-direction');
+    const gridArrow = $('arrow-grid');
+    const solarArrow = $('arrow-solar');
 
     if (gridLabel) {
         if (isExporting) {
@@ -686,7 +720,7 @@ function updateDashboard(data) {
     }
     const usage = Math.max(0, gridPower);
     const usagePercent = Math.min(100, (usage / maxImport) * 100);
-    const powerBarFill = document.getElementById('power-bar-fill');
+    const powerBarFill = $('power-bar-fill');
     if (powerBarFill) {
         powerBarFill.style.width = `${usagePercent}%`;
         powerBarFill.classList.remove('warning', 'critical');
@@ -703,8 +737,8 @@ function updateDashboard(data) {
     if (data.devices) {
         // Boiler
         if (data.devices.boiler) {
-            const boilerState = document.getElementById('boiler-state');
-            const boilerDot = document.getElementById('boiler-dot');
+            const boilerState = $('boiler-state');
+            const boilerDot = $('boiler-dot');
             const isOn = data.devices.boiler.state === 'on';
             if (boilerState) boilerState.textContent = isOn ? 'ON' : 'OFF';
             if (boilerDot) boilerDot.className = 'status-dot' + (isOn ? ' on' : '');
@@ -714,14 +748,14 @@ function updateDashboard(data) {
             const lastHeated = formatRelativeTime(data.devices.boiler.last_heated);
             setTextIfExists('boiler-last-heated', lastHeated ? `Heated ${lastHeated}` : '');
 
-            const boilerDevice = document.getElementById('device-boiler');
+            const boilerDevice = $('device-boiler');
             if (boilerDevice) boilerDevice.classList.toggle('active', isOn);
         }
 
         // EV Charger
         if (data.devices.ev) {
-            const evState = document.getElementById('ev-state');
-            const evDot = document.getElementById('ev-dot');
+            const evState = $('ev-state');
+            const evDot = $('ev-dot');
             const stateText = getEvStateText(data.devices.ev.state);
             const isCharging = data.devices.ev.state === 132;
             if (evState) evState.textContent = stateText;
@@ -733,7 +767,7 @@ function updateDashboard(data) {
             const lastCharged = formatRelativeTime(data.devices.ev.last_charged);
             setTextIfExists('ev-last-charged', lastCharged ? `Charged ${lastCharged}` : '');
 
-            const evDevice = document.getElementById('device-ev');
+            const evDevice = $('device-ev');
             if (evDevice) evDevice.classList.toggle('active', isCharging);
 
             // Update EV override buttons
@@ -742,34 +776,34 @@ function updateDashboard(data) {
 
         // Pool Pump
         if (data.devices.pool_pump) {
-            const poolState = document.getElementById('pool-pump-state');
-            const poolDot = document.getElementById('pool-dot');
+            const poolState = $('pool-pump-state');
+            const poolDot = $('pool-dot');
             const isOn = data.devices.pool_pump.state === 'on';
             if (poolState) poolState.textContent = isOn ? 'ON' : 'OFF';
             if (poolDot) poolDot.className = 'status-dot' + (isOn ? ' on' : '');
             setTextIfExists('pool-pump-power', formatWatts(data.devices.pool_pump.power));
 
             const temp = data.devices.pool_pump.ambient_temp;
-            const tempEl = document.getElementById('pool-ambient-temp');
+            const tempEl = $('pool-ambient-temp');
             if (tempEl && temp !== null) {
                 tempEl.textContent = `${temp.toFixed(1)}°C`;
                 tempEl.className = 'temp' + (temp <= 5 ? ' warning' : '');
             }
 
-            const poolDevice = document.getElementById('device-pool');
+            const poolDevice = $('device-pool');
             if (poolDevice) poolDevice.classList.toggle('active', isOn);
         }
 
         // Table Heater
         if (data.devices.table_heater) {
-            const tableHeaterState = document.getElementById('table-heater-state');
-            const tableHeaterDot = document.getElementById('table-heater-dot');
+            const tableHeaterState = $('table-heater-state');
+            const tableHeaterDot = $('table-heater-dot');
             const isOn = data.devices.table_heater.state === 'on';
             if (tableHeaterState) tableHeaterState.textContent = isOn ? 'ON' : 'OFF';
             if (tableHeaterDot) tableHeaterDot.className = 'status-dot' + (isOn ? ' on' : '');
             setTextIfExists('table-heater-power', formatWatts(data.devices.table_heater.power));
 
-            const tableHeaterDevice = document.getElementById('device-table-heater');
+            const tableHeaterDevice = $('device-table-heater');
             if (tableHeaterDevice) tableHeaterDevice.classList.toggle('active', isOn);
         }
 
@@ -803,8 +837,8 @@ function updateDashboard(data) {
     }
 
     // Alerts - always clear first, then build list
-    const alertsSection = document.getElementById('alerts-section');
-    const alertsList = document.getElementById('alerts-list');
+    const alertsSection = $('alerts-section');
+    const alertsList = $('alerts-list');
     if (alertsList) {
         let alertsHtml = '';
 
@@ -857,7 +891,7 @@ function updateDashboard(data) {
     }
 
     // Status indicator
-    const statusIndicator = document.getElementById('status-indicator');
+    const statusIndicator = $('status-indicator');
     if (statusIndicator) statusIndicator.classList.remove('disconnected');
 
     // Update power limits in settings
@@ -866,7 +900,7 @@ function updateDashboard(data) {
     }
 }
 
-// Fetch status from API
+// Fetch status from API (with exponential backoff on errors)
 async function fetchStatus() {
     try {
         const response = await fetch(`${API_BASE_URL}/api/status`);
@@ -874,11 +908,20 @@ async function fetchStatus() {
             throw new Error(`HTTP ${response.status}`);
         }
         const data = await response.json();
+        consecutiveErrors = 0;
         updateDashboard(data);
     } catch (error) {
         console.error('Failed to fetch status:', error);
-        const statusIndicator = document.getElementById('status-indicator');
+        const statusIndicator = $('status-indicator');
         if (statusIndicator) statusIndicator.classList.add('disconnected');
+
+        // Exponential backoff: slow down polling on repeated failures
+        consecutiveErrors++;
+        if (consecutiveErrors > 2) {
+            const backoff = Math.min(REFRESH_INTERVAL * Math.pow(2, consecutiveErrors - 2), MAX_BACKOFF);
+            clearInterval(refreshInterval);
+            refreshInterval = setInterval(fetchStatus, backoff);
+        }
     }
 }
 
@@ -900,7 +943,7 @@ async function setOverride(device, mode) {
 
 // Update EV override button states
 function updateEvOverrideButtons(overrideState) {
-    const container = document.getElementById('ev-override-buttons');
+    const container = $('ev-override-buttons');
     if (!container) return;
 
     // Map HA state (Dutch with emojis) to button mode
@@ -920,8 +963,8 @@ function updateEvOverrideButtons(overrideState) {
 
 // Toggle settings panel
 function toggleSettings() {
-    const content = document.getElementById('settings-content');
-    const toggle = document.getElementById('settings-toggle');
+    const content = $('settings-content');
+    const toggle = $('settings-toggle');
     if (content.style.display === 'none') {
         content.style.display = 'block';
         toggle.textContent = '-';
@@ -935,9 +978,9 @@ function toggleSettings() {
 function updateLimits(limits) {
     if (!limits) return;
 
-    const peakInput = document.getElementById('limit-peak');
-    const offPeakInput = document.getElementById('limit-off-peak');
-    const superOffPeakInput = document.getElementById('limit-super-off-peak');
+    const peakInput = $('limit-peak');
+    const offPeakInput = $('limit-off-peak');
+    const superOffPeakInput = $('limit-super-off-peak');
 
     if (peakInput && limits.peak) peakInput.value = limits.peak;
     if (offPeakInput && limits.off_peak) offPeakInput.value = limits.off_peak;
@@ -946,10 +989,10 @@ function updateLimits(limits) {
 
 // Save power limits
 async function saveLimits() {
-    const peak = parseInt(document.getElementById('limit-peak').value);
-    const offPeak = parseInt(document.getElementById('limit-off-peak').value);
-    const superOffPeak = parseInt(document.getElementById('limit-super-off-peak').value);
-    const statusEl = document.getElementById('save-status');
+    const peak = parseInt($('limit-peak').value);
+    const offPeak = parseInt($('limit-off-peak').value);
+    const superOffPeak = parseInt($('limit-super-off-peak').value);
+    const statusEl = $('save-status');
 
     try {
         const params = new URLSearchParams();
@@ -981,24 +1024,33 @@ async function saveLimits() {
 // Initialize
 let refreshInterval = null;
 
-function startPolling() {
-    // Clear any existing interval
+function stopPolling() {
     if (refreshInterval) {
         clearInterval(refreshInterval);
+        refreshInterval = null;
     }
-    // Fetch immediately and start polling
-    fetchStatus();
-    refreshInterval = setInterval(fetchStatus, REFRESH_INTERVAL);
+}
+
+function startPolling() {
+    // Debounce: collapse rapid visibility/focus events into one restart
+    clearTimeout(pollDebounceTimer);
+    pollDebounceTimer = setTimeout(() => {
+        stopPolling();
+        consecutiveErrors = 0;
+        fetchStatus();
+        refreshInterval = setInterval(fetchStatus, REFRESH_INTERVAL);
+    }, 500);
 }
 
 document.addEventListener('DOMContentLoaded', () => {
     startPolling();
 
-    // Handle visibility change (for iOS/mobile apps that suspend JS in background)
+    // Stop polling when tab/page hidden, restart when visible
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
-            // Page became visible again - restart polling
             startPolling();
+        } else {
+            stopPolling();
         }
     });
 
@@ -1006,4 +1058,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('focus', () => {
         startPolling();
     });
+
+    // Hourly auto-reload to reclaim leaked memory on low-RAM WebViews
+    setTimeout(() => location.reload(), AUTO_RELOAD_MS);
 });

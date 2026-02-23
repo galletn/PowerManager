@@ -3,8 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="format-detection" content="telephone=no">
+    <link rel="icon" href="data:,">
     <title>Power Manager</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="{{ static_prefix }}style.css">
 </head>
 <body>
     <div class="dashboard">
@@ -184,7 +186,7 @@
                         <!-- BMW i5 -->
                         <div class="car-card" id="car-i5">
                             <div class="car-image-container">
-                                <img src="https://gallet.duckdns.org:8123/local/i540%20cartoon.jpg" alt="BMW i5" class="car-image" onerror="this.style.display='none'">
+                                <img src="https://gallet.duckdns.org:8123/local/i540%20cartoon.jpg" alt="BMW i5" class="car-image" loading="lazy" decoding="async" width="400" height="120" onerror="this.style.display='none'">
                                 <div class="car-location-badge" id="i5-location-badge">
                                     <span class="location-icon">📍</span>
                                     <span id="bmw-i5-location">Away</span>
@@ -230,7 +232,7 @@
                         <!-- BMW iX1 -->
                         <div class="car-card" id="car-ix1">
                             <div class="car-image-container">
-                                <img src="https://gallet.duckdns.org:8123/local/ix120%20cartoon.jpg" alt="BMW iX1" class="car-image" onerror="this.style.display='none'">
+                                <img src="https://gallet.duckdns.org:8123/local/ix120%20cartoon.jpg" alt="BMW iX1" class="car-image" loading="lazy" decoding="async" width="400" height="120" onerror="this.style.display='none'">
                                 <div class="car-location-badge" id="ix1-location-badge">
                                     <span class="location-icon">📍</span>
                                     <span id="bmw-ix1-location">Away</span>
@@ -322,6 +324,7 @@
         </footer>
     </div>
 
-    <script src="/static/dashboard.js"></script>
+    {% if api_base %}<script>window.POWER_MANAGER_API = '{{ api_base }}';</script>
+    {% endif %}<script src="{{ static_prefix }}dashboard.js"></script>
 </body>
 </html>
