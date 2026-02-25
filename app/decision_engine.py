@@ -805,7 +805,11 @@ def _handle_ev_winter(
                 return effective_headroom
         elif ctx['ev_charging']:
             amp_diff = abs(target_amps - ctx['ev_limit'])
-            if amp_diff >= config.ev.amp_change_threshold:
+            # Use lower threshold (1A) for upward adjustments to maximize solar use
+            # Keep normal threshold for downward to prevent cycling
+            going_up = target_amps > ctx['ev_limit']
+            threshold = 1 if going_up else config.ev.amp_change_threshold
+            if amp_diff >= threshold:
                 if target_amps >= config.ev.min_amps:
                     decisions.ev.action = 'adjust'
                     decisions.ev.amps = target_amps

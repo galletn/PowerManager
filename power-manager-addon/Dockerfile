@@ -5,7 +5,7 @@ RUN apk add --no-cache git
 
 # Clone the Power Manager repository
 # Change CACHE_BUST value to force fresh clone (Docker caches RUN layers)
-ARG CACHE_BUST=1.0.10
+ARG CACHE_BUST=1.0.11
 RUN git clone https://github.com/galletn/PowerManager.git /opt/power-manager
 
 WORKDIR /opt/power-manager
