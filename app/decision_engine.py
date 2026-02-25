@@ -800,7 +800,7 @@ def _handle_ev_winter(
                 decisions.ev.action = 'on'
                 decisions.ev.amps = target_amps
                 effective_headroom -= target_amps * config.ev.watts_per_amp
-                solar_pct = int((pv / (target_amps * config.ev.watts_per_amp)) * 100)
+                solar_pct = min(100, int((pv / (target_amps * config.ev.watts_per_amp)) * 100))
                 plan.append(f"EV: SOLAR START {target_amps}A (~{solar_pct}% solar)")
                 return effective_headroom
         elif ctx['ev_charging']:
@@ -943,19 +943,25 @@ def _handle_heaters_winter(
     hr_on = ctx['hr_on']
 
     # Calculate remaining capacity
+    # effective_headroom already accounts for EV power decided by _handle_ev_winter
     remaining = effective_headroom
-    if decisions.ev.action == 'on':
-        remaining -= decisions.ev.amps * config.ev.watts_per_amp
 
     # === TABLE HEATER (Priority 4, 4100W) ===
     if ovr['table_heater'] == 'auto':
         enough_for_table = remaining > table_power + hyst
         # When heater is already ON, its consumption reduces the export reading.
-        # Add actual heater power back to get the "would-be" export without heater.
+        # Calculate what export would be if heater turned off:
+        # current net = p1_return - p1 (negative when importing)
+        # without heater: net + ht_actual_power
+        p1 = ctx.get('p1', 0)  # Import power
         ht_actual_power = ctx.get('ht_power', 0) if ht_on else 0
-        effective_export = p1_return + ht_actual_power
-        has_solar_for_table = is_exporting or (ht_on and effective_export > table_power)
-        has_solar_for_table = has_solar_for_table and effective_export > table_power
+        effective_export = p1_return - p1 + ht_actual_power
+        # Account for EV/boiler power decided this cycle but not yet in sensors
+        if decisions.ev.action == 'on':
+            effective_export -= decisions.ev.amps * config.ev.watts_per_amp
+        if decisions.boiler.action == 'on':
+            effective_export -= config.boiler.power
+        has_solar_for_table = effective_export > table_power
 
         if tariff == 'super-off-peak' or has_solar_for_table:
             if not ht_on and (enough_for_table or has_solar_for_table):
@@ -1199,7 +1205,7 @@ def _apply_summer_logic(decisions: Decisions, plan: list, ctx: dict):
                     decisions.ev.action = 'on'
                     decisions.ev.amps = target_amps
                     effective_headroom -= target_amps * config.ev.watts_per_amp
-                    solar_pct = int((pv / (target_amps * config.ev.watts_per_amp)) * 100)
+                    solar_pct = min(100, int((pv / (target_amps * config.ev.watts_per_amp)) * 100))
                     plan.append(f"EV: SOLAR START {target_amps}A (~{solar_pct}% solar)")
             elif ctx['ev_charging']:
                 amp_diff = abs(target_amps - ctx['ev_limit'])
