@@ -778,6 +778,44 @@ def _handle_ev_winter(
     # To calculate target amps, we need TOTAL power available for EV.
     current_ev_watts = ctx['ev_limit'] * config.ev.watts_per_amp if ctx['ev_charging'] else 0
 
+    # === SOLAR SURPLUS CHARGING (any tariff - free power!) ===
+    is_exporting = ctx.get('is_exporting', False)
+    pv = ctx.get('pv', 0)
+    p1 = ctx.get('p1', 0)
+    p1_return = ctx.get('p1_return', 0)
+    has_good_solar = pv > 1500 and (is_exporting or p1 < MAX_GRID_IMPORT_FOR_EV)
+
+    if has_good_solar:
+        if is_exporting:
+            available_power = p1_return + MAX_GRID_IMPORT_FOR_EV
+        else:
+            available_power = MAX_GRID_IMPORT_FOR_EV - p1
+
+        total_for_ev = available_power + current_ev_watts - hyst
+        available_amps = calculate_available_amps(total_for_ev, config.ev.watts_per_amp)
+        target_amps = max(config.ev.min_amps, min(available_amps, config.ev.max_amps))
+
+        if ctx['ev_ready'] and target_amps >= config.ev.min_amps:
+            if can_switch('ev', True):
+                decisions.ev.action = 'on'
+                decisions.ev.amps = target_amps
+                effective_headroom -= target_amps * config.ev.watts_per_amp
+                solar_pct = int((pv / (target_amps * config.ev.watts_per_amp)) * 100)
+                plan.append(f"EV: SOLAR START {target_amps}A (~{solar_pct}% solar)")
+                return effective_headroom
+        elif ctx['ev_charging']:
+            amp_diff = abs(target_amps - ctx['ev_limit'])
+            if amp_diff >= config.ev.amp_change_threshold:
+                if target_amps >= config.ev.min_amps:
+                    decisions.ev.action = 'adjust'
+                    decisions.ev.amps = target_amps
+                    plan.append(f"EV: adjust to {target_amps}A (solar)")
+                else:
+                    decisions.ev.action = 'off'
+                    plan.append("EV: STOP (insufficient solar)")
+            return effective_headroom
+
+    # === TARIFF-BASED CHARGING (no solar surplus) ===
     if tariff == 'super-off-peak':
         # Super off-peak (9kW winter limit) - dynamic capacity sharing
         # When boiler/heater are actively consuming, their power is already
