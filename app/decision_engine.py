@@ -912,14 +912,19 @@ def _handle_heaters_winter(
     # === TABLE HEATER (Priority 4, 4100W) ===
     if ovr['table_heater'] == 'auto':
         enough_for_table = remaining > table_power + hyst
-        has_solar_for_table = is_exporting and p1_return > table_power
+        # When heater is already ON, its consumption reduces the export reading.
+        # Add actual heater power back to get the "would-be" export without heater.
+        ht_actual_power = ctx.get('ht_power', 0) if ht_on else 0
+        effective_export = p1_return + ht_actual_power
+        has_solar_for_table = is_exporting or (ht_on and effective_export > table_power)
+        has_solar_for_table = has_solar_for_table and effective_export > table_power
 
         if tariff == 'super-off-peak' or has_solar_for_table:
             if not ht_on and (enough_for_table or has_solar_for_table):
                 if can_switch('heater_table', True):
                     decisions.heater_table.action = 'on'
                     reason = "solar" if has_solar_for_table else "super-off-peak"
-                    plan.append(f"Table heater: ON ({reason})")
+                    plan.append(f"Table heater: ON ({reason}, export {int(effective_export)}W)")
             elif ht_on and remaining < -hyst and not has_solar_for_table:
                 # Only shed table heater if we're actually over the grid limit.
                 # Table heater power is already in net_p1, so remaining < 0 means
