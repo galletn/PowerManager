@@ -1018,7 +1018,10 @@ def _handle_heaters_winter(
             effective_export -= decisions.ev.amps * config.ev.watts_per_amp
         if decisions.boiler.action == 'on':
             effective_export -= config.boiler.power
-        has_solar_for_table = effective_export > table_power
+        # Allow a small margin: battery charge and solar fluctuate, so a strict
+        # threshold causes the heater to miss when surplus is just barely under rated power.
+        SOLAR_TABLE_MARGIN = 200  # Accept up to 200W grid import (~5% of 4100W)
+        has_solar_for_table = effective_export > table_power - SOLAR_TABLE_MARGIN
 
         if tariff == 'super-off-peak' or has_solar_for_table:
             if not ht_on and (enough_for_table or has_solar_for_table):
