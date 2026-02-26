@@ -710,6 +710,10 @@ function updateDashboard(data) {
     const batteryFlow = document.querySelector('.battery-flow');
     if (data.devices && data.devices.battery) {
         const bat = data.devices.battery;
+        if (window._batDebugCount === undefined) window._batDebugCount = 0;
+        if (window._batDebugCount++ < 3) {
+            console.log('Battery data:', JSON.stringify(bat));
+        }
         const batPower = bat.power != null ? bat.power : 0;
         const batSoe = bat.soe;
         const batNode = document.querySelector('.power-node.battery');

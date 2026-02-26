@@ -697,6 +697,31 @@ async def get_status():
     # is_exporting: true when export > import (net is negative)
     is_exporting = p1_return > p1_power
 
+    # Battery: read directly from ha_states (same approach as consumers)
+    # This ensures battery data is always fresh, even if parse_inputs had issues
+    def _get_battery_num(entity_id):
+        state = ha_states.get(entity_id, {})
+        val = state.get("state")
+        if val in (None, "unavailable", "unknown", ""):
+            return None
+        try:
+            return float(val)
+        except (ValueError, TypeError):
+            return None
+
+    def _get_battery_str(entity_id, default="unknown"):
+        state = ha_states.get(entity_id, {})
+        val = state.get("state")
+        if val in (None, "unavailable", "unknown"):
+            return default
+        return str(val)
+
+    entities = config.entities
+    bat_power = _get_battery_num(entities.battery_power)
+    bat_soe = _get_battery_num(entities.battery_soe)
+    bat_status = _get_battery_str(entities.battery_status)
+    bat_capacity = _get_battery_num(entities.battery_capacity)
+
     return {
         "grid_import": p1_power,
         "grid_export": p1_return,
@@ -753,10 +778,10 @@ async def get_status():
                 "time_to_full": last_inputs.bmw_ix1_time_to_full
             },
             "battery": {
-                "power": last_inputs.battery_power,
-                "soe": last_inputs.battery_soe,
-                "status": last_inputs.battery_status,
-                "capacity": last_inputs.battery_capacity
+                "power": bat_power if bat_power is not None else last_inputs.battery_power,
+                "soe": bat_soe if bat_soe is not None else last_inputs.battery_soe,
+                "status": bat_status,
+                "capacity": bat_capacity if bat_capacity is not None else last_inputs.battery_capacity
             },
             "table_heater": {
                 "state": last_inputs.heater_table_switch,
