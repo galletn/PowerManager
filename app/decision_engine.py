@@ -42,6 +42,9 @@ def get_solar_battery_charge(pv: float, battery_power: float) -> float:
     Returns:
         Reclaimable battery charge power in watts (always >= 0).
     """
+    # Guard: battery_power can be None if HA entity is unavailable
+    if battery_power is None:
+        return 0.0
     # Only relevant when battery is charging (negative power)
     charge_power = -battery_power
     if charge_power <= 0:

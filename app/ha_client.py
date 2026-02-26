@@ -476,7 +476,7 @@ class HAClient:
             ovr_dishwasher=get_str(e.ovr_dishwasher, ""),
 
             # Battery (SolarEdge Energy Bank)
-            battery_power=get_num(e.battery_power, 0.0),
+            battery_power=get_num(e.battery_power, 0.0) or 0.0,
             battery_soe=get_num(e.battery_soe),
             battery_status=get_str(e.battery_status, "unknown"),
             battery_capacity=get_num(e.battery_capacity),
