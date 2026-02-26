@@ -4,8 +4,7 @@ FROM python:3.12-alpine
 RUN apk add --no-cache git
 
 # Clone the Power Manager repository
-# Change CACHE_BUST value to force fresh clone (Docker caches RUN layers)
-ARG CACHE_BUST=1.0.17
+# v1.0.18 - battery entity name fix (solaredge2_i1_b1_*)
 RUN git clone https://github.com/galletn/PowerManager.git /opt/power-manager
 
 WORKDIR /opt/power-manager
