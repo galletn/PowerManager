@@ -1012,7 +1012,9 @@ def _handle_heaters_winter(
         p1 = ctx.get('p1', 0)  # Import power
         bat_charge = ctx.get('battery_charge', 0)
         ht_actual_power = ctx.get('ht_power', 0) if ht_on else 0
-        effective_export = p1_return - p1 + ht_actual_power + bat_charge
+        # Raw solar surplus: what's available before other decisions this cycle
+        raw_export = p1_return - p1 + ht_actual_power + bat_charge
+        effective_export = raw_export
         # Account for EV/boiler power decided this cycle but not yet in sensors
         if decisions.ev.action == 'on':
             effective_export -= decisions.ev.amps * config.ev.watts_per_amp
@@ -1021,17 +1023,19 @@ def _handle_heaters_winter(
         # Full solar: surplus covers (nearly) all of the heater's rated power
         SOLAR_TABLE_MARGIN = 200  # Accept up to 200W grid import (~5% of 4100W)
         has_solar_for_table = effective_export > table_power - SOLAR_TABLE_MARGIN
-        # Significant solar: worth running the heater even if grid contributes some.
-        # Better to use 1500W+ of free solar than export it at low feed-in rates.
+        # Significant solar: use RAW export (before boiler/EV deductions) because
+        # the grid headroom check (enough_for_table) already accounts for those.
+        # Otherwise the boiler eating solar blocks the heater even when grid allows it.
         MIN_EXPORT_FOR_TABLE = 1500
-        has_significant_solar = effective_export > MIN_EXPORT_FOR_TABLE
+        has_significant_solar = raw_export > MIN_EXPORT_FOR_TABLE
+        plan.append(f"Table: raw={int(raw_export)}W eff={int(effective_export)}W rem={int(remaining)}W sig={has_significant_solar} full={has_solar_for_table} enough={enough_for_table}")
 
         if tariff == 'super-off-peak' or has_significant_solar:
             if not ht_on and (enough_for_table or has_solar_for_table):
                 if can_switch('heater_table', True):
                     decisions.heater_table.action = 'on'
-                    reason = "solar" if has_solar_for_table else f"solar {int(effective_export)}W"
-                    plan.append(f"Table heater: ON ({reason}, export {int(effective_export)}W)")
+                    reason = "solar" if has_solar_for_table else f"solar {int(raw_export)}W"
+                    plan.append(f"Table heater: ON ({reason}, export {int(raw_export)}W)")
             elif ht_on and remaining < -hyst and not has_significant_solar:
                 # Only shed table heater if we're actually over the grid limit
                 # AND there's no significant solar to justify keeping it on.
