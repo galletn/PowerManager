@@ -204,11 +204,11 @@ class EntitiesConfig:
     bmw_ix1_charging_soc: str = "sensor.ix1_edrive20_charging_ev_predicted_state_of_charge"
     bmw_ix1_charging_range: str = "sensor.ix1_edrive20_range_ev_estimate_during_charging"
 
-    # Battery (SolarEdge Energy Bank)
-    battery_power: str = "sensor.solaredge_b1_dc_power_2"        # +discharge, -charge (W)
-    battery_soe: str = "sensor.solaredge_b1_state_of_energy"     # 0-100%
-    battery_status: str = "sensor.solaredge_b1_status"           # Charging/Discharging/Idle
-    battery_capacity: str = "sensor.solaredge_b1_max_energy"     # Max capacity (Wh)
+    # Battery (SolarEdge Energy Bank - on second inverter SE5000H)
+    battery_power: str = "sensor.solaredge2_i1_b1_dc_power_inverted" # +discharge, -charge (W)
+    battery_soe: str = "sensor.solaredge2_i1_b1_state_of_energy_2"   # 0-100%
+    battery_status: str = "sensor.solaredge2_i1_b1_status_2"         # B_STATUS_CHARGE etc.
+    battery_capacity: str = "sensor.solaredge2_i1_b1_maximum_energy_2" # Max capacity (kWh)
 
     # Sun and weather for dashboard icons
     sun: str = "sun.sun"
