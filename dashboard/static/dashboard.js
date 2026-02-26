@@ -751,16 +751,17 @@ function updateDashboard(data) {
             }
         }
 
-        // SOE bar
+        // SOE bar (SolarEdge may report 0-1 fraction or 0-100 percent)
         if (batSoe != null) {
+            const soePct = batSoe <= 1 ? batSoe * 100 : batSoe;
             const soeFill = $('battery-soe-fill');
             if (soeFill) {
-                soeFill.style.width = `${Math.min(100, batSoe)}%`;
+                soeFill.style.width = `${Math.min(100, soePct)}%`;
                 soeFill.classList.remove('low', 'medium');
-                if (batSoe < 20) soeFill.classList.add('low');
-                else if (batSoe < 50) soeFill.classList.add('medium');
+                if (soePct < 20) soeFill.classList.add('low');
+                else if (soePct < 50) soeFill.classList.add('medium');
             }
-            setTextIfExists('battery-soe-text', `${Math.round(batSoe)}%`);
+            setTextIfExists('battery-soe-text', `${Math.round(soePct)}%`);
         }
     }
 
