@@ -714,60 +714,54 @@ function updateDashboard(data) {
         const batSoe = bat.soe;
         const batNode = document.querySelector('.power-node.battery');
         const batArrow = $('arrow-battery');
-        const hasBatteryData = bat.soe != null || bat.status !== 'unknown';
 
-        // Show/hide battery section based on data availability
-        if (batteryFlow) batteryFlow.style.display = hasBatteryData ? '' : 'none';
+        // Always show battery section when data exists
+        if (batteryFlow) batteryFlow.style.display = '';
 
-        if (hasBatteryData) {
-            // Power display: positive=discharging, negative=charging
-            setTextIfExists('battery-power', formatWatts(Math.abs(batPower)));
+        // Power display: positive=discharging, negative=charging
+        setTextIfExists('battery-power', formatWatts(Math.abs(batPower)));
 
-            // Status and styling
-            if (batNode) {
-                batNode.classList.remove('charging', 'discharging');
-                if (batPower < -50) {
-                    batNode.classList.add('charging');
-                    setTextIfExists('battery-label', 'Charging');
-                } else if (batPower > 50) {
-                    batNode.classList.add('discharging');
-                    setTextIfExists('battery-label', 'Discharging');
-                } else {
-                    setTextIfExists('battery-label', 'Idle');
-                }
-            }
-
-            // Arrow direction
-            if (batArrow) {
-                if (batPower < -50) {
-                    batArrow.textContent = '↓';
-                    batArrow.classList.add('flow-down');
-                    batArrow.classList.remove('flow-up');
-                } else if (batPower > 50) {
-                    batArrow.textContent = '↑';
-                    batArrow.classList.remove('flow-down');
-                    batArrow.classList.add('flow-up');
-                } else {
-                    batArrow.textContent = '·';
-                    batArrow.classList.remove('flow-down', 'flow-up');
-                }
-            }
-
-            // SOE bar
-            if (batSoe != null) {
-                const soeFill = $('battery-soe-fill');
-                if (soeFill) {
-                    soeFill.style.width = `${Math.min(100, batSoe)}%`;
-                    soeFill.classList.remove('low', 'medium');
-                    if (batSoe < 20) soeFill.classList.add('low');
-                    else if (batSoe < 50) soeFill.classList.add('medium');
-                }
-                setTextIfExists('battery-soe-text', `${Math.round(batSoe)}%`);
+        // Status and styling
+        if (batNode) {
+            batNode.classList.remove('charging', 'discharging');
+            if (batPower < -50) {
+                batNode.classList.add('charging');
+                setTextIfExists('battery-label', 'Charging');
+            } else if (batPower > 50) {
+                batNode.classList.add('discharging');
+                setTextIfExists('battery-label', 'Discharging');
+            } else {
+                setTextIfExists('battery-label', 'Idle');
             }
         }
-    } else {
-        // No battery data at all - hide the section
-        if (batteryFlow) batteryFlow.style.display = 'none';
+
+        // Arrow direction
+        if (batArrow) {
+            if (batPower < -50) {
+                batArrow.textContent = '↓';
+                batArrow.classList.add('flow-down');
+                batArrow.classList.remove('flow-up');
+            } else if (batPower > 50) {
+                batArrow.textContent = '↑';
+                batArrow.classList.remove('flow-down');
+                batArrow.classList.add('flow-up');
+            } else {
+                batArrow.textContent = '·';
+                batArrow.classList.remove('flow-down', 'flow-up');
+            }
+        }
+
+        // SOE bar
+        if (batSoe != null) {
+            const soeFill = $('battery-soe-fill');
+            if (soeFill) {
+                soeFill.style.width = `${Math.min(100, batSoe)}%`;
+                soeFill.classList.remove('low', 'medium');
+                if (batSoe < 20) soeFill.classList.add('low');
+                else if (batSoe < 50) soeFill.classList.add('medium');
+            }
+            setTextIfExists('battery-soe-text', `${Math.round(batSoe)}%`);
+        }
     }
 
     // Power bar - use current tariff's limit
