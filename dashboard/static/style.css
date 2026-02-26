@@ -194,6 +194,50 @@ h2 {
     color: var(--ha-text-secondary);
 }
 
+/* Battery Flow (T-shape below Home) */
+.battery-flow {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-top: -8px;
+    padding-bottom: 8px;
+}
+
+.battery-connector {
+    font-size: 20px;
+    color: var(--ha-text-secondary);
+    line-height: 1;
+}
+
+.power-node.battery .node-value { color: #4caf50; }
+.power-node.battery.discharging .node-value { color: #ff9800; }
+.power-node.battery.charging .node-value { color: #2196f3; }
+
+.battery-soe-bar {
+    width: 60px;
+    height: 6px;
+    background: var(--ha-divider);
+    border-radius: 3px;
+    margin: 4px auto 0;
+    overflow: hidden;
+}
+
+.battery-soe-fill {
+    height: 100%;
+    background: #4caf50;
+    border-radius: 3px;
+    transition: width 0.3s, background 0.3s;
+}
+
+.battery-soe-fill.low { background: #f44336; }
+.battery-soe-fill.medium { background: #ff9800; }
+
+.battery-soe-text {
+    font-size: 11px;
+    color: var(--ha-text-secondary);
+    margin-top: 2px;
+}
+
 /* Power Bar */
 .power-bar-container {
     margin-top: 16px;
@@ -1172,6 +1216,14 @@ h2 {
 
 .arrow.flow-left {
     color: var(--ha-error, #db4437);
+}
+
+.arrow.flow-down {
+    color: #2196f3;
+}
+
+.arrow.flow-up {
+    color: #ff9800;
 }
 
 /* Grid node styling when exporting */

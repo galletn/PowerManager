@@ -752,6 +752,12 @@ async def get_status():
                 "mileage": last_inputs.bmw_ix1_mileage,
                 "time_to_full": last_inputs.bmw_ix1_time_to_full
             },
+            "battery": {
+                "power": last_inputs.battery_power,
+                "soe": last_inputs.battery_soe,
+                "status": last_inputs.battery_status,
+                "capacity": last_inputs.battery_capacity
+            },
             "table_heater": {
                 "state": last_inputs.heater_table_switch,
                 "power": table_heater_power,
@@ -908,14 +914,19 @@ def _get_consumers_data(states: Optional[dict] = None):
              "icon": "💾", "power": get_power(entities.serverroom_storage_power)},
             {"id": "chargers", "name": "Chargers", "icon": "🔌",
              "power": get_power(entities.chargers_power)},
+            {"id": "battery", "name": "Home Battery", "icon": "🔋",
+             "power": max(0, -get_power(entities.battery_power))},
         ]
 
         # Calculate totals
-        # Home consumption = grid import + solar production
+        # Home consumption = grid import - grid export + solar production
         total_tracked = sum(c["power"] for c in consumers)
         total_home = 0
         if last_inputs:
-            total_home = last_inputs.p1_power + last_inputs.pv_power
+            p1 = last_inputs.p1_power or 0
+            p1r = last_inputs.p1_return or 0
+            pv = last_inputs.pv_power or 0
+            total_home = p1 - p1r + pv
         untracked = max(0, total_home - total_tracked)
 
         return {

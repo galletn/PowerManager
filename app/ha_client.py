@@ -475,6 +475,12 @@ class HAClient:
             ovr_table_heater=get_str(e.ovr_table_heater, ""),
             ovr_dishwasher=get_str(e.ovr_dishwasher, ""),
 
+            # Battery (SolarEdge Energy Bank)
+            battery_power=get_num(e.battery_power, 0.0),
+            battery_soe=get_num(e.battery_soe),
+            battery_status=get_str(e.battery_status, "unknown"),
+            battery_capacity=get_num(e.battery_capacity),
+
             # BMW Cars - i5 eDrive40
             bmw_i5_battery=get_num(e.bmw_i5_battery),
             bmw_i5_range=get_num(e.bmw_i5_range),

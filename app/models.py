@@ -91,6 +91,12 @@ class PowerInputs:
     ovr_table_heater: str = ''
     ovr_dishwasher: str = ''
 
+    # Battery (SolarEdge Energy Bank)
+    battery_power: float = 0.0          # +discharge, -charge (W)
+    battery_soe: Optional[float] = None # State of Energy 0-100%
+    battery_status: str = 'unknown'     # Charging/Discharging/Idle
+    battery_capacity: Optional[float] = None  # Max capacity (Wh)
+
     # BMW Cars - i5 eDrive40
     bmw_i5_battery: Optional[float] = None
     bmw_i5_range: Optional[float] = None

@@ -28,6 +28,33 @@ DW_RUNNING_THRESHOLD = 50
 SOLAR_SURPLUS_GRACE_PERIOD = 300  # 5 minutes
 
 
+def get_solar_battery_charge(pv: float, battery_power: float) -> float:
+    """Calculate battery charging power that can be reclaimed for devices.
+
+    When the home battery is charging from solar, that power could go to
+    devices instead (reducing battery cycles). This returns the battery's
+    charge power as reclaimable surplus, with safety guards.
+
+    Args:
+        pv: Solar production in watts.
+        battery_power: Battery power (positive=discharging, negative=charging).
+
+    Returns:
+        Reclaimable battery charge power in watts (always >= 0).
+    """
+    # Only relevant when battery is charging (negative power)
+    charge_power = -battery_power
+    if charge_power <= 0:
+        return 0.0
+    # Guard: no solar means battery is charging from grid (night)
+    if pv < 500:
+        return 0.0
+    # Guard: solar must exceed battery charge (sanity check)
+    if pv < charge_power:
+        return 0.0
+    return charge_power
+
+
 def calculate_ev_hours_needed(inputs: PowerInputs, config: Config) -> float:
     """Calculate hours needed for EV to reach 80% SoC.
 
@@ -279,6 +306,9 @@ def calculate_decisions(
     is_exporting = p1_return > p1
     hyst = config.timing.hysteresis
 
+    # Battery charge power reclaimable for devices
+    battery_charge = get_solar_battery_charge(pv, inputs.battery_power)
+
     # Parse overrides
     ovr = {
         'ev': parse_override(inputs.ovr_ev),
@@ -369,6 +399,19 @@ def calculate_decisions(
     # Show net grid power (negative = exporting)
     grid_label = f"Export: {fmt_w(abs(net_p1))}" if is_exporting else f"Import: {fmt_w(net_p1)}"
     plan.append(f"{tariff_label} {grid_icon} | {grid_label} | PV: {fmt_w(pv)} | Avail: {fmt_w(avail)}")
+    # Battery status line (only if battery data available)
+    bat_power = inputs.battery_power
+    bat_soe = inputs.battery_soe
+    if bat_soe is not None:
+        if bat_power < -50:
+            bat_label = f"Bat: Charging {fmt_w(abs(bat_power))} ({int(bat_soe)}%)"
+        elif bat_power > 50:
+            bat_label = f"Bat: Discharging {fmt_w(bat_power)} ({int(bat_soe)}%)"
+        else:
+            bat_label = f"Bat: Idle ({int(bat_soe)}%)"
+        if battery_charge > 0:
+            bat_label += f" [+{fmt_w(battery_charge)} reclaimable]"
+        plan.append(bat_label)
     plan.append(f"{'Summer' if summer else 'Winter'} | EV: {ev_status_text}")
 
     # Track available headroom
@@ -449,6 +492,7 @@ def calculate_decisions(
             'p1': p1,
             'p1_return': p1_return,  # Export power
             'net_p1': net_p1,        # Net grid (neg = export)
+            'battery_charge': battery_charge,
         })
     else:
         _apply_summer_logic(decisions, plan, {
@@ -480,6 +524,7 @@ def calculate_decisions(
             'p1': p1,
             'p1_return': p1_return,  # Export power
             'net_p1': net_p1,        # Net grid (neg = export)
+            'battery_charge': battery_charge,
         })
 
     # Calculate final headroom
@@ -630,8 +675,11 @@ def _handle_boiler_winter(
         enough_power = effective_headroom > config.boiler.power + hyst
 
         # Solar surplus logic: if exporting significant power, use boiler
+        # Include battery charge power as reclaimable surplus
         p1_return = ctx.get('p1_return', 0)  # Actual export power
-        has_solar_surplus = is_exporting and p1_return > MIN_EXPORT_FOR_BOILER
+        bat_charge = ctx.get('battery_charge', 0)
+        effective_surplus = p1_return + bat_charge
+        has_solar_surplus = is_exporting and effective_surplus > MIN_EXPORT_FOR_BOILER
 
         # Determine if boiler should heat (conditions regardless of power):
         # 1. Super off-peak (cheapest rate, 01:00-07:00)
@@ -648,7 +696,7 @@ def _handle_boiler_winter(
             reason = "super-off-peak"
         elif has_solar_surplus:
             wants_to_heat = True
-            reason = f"solar ({int(p1_return)}W export)"
+            reason = f"solar ({int(effective_surplus)}W avail)"
             is_solar_reason = True
         elif approaching_deadline and tariff in ('off-peak', 'super-off-peak'):
             wants_to_heat = True
@@ -783,13 +831,14 @@ def _handle_ev_winter(
     pv = ctx.get('pv', 0)
     p1 = ctx.get('p1', 0)
     p1_return = ctx.get('p1_return', 0)
-    has_good_solar = pv > 1500 and (is_exporting or p1 < MAX_GRID_IMPORT_FOR_EV)
+    bat_charge = ctx.get('battery_charge', 0)
+    has_good_solar = pv > 1500 and (is_exporting or p1 < MAX_GRID_IMPORT_FOR_EV + bat_charge)
 
     if has_good_solar:
         if is_exporting:
-            available_power = p1_return + MAX_GRID_IMPORT_FOR_EV
+            available_power = p1_return + bat_charge + MAX_GRID_IMPORT_FOR_EV
         else:
-            available_power = MAX_GRID_IMPORT_FOR_EV - p1
+            available_power = MAX_GRID_IMPORT_FOR_EV + bat_charge - p1
 
         total_for_ev = available_power + current_ev_watts - hyst
         available_amps = calculate_available_amps(total_for_ev, config.ev.watts_per_amp)
@@ -958,8 +1007,9 @@ def _handle_heaters_winter(
         # current net = p1_return - p1 (negative when importing)
         # without heater: net + ht_actual_power
         p1 = ctx.get('p1', 0)  # Import power
+        bat_charge = ctx.get('battery_charge', 0)
         ht_actual_power = ctx.get('ht_power', 0) if ht_on else 0
-        effective_export = p1_return - p1 + ht_actual_power
+        effective_export = p1_return - p1 + ht_actual_power + bat_charge
         # Account for EV/boiler power decided this cycle but not yet in sensors
         if decisions.ev.action == 'on':
             effective_export -= decisions.ev.amps * config.ev.watts_per_amp
@@ -1000,14 +1050,15 @@ def _handle_heaters_winter(
     RIGHT_HEATER_ON_THRESHOLD = 2200  # Turn on when exporting > 2200W
     if ovr.get('right_heater', 'auto') == 'auto':
         p1 = ctx.get('p1', 0)  # Import power
-        has_solar_for_right = is_exporting and p1_return > RIGHT_HEATER_ON_THRESHOLD
+        bat_charge = ctx.get('battery_charge', 0)
+        has_solar_for_right = is_exporting and (p1_return + bat_charge) > RIGHT_HEATER_ON_THRESHOLD
         importing_too_much = not is_exporting and p1 > 500
 
         if has_solar_for_right:
             if not hr_on:
                 if can_switch('heater_right', True):
                     decisions.heater_right.action = 'on'
-                    plan.append(f"Right heater: ON (solar {int(p1_return)}W)")
+                    plan.append(f"Right heater: ON (solar {int(p1_return + bat_charge)}W)")
         elif hr_on and (importing_too_much or not is_exporting):
             # Turn off if importing > 500W or no longer exporting
             if can_switch('heater_right', False):
@@ -1107,6 +1158,7 @@ def _apply_dishwasher_logic(decisions: Decisions, plan: list, ctx: dict):
     # Minimum solar export to consider "solar surplus"
     # MIN_SOLAR_SURPLUS = 500W export = good solar
     p1_return = ctx.get('p1_return', 0)  # Actual export power
+    bat_charge = ctx.get('battery_charge', 0)
 
     # If dishwasher is running (drawing power), NEVER interrupt
     if dw_running:
@@ -1122,7 +1174,7 @@ def _apply_dishwasher_logic(decisions: Decisions, plan: list, ctx: dict):
     # waiting for the smart scheduling to release it
 
     if dw_waiting:
-        has_solar_surplus = is_exporting and p1_return > MIN_SOLAR_SURPLUS
+        has_solar_surplus = is_exporting and (p1_return + bat_charge) > MIN_SOLAR_SURPLUS
         is_cheap_tariff = tariff in ('off-peak', 'super-off-peak')
 
         # Check if we have enough headroom for the dishwasher
@@ -1140,7 +1192,7 @@ def _apply_dishwasher_logic(decisions: Decisions, plan: list, ctx: dict):
             # Solar covers the consumption, no grid limit concern
             decisions.dishwasher.action = 'on'
             decisions.dishwasher.reason = 'solar surplus'
-            plan.append(f"Dishwasher: RUN (solar surplus {p1_return:.0f}W)")
+            plan.append(f"Dishwasher: RUN (solar surplus {p1_return + bat_charge:.0f}W)")
         elif is_cheap_tariff and has_enough_power:
             # Off-peak or super-off-peak with enough headroom - allow run
             decisions.dishwasher.action = 'on'
@@ -1181,21 +1233,19 @@ def _apply_summer_logic(decisions: Decisions, plan: list, ctx: dict):
     # Allow up to 1kW grid import when solar is good (better than exporting all)
     p1 = ctx.get('p1', 0)         # Import power
     p1_return = ctx.get('p1_return', 0)  # Export power
+    bat_charge = ctx.get('battery_charge', 0)
 
     if ovr['ev'] == 'auto' and ctx['ev_plugged'] and not ctx['ev_done']:
         # Good solar: either exporting, or importing less than threshold
-        has_good_solar = pv > 1500 and (is_exporting or p1 < MAX_GRID_IMPORT_FOR_EV)
+        has_good_solar = pv > 1500 and (is_exporting or p1 < MAX_GRID_IMPORT_FOR_EV + bat_charge)
 
         if has_good_solar:
             # Calculate available power for EV
-            # If exporting: we can use export + allowed import
-            # If importing < threshold: we can use (threshold - current import)
+            # Include battery charge as reclaimable surplus
             if is_exporting:
-                # Exporting = can use all export + allowed import buffer
-                available_power = p1_return + MAX_GRID_IMPORT_FOR_EV
+                available_power = p1_return + bat_charge + MAX_GRID_IMPORT_FOR_EV
             else:
-                # Already importing, but under threshold
-                available_power = MAX_GRID_IMPORT_FOR_EV - p1
+                available_power = MAX_GRID_IMPORT_FOR_EV + bat_charge - p1
 
             # When EV is already charging, add back its consumption
             current_ev_watts = ctx['ev_limit'] * config.ev.watts_per_amp if ctx['ev_charging'] else 0
@@ -1227,9 +1277,10 @@ def _apply_summer_logic(decisions: Decisions, plan: list, ctx: dict):
                 decisions.ev.action = 'off'
                 plan.append("EV: STOP (grid import too high)")
 
-    # Boiler - use solar surplus
+    # Boiler - use solar surplus (include battery charge as reclaimable)
     if ovr['boiler'] == 'auto' and not ctx['boiler_full']:
-        if is_exporting and pv > config.boiler.power:
+        effective_surplus = p1_return + bat_charge
+        if is_exporting and (pv > config.boiler.power or effective_surplus > config.boiler.power):
             if not ctx['boiler_on'] and can_switch('boiler', True):
                 decisions.boiler.action = 'on'
                 effective_headroom -= config.boiler.power

@@ -73,8 +73,9 @@ class TestDishwasherRunsWithSolar:
             base_inputs,
             dishwasher_switch='on',
             dishwasher_power=10,  # Waiting to run
-            p1_power=-2000,  # Exporting 2kW (solar surplus)
-            pv_power=4000,  # Good solar production
+            p1_power=0,       # Not importing
+            p1_return=2000,   # Exporting 2kW (solar surplus)
+            pv_power=4000,    # Good solar production
             ovr_dishwasher='auto'
         )
 
