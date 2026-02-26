@@ -316,6 +316,9 @@ async def add_iframe_headers(request: Request, call_next):
     # Allow embedding in iframes from any origin
     response.headers["X-Frame-Options"] = "ALLOWALL"
     response.headers["Content-Security-Policy"] = "frame-ancestors *"
+    # Prevent browser caching of static files (CSS/JS) during development
+    if request.url.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-cache, must-revalidate"
     return response
 
 # Setup templates

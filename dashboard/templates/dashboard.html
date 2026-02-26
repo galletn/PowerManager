@@ -6,7 +6,7 @@
     <meta name="format-detection" content="telephone=no">
     <link rel="icon" href="data:,">
     <title>Power Manager</title>
-    <link rel="stylesheet" href="{{ static_prefix }}style.css">
+    <link rel="stylesheet" href="{{ static_prefix }}style.css?v=1.0.20">
 </head>
 <body>
     <div class="dashboard">
@@ -340,6 +340,6 @@
     </div>
 
     {% if api_base %}<script>window.POWER_MANAGER_API = '{{ api_base }}';</script>
-    {% endif %}<script src="{{ static_prefix }}dashboard.js"></script>
+    {% endif %}<script src="{{ static_prefix }}dashboard.js?v=1.0.20"></script>
 </body>
 </html>
