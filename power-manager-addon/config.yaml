@@ -1,6 +1,6 @@
 name: "Power Manager"
 description: "Home energy management - optimizes power based on solar production, Belgian tariffs, and consumption patterns"
-version: "1.0.24"
+version: "1.0.25"
 slug: "power_manager"
 url: "https://github.com/galletn/PowerManager"
 arch:

@@ -496,6 +496,8 @@ def calculate_decisions(
             'p1_return': p1_return,  # Export power
             'net_p1': net_p1,        # Net grid (neg = export)
             'battery_charge': battery_charge,
+            'battery_soe': inputs.battery_soe,
+            'battery_power': inputs.battery_power,
         })
     else:
         _apply_summer_logic(decisions, plan, {
@@ -1005,40 +1007,60 @@ def _handle_heaters_winter(
     # === TABLE HEATER (Priority 4, 4100W) ===
     if ovr['table_heater'] == 'auto':
         enough_for_table = remaining > table_power + hyst
-        # When heater is already ON, its consumption reduces the export reading.
-        # Calculate what export would be if heater turned off:
-        # current net = p1_return - p1 (negative when importing)
-        # without heater: net + ht_actual_power
         p1 = ctx.get('p1', 0)  # Import power
         bat_charge = ctx.get('battery_charge', 0)
+        bat_soe = ctx.get('battery_soe')
+        bat_power = ctx.get('battery_power')  # +discharge, -charge
         ht_actual_power = ctx.get('ht_power', 0) if ht_on else 0
-        # Raw solar surplus: what's available before other decisions this cycle
-        raw_export = p1_return - p1 + ht_actual_power + bat_charge
+
+        # Battery protection: save battery for peak hours.
+        # Don't let the heater drain the battery below 80%.
+        BAT_SOE_MIN_FOR_TABLE = 80
+        bat_discharging = bat_power is not None and bat_power > 100
+        bat_low = bat_soe is not None and bat_soe < BAT_SOE_MIN_FOR_TABLE
+
+        # When heater is ON, its power reduces the P1 export reading.
+        # Add it back to estimate "what would export be without heater?"
+        # BUT: only if solar is actually producing. If battery is covering
+        # the heater (discharging), adding back ht_power is misleading.
+        pv = ctx.get('pv', 0)
+        ht_reclaimable = ht_actual_power if pv > 500 else 0
+        raw_export = p1_return - p1 + ht_reclaimable + bat_charge
         effective_export = raw_export
         # Account for EV/boiler power decided this cycle but not yet in sensors
         if decisions.ev.action == 'on':
             effective_export -= decisions.ev.amps * config.ev.watts_per_amp
         if decisions.boiler.action == 'on':
             effective_export -= config.boiler.power
+
         # Full solar: surplus covers (nearly) all of the heater's rated power
-        SOLAR_TABLE_MARGIN = 200  # Accept up to 200W grid import (~5% of 4100W)
+        SOLAR_TABLE_MARGIN = 200
         has_solar_for_table = effective_export > table_power - SOLAR_TABLE_MARGIN
         # Significant solar: use RAW export (before boiler/EV deductions) because
-        # the grid headroom check (enough_for_table) already accounts for those.
-        # Otherwise the boiler eating solar blocks the heater even when grid allows it.
+        # enough_for_table already accounts for their headroom impact.
         MIN_EXPORT_FOR_TABLE = 1500
         has_significant_solar = raw_export > MIN_EXPORT_FOR_TABLE
-        plan.append(f"Table: raw={int(raw_export)}W eff={int(effective_export)}W rem={int(remaining)}W sig={has_significant_solar} full={has_solar_for_table} enough={enough_for_table}")
 
-        if tariff == 'super-off-peak' or has_significant_solar:
+        soe_str = f"{int(bat_soe)}%" if bat_soe is not None else "?"
+        plan.append(f"Table: raw={int(raw_export)}W rem={int(remaining)}W "
+                     f"sig={has_significant_solar} enough={enough_for_table} "
+                     f"bat={soe_str} draining={bat_discharging}")
+
+        # Battery protection: turn off heater if battery is draining below threshold
+        if ht_on and bat_discharging and bat_low:
+            if can_switch('heater_table', False):
+                decisions.heater_table.action = 'off'
+                plan.append(f"Table heater: OFF (battery {soe_str} < {BAT_SOE_MIN_FOR_TABLE}%)")
+        elif tariff == 'super-off-peak' or has_significant_solar:
             if not ht_on and (enough_for_table or has_solar_for_table):
-                if can_switch('heater_table', True):
+                # Don't turn on if battery is low and discharging
+                if bat_discharging and bat_low:
+                    plan.append(f"Table heater: SKIP (battery {soe_str})")
+                elif can_switch('heater_table', True):
                     decisions.heater_table.action = 'on'
                     reason = "solar" if has_solar_for_table else f"solar {int(raw_export)}W"
                     plan.append(f"Table heater: ON ({reason}, export {int(raw_export)}W)")
             elif ht_on and remaining < -hyst and not has_significant_solar:
-                # Only shed table heater if we're actually over the grid limit
-                # AND there's no significant solar to justify keeping it on.
                 if can_switch('heater_table', False):
                     decisions.heater_table.action = 'off'
                     plan.append("Table heater: OFF (grid limit exceeded)")
