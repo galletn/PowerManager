@@ -755,9 +755,9 @@ function updateDashboard(data) {
             }
         }
 
-        // SOE bar (SolarEdge may report 0-1 fraction or 0-100 percent)
+        // SOE bar - value is already a percentage (0-100 scale from HA)
         if (batSoe != null) {
-            const soePct = batSoe <= 1 ? batSoe * 100 : batSoe;
+            const soePct = batSoe;
             const soeFill = $('battery-soe-fill');
             if (soeFill) {
                 soeFill.style.width = `${Math.min(100, soePct)}%`;
