@@ -490,6 +490,7 @@ def calculate_decisions(
             'can_switch': can_switch,
             'device_state': device_state,
             'now': now_ts,
+            'is_summer': False,
             'is_exporting': is_exporting,
             'pv': pv,
             'p1': p1,
@@ -509,6 +510,7 @@ def calculate_decisions(
             'ev_limit': ev_limit,
             'boiler_on': boiler_on,
             'boiler_full': boiler_full,
+            'boiler_force': boiler_force,
             'boiler_power': boiler_power,
             'dw_switch_on': dw_switch_on,
             'dw_power': dw_power,
@@ -520,16 +522,20 @@ def calculate_decisions(
             'hyst': hyst,
             'tariff': tariff,
             'tariff_info': tariff_info,
+            'date': now,
             'config': config,
             'can_switch': can_switch,
             'device_state': device_state,
             'now': now_ts,
+            'is_summer': True,
             'is_exporting': is_exporting,
             'pv': pv,
             'p1': p1,
             'p1_return': p1_return,  # Export power
             'net_p1': net_p1,        # Net grid (neg = export)
             'battery_charge': battery_charge,
+            'battery_soe': inputs.battery_soe,
+            'battery_power': inputs.battery_power,
         })
 
     # Calculate final headroom
@@ -617,13 +623,13 @@ def _apply_manual_overrides(decisions: Decisions, plan: list, ovr: dict, ctx: di
         plan.append("Dishwasher: OVERRIDE OFF")
 
 
-def _handle_boiler_winter(
+def _handle_boiler(
     decisions: Decisions,
     plan: list,
     ctx: dict,
     effective_headroom: float
 ) -> tuple[float, float]:
-    """Handle boiler logic for winter mode.
+    """Handle boiler logic for both winter and summer modes.
 
     Determines whether to turn the boiler on/off based on tariff, solar surplus,
     force heat mode, and deadline approaching. The boiler has priority 2 (after
@@ -647,7 +653,8 @@ def _handle_boiler_winter(
 
     boiler_will_use = 0
     hour = ctx['date'].hour + ctx['date'].minute / 60
-    deadline = config.boiler.deadline_winter
+    is_summer = ctx.get('is_summer', False)
+    deadline = config.boiler.deadline_summer if is_summer else config.boiler.deadline_winter
     boiler_force = ctx.get('boiler_force', False)
     is_exporting = ctx.get('is_exporting', False)
 
@@ -1137,7 +1144,7 @@ def _apply_winter_logic(decisions: Decisions, plan: list, ctx: dict):
     effective_headroom = headroom
 
     # === BOILER FIRST (Priority 2 - hot water is essential!) ===
-    boiler_will_use, effective_headroom = _handle_boiler_winter(
+    boiler_will_use, effective_headroom = _handle_boiler(
         decisions, plan, ctx, effective_headroom
     )
 
@@ -1311,18 +1318,10 @@ def _apply_summer_logic(decisions: Decisions, plan: list, ctx: dict):
                 decisions.ev.action = 'off'
                 plan.append("EV: STOP (grid import too high)")
 
-    # Boiler - use solar surplus (include battery charge as reclaimable)
-    if ovr['boiler'] == 'auto' and not ctx['boiler_full']:
-        effective_surplus = p1_return + bat_charge
-        if is_exporting and (pv > config.boiler.power or effective_surplus > config.boiler.power):
-            if not ctx['boiler_on'] and can_switch('boiler', True):
-                decisions.boiler.action = 'on'
-                effective_headroom -= config.boiler.power
-                plan.append("Boiler: ON (solar surplus)")
-        elif ctx['boiler_on'] and not is_exporting:
-            if can_switch('boiler', False):
-                decisions.boiler.action = 'off'
-                plan.append("Boiler: OFF (no surplus)")
+    # === BOILER (reuse full boiler logic - nighttime heating + solar surplus) ===
+    boiler_will_use, effective_headroom = _handle_boiler(
+        decisions, plan, ctx, effective_headroom
+    )
 
     # === DISHWASHER (smart scheduling) ===
     # Same logic as winter - optimize for solar/cheap tariffs
@@ -1442,7 +1441,7 @@ def check_boiler_deadline(
     is_heating = boiler_on and boiler_power >= idle_threshold
 
     # Get deadline hour (e.g., 6.5 = 06:30)
-    deadline_hour = config.boiler.deadline_winter
+    deadline_hour = config.boiler.deadline_summer if is_summer(now) else config.boiler.deadline_winter
     current_hour = now.hour + now.minute / 60
 
     # Night cycle: 22:00 previous day to deadline
