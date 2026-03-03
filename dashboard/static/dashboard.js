@@ -990,6 +990,13 @@ async function fetchStatus() {
 
 // Set override
 async function setOverride(device, mode) {
+    // Immediately update button visuals for instant feedback
+    const container = $(`${device}-override-buttons`);
+    if (container) {
+        container.querySelectorAll('.override-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.getAttribute('data-mode') === mode);
+        });
+    }
     try {
         const response = await fetch(`${API_BASE_URL}/api/override/${device}?mode=${mode}`, {
             method: 'POST'
@@ -1001,6 +1008,7 @@ async function setOverride(device, mode) {
     } catch (error) {
         console.error('Failed to set override:', error);
         alert(`Failed to set ${device} to ${mode}: ${error.message}`);
+        fetchStatus(); // Revert button state on error
     }
 }
 
