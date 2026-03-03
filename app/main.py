@@ -1010,7 +1010,7 @@ async def set_override(device: str, mode: str):
 
     valid_devices = ['ev', 'boiler', 'pool', 'table_heater', 'dishwasher',
                      'ac_living', 'ac_bedroom', 'ac_office', 'ac_mancave']
-    valid_modes = ['auto', 'on', 'off']
+    valid_modes = ['auto', 'on', 'off', 'solar']
 
     if device not in valid_devices:
         raise HTTPException(
@@ -1037,7 +1037,7 @@ async def set_override(device: str, mode: str):
 
     # Map API mode to HA input_select option (Dutch labels with emojis)
     mode_map = {
-        'ev': {'auto': '🤖 Auto', 'on': '⚡ Laden', 'off': '⏹️ Uit'},
+        'ev': {'auto': '🤖 Auto', 'solar': '☀️ Solar', 'on': '⚡ Laden', 'off': '⏹️ Uit'},
         'boiler': {'auto': '🤖 Auto', 'on': '🔥 Aan', 'off': '⏹️ Uit'},
         'pool': {'auto': '🤖 Auto', 'on': '🔥 Aan', 'off': '⏹️ Uit'},
         'table_heater': {'auto': '🤖 Auto', 'on': '🔥 Aan', 'off': '⏹️ Uit'},

@@ -4,7 +4,7 @@
  *
  * STANDALONE MODE: To use this dashboard from HA's www folder or another host,
  * set window.POWER_MANAGER_API before loading this script:
- *   <script>window.POWER_MANAGER_API = 'https://192.168.68.78:8081';</script>
+ *   <script>window.POWER_MANAGER_API = 'https://YOUR-PM-HOST:8081';</script>
  *   <script src="dashboard.js"></script>
  */
 
@@ -1012,6 +1012,7 @@ function updateEvOverrideButtons(overrideState) {
     // Map HA state (Dutch with emojis) to button mode
     const stateToMode = {
         '🤖 Auto': 'auto',
+        '☀️ Solar': 'solar',
         '⚡ Laden': 'on',
         '⏹️ Uit': 'off'
     };

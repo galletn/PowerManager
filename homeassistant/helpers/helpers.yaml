@@ -112,10 +112,11 @@ input_select:
   pm_override_ev:
     name: EV Charging
     options:
-      - "Auto"
-      - "Charge"
-      - "Off"
-    initial: "Auto"
+      - "🤖 Auto"
+      - "☀️ Solar"
+      - "⚡ Laden"
+      - "⏹️ Uit"
+    initial: "🤖 Auto"
     icon: mdi:ev-station
 
   pm_override_table_heater:

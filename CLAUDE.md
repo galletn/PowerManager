@@ -12,7 +12,7 @@ Power Manager runs as a **Home Assistant add-on** with ingress support. The dash
 |----------|-------|
 | Add-on slug | `power_manager` |
 | Ingress port | `8099` |
-| HA URL | `https://gallet.duckdns.org:8123` |
+| HA URL | Set via environment/config |
 | HA API | Via Supervisor internal API (`http://supervisor/core`) |
 | Token | Automatic via `SUPERVISOR_TOKEN` |
 

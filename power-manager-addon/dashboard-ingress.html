@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Power Manager</title>
-    <link rel="stylesheet" href="static/style.css?v=1.0.26">
+    <link rel="stylesheet" href="static/style.css?v=1.0.28">
 </head>
 <body>
     <div class="dashboard">
@@ -190,6 +190,7 @@
                             <span class="override-label">Charger:</span>
                             <div class="override-buttons" id="ev-override-buttons">
                                 <button class="override-btn" data-mode="auto" onclick="setOverride('ev', 'auto')">Auto</button>
+                                <button class="override-btn" data-mode="solar" onclick="setOverride('ev', 'solar')">Solar</button>
                                 <button class="override-btn" data-mode="on" onclick="setOverride('ev', 'on')">Charge</button>
                                 <button class="override-btn" data-mode="off" onclick="setOverride('ev', 'off')">Off</button>
                             </div>
@@ -199,7 +200,7 @@
                         <!-- BMW i5 -->
                         <div class="car-card" id="car-i5">
                             <div class="car-image-container">
-                                <img src="https://gallet.duckdns.org:8123/local/i540%20cartoon.jpg" alt="BMW i5" class="car-image" onerror="this.style.display='none'">
+                                <img src="/local/i540%20cartoon.jpg" alt="BMW i5" class="car-image" onerror="this.style.display='none'">
                                 <div class="car-location-badge" id="i5-location-badge">
                                     <span class="location-icon">📍</span>
                                     <span id="bmw-i5-location">Away</span>
@@ -245,7 +246,7 @@
                         <!-- BMW iX1 -->
                         <div class="car-card" id="car-ix1">
                             <div class="car-image-container">
-                                <img src="https://gallet.duckdns.org:8123/local/ix120%20cartoon.jpg" alt="BMW iX1" class="car-image" onerror="this.style.display='none'">
+                                <img src="/local/ix120%20cartoon.jpg" alt="BMW iX1" class="car-image" onerror="this.style.display='none'">
                                 <div class="car-location-badge" id="ix1-location-badge">
                                     <span class="location-icon">📍</span>
                                     <span id="bmw-ix1-location">Away</span>
@@ -338,6 +339,6 @@
     </div>
 
     <script>window.POWER_MANAGER_API = '.';</script>
-    <script src="static/dashboard.js?v=1.0.26"></script>
+    <script src="static/dashboard.js?v=1.0.28"></script>
 </body>
 </html>

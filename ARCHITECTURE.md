@@ -185,7 +185,7 @@ Features:
 
 ```yaml
 home_assistant:
-  url: "https://gallet.duckdns.org:8123"
+  url: "https://your-ha-host:8123"
   token: "eyJ..."
 
 polling_interval: 30  # seconds
@@ -218,7 +218,7 @@ bmw_low_battery:
   check_hours: [20, 21, 22]
 
 notifications:
-  entity: "mobile_app_iphone_van_nicolas_2"
+  entity: "mobile_app_your_phone"
 ```
 
 ## Deployment Options

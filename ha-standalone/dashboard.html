@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Power Manager</title>
     <!-- Load CSS directly from Power Manager server for auto-updates -->
-    <link rel="stylesheet" href="https://gallet.duckdns.org:8081/static/style.css">
+    <link rel="stylesheet" href="https://YOUR-PM-HOST:8081/static/style.css">
 </head>
 <body>
     <div class="dashboard">
@@ -175,7 +175,7 @@
                         <!-- BMW i5 -->
                         <div class="car-card" id="car-i5">
                             <div class="car-image-container">
-                                <img src="https://gallet.duckdns.org:8123/local/i540%20cartoon.jpg" alt="BMW i5" class="car-image" onerror="this.style.display='none'">
+                                <img src="/local/i540%20cartoon.jpg" alt="BMW i5" class="car-image" onerror="this.style.display='none'">
                                 <div class="car-location-badge" id="i5-location-badge">
                                     <span class="location-icon">📍</span>
                                     <span id="bmw-i5-location">Away</span>
@@ -221,7 +221,7 @@
                         <!-- BMW iX1 -->
                         <div class="car-card" id="car-ix1">
                             <div class="car-image-container">
-                                <img src="https://gallet.duckdns.org:8123/local/ix120%20cartoon.jpg" alt="BMW iX1" class="car-image" onerror="this.style.display='none'">
+                                <img src="/local/ix120%20cartoon.jpg" alt="BMW iX1" class="car-image" onerror="this.style.display='none'">
                                 <div class="car-location-badge" id="ix1-location-badge">
                                     <span class="location-icon">📍</span>
                                     <span id="bmw-ix1-location">Away</span>
@@ -317,9 +317,9 @@
     <script>
         // Configure the Power Manager API URL for standalone mode
         // Using hostname so SSL certificate matches
-        window.POWER_MANAGER_API = 'https://gallet.duckdns.org:8081';
+        window.POWER_MANAGER_API = 'https://YOUR-PM-HOST:8081';
     </script>
     <!-- Load JS directly from Power Manager server for auto-updates -->
-    <script src="https://gallet.duckdns.org:8081/static/dashboard.js"></script>
+    <script src="https://YOUR-PM-HOST:8081/static/dashboard.js"></script>
 </body>
 </html>

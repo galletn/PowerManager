@@ -20,7 +20,7 @@ CONFIGURATION:
 --------------
 Edit ALL dashboard*.html files and set the API URL:
 
-    window.POWER_MANAGER_API = 'https://192.168.68.78:8081';
+    window.POWER_MANAGER_API = 'https://YOUR-PM-HOST:8081';
 
 DEPLOYMENT:
 -----------
@@ -55,14 +55,14 @@ If values don't load:
    The browser may block requests to the Power Manager API because it uses
    a self-signed or untrusted certificate. To fix:
 
-   - Open https://192.168.68.78:8081 directly in your browser
+   - Open https://YOUR-PM-HOST:8081 directly in your browser
    - Accept the security warning / add exception
    - Then refresh the dashboard
 
 2. Check browser console (F12 -> Console) for errors
 
 3. Verify the API is running:
-   curl -k https://192.168.68.78:8081/api/status
+   curl -k https://YOUR-PM-HOST:8081/api/status
 
 4. If using internal IP, make sure it's accessible from your network
 

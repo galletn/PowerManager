@@ -114,12 +114,12 @@ class TestManualOverrides:
         assert any('OVERRIDE OFF' in entry for entry in result.plan)
 
     def test_ev_override_on(self, base_inputs, config, device_state, winter_evening):
-        """EV override ON starts charging at max amps."""
+        """EV override ON starts charging (respects headroom)."""
         inputs = replace(base_inputs, ovr_ev='on', ev_state=EVState.READY)
         result = calculate_decisions(inputs, config, device_state, winter_evening)
 
         assert result.decisions.ev.action == 'on'
-        assert result.decisions.ev.amps == config.ev.max_amps
+        assert result.decisions.ev.amps >= config.ev.min_amps
 
 
 class TestEvCharging:

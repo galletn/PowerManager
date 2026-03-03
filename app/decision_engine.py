@@ -152,6 +152,9 @@ def parse_override(value: str) -> str:
     # Check for auto patterns
     if v in ('', 'auto', 'automatic') or 'auto' in v:
         return 'auto'
+    # Check for solar-only pattern
+    if v in ('solar',) or 'solar' in v or 'zon' in v:
+        return 'solar'
     # Check for on/active patterns (includes Dutch: aan, laden, start)
     if v in ('on', 'aan', 'force_on', 'force on', 'laden', 'start') or \
        'aan' in v or 'laden' in v or 'start' in v:
@@ -508,6 +511,7 @@ def calculate_decisions(
             'ev_ready': ev_ready,
             'ev_charging': ev_charging,
             'ev_limit': ev_limit,
+            'ev_hours_needed': ev_hours_needed,
             'boiler_on': boiler_on,
             'boiler_full': boiler_full,
             'boiler_force': boiler_force,
@@ -802,18 +806,18 @@ def _handle_boiler(
     return boiler_will_use, effective_headroom
 
 
-def _handle_ev_winter(
+def _handle_ev(
     decisions: Decisions,
     plan: list,
     ctx: dict,
     effective_headroom: float,
     boiler_will_use: float
 ) -> float:
-    """Handle EV charging logic for winter mode.
+    """Handle EV charging logic for both seasons.
 
-    Manages EV charging based on tariff periods and available capacity.
-    During super-off-peak, EV can charge alongside boiler. During off-peak,
-    EV only charges if boiler is idle. Charging stops during peak tariff.
+    Manages EV charging based on solar surplus and tariff periods.
+    Solar surplus charging is always active. Tariff-based charging
+    (super-off-peak/off-peak) is skipped when override is 'solar'.
 
     Args:
         decisions: Decisions object to update with EV action.
@@ -831,7 +835,7 @@ def _handle_ev_winter(
     can_switch = ctx['can_switch']
     tariff = ctx['tariff']
 
-    if ovr['ev'] != 'auto' or not ctx['ev_plugged'] or ctx['ev_done']:
+    if ovr['ev'] not in ('auto', 'solar') or not ctx['ev_plugged'] or ctx['ev_done']:
         return effective_headroom
 
     # When EV is already charging, its power is included in p1.
@@ -881,6 +885,10 @@ def _handle_ev_winter(
             return effective_headroom
 
     # === TARIFF-BASED CHARGING (no solar surplus) ===
+    # Solar-only mode: skip tariff-based charging entirely
+    if ovr['ev'] == 'solar':
+        return effective_headroom
+
     if tariff == 'super-off-peak':
         # Super off-peak (9kW winter limit) - dynamic capacity sharing
         # When boiler/heater are actively consuming, their power is already
@@ -1149,7 +1157,7 @@ def _apply_winter_logic(decisions: Decisions, plan: list, ctx: dict):
     )
 
     # === EV CHARGING (Priority 3 - use remaining capacity) ===
-    effective_headroom = _handle_ev_winter(
+    effective_headroom = _handle_ev(
         decisions, plan, ctx, effective_headroom, boiler_will_use
     )
 
@@ -1270,53 +1278,11 @@ def _apply_summer_logic(decisions: Decisions, plan: list, ctx: dict):
     is_exporting = ctx['is_exporting']
     pv = ctx['pv']
 
-    # EV Charging - solar-assisted charging
-    # Allow up to 1kW grid import when solar is good (better than exporting all)
-    p1 = ctx.get('p1', 0)         # Import power
-    p1_return = ctx.get('p1_return', 0)  # Export power
-    bat_charge = ctx.get('battery_charge', 0)
-
-    if ovr['ev'] == 'auto' and ctx['ev_plugged'] and not ctx['ev_done']:
-        # Good solar: either exporting, or importing less than threshold
-        has_good_solar = pv > 1500 and (is_exporting or p1 < MAX_GRID_IMPORT_FOR_EV + bat_charge)
-
-        if has_good_solar:
-            # Calculate available power for EV
-            # Include battery charge as reclaimable surplus
-            if is_exporting:
-                available_power = p1_return + bat_charge + MAX_GRID_IMPORT_FOR_EV
-            else:
-                available_power = MAX_GRID_IMPORT_FOR_EV + bat_charge - p1
-
-            # When EV is already charging, add back its consumption
-            current_ev_watts = ctx['ev_limit'] * config.ev.watts_per_amp if ctx['ev_charging'] else 0
-            total_for_ev = available_power + current_ev_watts - hyst
-
-            available_amps = calculate_available_amps(total_for_ev, config.ev.watts_per_amp)
-            target_amps = max(config.ev.min_amps, min(available_amps, config.ev.max_amps))
-
-            if ctx['ev_ready'] and target_amps >= config.ev.min_amps:
-                if can_switch('ev', True):
-                    decisions.ev.action = 'on'
-                    decisions.ev.amps = target_amps
-                    effective_headroom -= target_amps * config.ev.watts_per_amp
-                    solar_pct = min(100, int((pv / (target_amps * config.ev.watts_per_amp)) * 100))
-                    plan.append(f"EV: SOLAR START {target_amps}A (~{solar_pct}% solar)")
-            elif ctx['ev_charging']:
-                amp_diff = abs(target_amps - ctx['ev_limit'])
-                if amp_diff >= config.ev.amp_change_threshold:
-                    if target_amps >= config.ev.min_amps:
-                        decisions.ev.action = 'adjust'
-                        decisions.ev.amps = target_amps
-                        plan.append(f"EV: adjust to {target_amps}A (solar)")
-                    else:
-                        decisions.ev.action = 'off'
-                        plan.append("EV: STOP (insufficient solar)")
-        elif ctx['ev_charging'] and p1 > MAX_GRID_IMPORT_FOR_EV:
-            # Importing too much from grid, stop or reduce
-            if can_switch('ev', False):
-                decisions.ev.action = 'off'
-                plan.append("EV: STOP (grid import too high)")
+    # === EV CHARGING (reuse full EV logic - nighttime + solar) ===
+    boiler_will_use = 0  # Will be updated after boiler logic
+    effective_headroom = _handle_ev(
+        decisions, plan, ctx, effective_headroom, boiler_will_use
+    )
 
     # === BOILER (reuse full boiler logic - nighttime heating + solar surplus) ===
     boiler_will_use, effective_headroom = _handle_boiler(
@@ -1420,7 +1386,7 @@ def check_boiler_deadline(
     2. It's at/past deadline and boiler hasn't heated enough (critical)
 
     The "night cycle" runs from 22:00 to the deadline (e.g., 06:30).
-    Heating time is tracked and alerts are sent to Nicolas's phone.
+    Heating time is tracked and alerts are sent to the user's phone.
 
     Args:
         inputs: Current power readings from Home Assistant

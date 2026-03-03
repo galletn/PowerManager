@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class HAConfig:
     """Home Assistant connection settings."""
-    url: str = "https://gallet.duckdns.org:8123"
+    url: str = ""
     token: str = ""
     verify_ssl: bool = False
 
@@ -72,7 +72,7 @@ class FrostProtectionConfig:
     critical_threshold: float = 2.0
     pump_min_power: int = 100
     pump_off_alert_delay: int = 300
-    notify_entity: str = "mobile_app_iphone_van_nicolas_2"
+    notify_entity: str = "mobile_app_your_phone"
 
 
 @dataclass
@@ -81,7 +81,7 @@ class BMWLowBatteryConfig:
     enabled: bool = True
     battery_threshold: int = 50
     check_hours: list = field(default_factory=lambda: [20, 21, 22])
-    notify_entity: str = "mobile_app_iphone_van_nicolas_2"
+    notify_entity: str = "mobile_app_your_phone"
 
 
 @dataclass
