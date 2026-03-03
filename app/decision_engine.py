@@ -540,6 +540,10 @@ def calculate_decisions(
             'battery_charge': battery_charge,
             'battery_soe': inputs.battery_soe,
             'battery_power': inputs.battery_power,
+            'ht_on': ht_on,
+            'hr_on': hr_on,
+            'ht_power': ht_power,
+            'ev_power': inputs.ev_power,
         })
 
     # Calculate final headroom
@@ -984,17 +988,18 @@ def _handle_ev(
     return effective_headroom
 
 
-def _handle_heaters_winter(
+def _handle_heaters(
     decisions: Decisions,
     plan: list,
     ctx: dict,
     effective_headroom: float
 ) -> None:
-    """Handle table heater and right heater logic for winter mode.
+    """Handle table heater and right heater logic.
 
     Heaters have the lowest priority and use remaining capacity after boiler and EV.
     Priority: table_heater (4100W) first, then right_heater (2500W).
     Also turns on with solar export to use free power.
+    Used in both winter and summer modes.
 
     Args:
         decisions: Decisions object to update with heater actions.
@@ -1162,7 +1167,7 @@ def _apply_winter_logic(decisions: Decisions, plan: list, ctx: dict):
     )
 
     # === TABLE HEATER (Priority 4 - lowest, use remaining capacity) ===
-    _handle_heaters_winter(decisions, plan, ctx, effective_headroom)
+    _handle_heaters(decisions, plan, ctx, effective_headroom)
 
     # Update headroom in context for dishwasher to see reduced capacity
     # from devices being turned ON in this cycle
@@ -1293,6 +1298,12 @@ def _apply_summer_logic(decisions: Decisions, plan: list, ctx: dict):
     # Same logic as winter - optimize for solar/cheap tariffs
     ctx['headroom'] = effective_headroom  # Use updated headroom
     _apply_dishwasher_logic(decisions, plan, ctx)
+
+    # === TABLE HEATER (summer - only when override is "On") ===
+    # In summer, table heater doesn't run on Auto - only when explicitly enabled.
+    # The heater logic still applies solar surplus guards and battery protection.
+    if ovr['table_heater'] == 'on':
+        _handle_heaters(decisions, plan, ctx, effective_headroom)
 
 
 def check_frost_protection(
