@@ -682,11 +682,20 @@ def _handle_boiler(
             boiler_will_use = ctx.get('boiler_power', config.boiler.power)
         return boiler_will_use, effective_headroom
 
+    p1_return = ctx.get('p1_return', 0)
+    bat_charge = ctx.get('battery_charge', 0)
+    effective_surplus = p1_return + bat_charge
+    bat_soe = ctx.get('battery_soe')
+    has_solar_surplus = is_exporting and effective_surplus > MIN_EXPORT_FOR_BOILER
+
     if tariff == 'peak' and ctx['boiler_on'] and not boiler_force:
-        # Turn off during peak (unless force heat)
-        if hour > deadline and can_switch('boiler', False):
+        # During peak, keep boiler on if solar surplus exists and battery is healthy.
+        # Only force off if battery drops below 30% (reserve for peak rate coverage).
+        bat_critical = bat_soe is not None and bat_soe < 30
+        if hour > deadline and (not has_solar_surplus or bat_critical) and can_switch('boiler', False):
             decisions.boiler.action = 'off'
-            plan.append("Boiler: OFF (peak tariff)")
+            reason = "battery low" if bat_critical else "peak tariff"
+            plan.append(f"Boiler: OFF ({reason})")
         return boiler_will_use, effective_headroom
 
     if not ctx['boiler_full']:
@@ -694,12 +703,7 @@ def _handle_boiler(
         approaching_deadline = hour >= (deadline - 2) and hour < deadline
         enough_power = effective_headroom > config.boiler.power + hyst
 
-        # Solar surplus logic: if exporting significant power, use boiler
-        # Include battery charge power as reclaimable surplus
-        p1_return = ctx.get('p1_return', 0)  # Actual export power
-        bat_charge = ctx.get('battery_charge', 0)
-        effective_surplus = p1_return + bat_charge
-        has_solar_surplus = is_exporting and effective_surplus > MIN_EXPORT_FOR_BOILER
+        # Solar surplus already computed above (before peak tariff check)
 
         # Determine if boiler should heat (conditions regardless of power):
         # 1. Super off-peak (cheapest rate, 01:00-07:00)
