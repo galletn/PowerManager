@@ -691,8 +691,9 @@ def _handle_boiler(
     if tariff == 'peak' and ctx['boiler_on'] and not boiler_force:
         # During peak, keep boiler on if solar surplus exists and battery is healthy.
         # Only force off if battery drops below 30% (reserve for peak rate coverage).
+        # Skip hysteresis for tariff-based turn-off — tariff transitions should be immediate.
         bat_critical = bat_soe is not None and bat_soe < 30
-        if hour > deadline and (not has_solar_surplus or bat_critical) and can_switch('boiler', False):
+        if hour > deadline and (not has_solar_surplus or bat_critical):
             decisions.boiler.action = 'off'
             reason = "battery low" if bat_critical else "peak tariff"
             plan.append(f"Boiler: OFF ({reason})")
