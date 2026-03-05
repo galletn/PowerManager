@@ -686,7 +686,12 @@ def _handle_boiler(
     bat_charge = ctx.get('battery_charge', 0)
     effective_surplus = p1_return + bat_charge
     bat_soe = ctx.get('battery_soe')
-    has_solar_surplus = is_exporting and effective_surplus > MIN_EXPORT_FOR_BOILER
+    # When boiler is ON, its consumption absorbs the surplus so p1_return drops.
+    # Add boiler power back to see if solar WOULD produce surplus without the boiler.
+    boiler_power_now = ctx.get('boiler_power', 0) if ctx['boiler_on'] else 0
+    virtual_surplus = effective_surplus + boiler_power_now
+    has_solar_surplus = (is_exporting and effective_surplus > MIN_EXPORT_FOR_BOILER) or \
+                        (ctx['boiler_on'] and virtual_surplus > MIN_EXPORT_FOR_BOILER)
 
     if tariff == 'peak' and ctx['boiler_on'] and not boiler_force:
         # During peak, keep boiler on if solar surplus exists and battery is healthy.
@@ -1107,17 +1112,26 @@ def _handle_heaters(
     # This is the lowest priority device - only uses excess solar
     # Turns off when importing > 500W
     RIGHT_HEATER_ON_THRESHOLD = 2200  # Turn on when exporting > 2200W
+    RIGHT_HEATER_OFF_THRESHOLD = 500  # Turn off when importing > 500W
     if ovr.get('right_heater', 'auto') == 'auto':
         p1 = ctx.get('p1', 0)  # Import power
         bat_charge = ctx.get('battery_charge', 0)
-        has_solar_for_right = is_exporting and (p1_return + bat_charge) > RIGHT_HEATER_ON_THRESHOLD
-        importing_too_much = not is_exporting and p1 > 500
+        raw_surplus = p1_return + bat_charge
+        # When heater is ON, add its rated power back to see virtual surplus
+        hr_actual_power = right_power if hr_on else 0
+        virtual_right_surplus = raw_surplus + hr_actual_power
+        has_solar_for_right = is_exporting and raw_surplus > RIGHT_HEATER_ON_THRESHOLD
+        # When ON, check virtual surplus (would we export without the heater?)
+        still_has_solar = hr_on and virtual_right_surplus > RIGHT_HEATER_ON_THRESHOLD
+        importing_too_much = not is_exporting and p1 > RIGHT_HEATER_OFF_THRESHOLD and not still_has_solar
 
-        if has_solar_for_right:
+        if has_solar_for_right or still_has_solar:
             if not hr_on:
                 if can_switch('heater_right', True):
                     decisions.heater_right.action = 'on'
-                    plan.append(f"Right heater: ON (solar {int(p1_return + bat_charge)}W)")
+                    plan.append(f"Right heater: ON (solar {int(raw_surplus)}W)")
+            else:
+                plan.append(f"Right heater: HEATING (virtual {int(virtual_right_surplus)}W)")
         elif hr_on and (importing_too_much or not is_exporting):
             # Turn off if importing > 500W or no longer exporting
             if can_switch('heater_right', False):
