@@ -602,6 +602,7 @@ def _update_device_state(inputs: PowerInputs, confirmed_states: dict[str, bool])
     update_state('ev', inputs.ev_state == 132)
     update_state('boiler', inputs.boiler_switch == 'on')
     update_state('pool_pump', inputs.pool_pump_switch == 'on')
+    update_state('pool', inputs.pool_climate == 'heat')
     update_state('heater_table', inputs.heater_table_switch == 'on')
     update_state('dishwasher', inputs.dishwasher_switch == 'on')
 

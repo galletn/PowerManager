@@ -196,12 +196,14 @@ class AllDeviceStates:
     dishwasher_solar_surplus_since: float = 0.0
     heater_right_solar_surplus_since: float = 0.0
     heater_table_solar_surplus_since: float = 0.0
+    pool_solar_surplus_since: float = 0.0
     # Timestamp when we started importing (no solar surplus) while device is on
     # Used to turn off device after grace period of sustained import
     boiler_importing_since: float = 0.0
     dishwasher_importing_since: float = 0.0
     heater_right_importing_since: float = 0.0
     heater_table_importing_since: float = 0.0
+    pool_importing_since: float = 0.0
 
 
 @dataclass

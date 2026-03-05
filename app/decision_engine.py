@@ -363,6 +363,10 @@ def calculate_decisions(
     ht_on = inputs.heater_table_switch == 'on'
     ht_power = inputs.heater_table_power
 
+    # Pool heating
+    pool_heating_on = inputs.pool_climate == 'heat'
+    pool_power = inputs.pool_power
+
     # Dishwasher
     dw_switch_on = inputs.dishwasher_switch == 'on'
     dw_power = inputs.dishwasher_power
@@ -478,6 +482,8 @@ def calculate_decisions(
             'hr_on': hr_on,
             'ht_on': ht_on,
             'ht_power': ht_power,
+            'pool_heating_on': pool_heating_on,
+            'pool_power': pool_power,
             'dw_switch_on': dw_switch_on,
             'dw_power': dw_power,
             'dw_running': dw_running,
@@ -516,6 +522,8 @@ def calculate_decisions(
             'boiler_full': boiler_full,
             'boiler_force': boiler_force,
             'boiler_power': boiler_power,
+            'pool_heating_on': pool_heating_on,
+            'pool_power': pool_power,
             'dw_switch_on': dw_switch_on,
             'dw_power': dw_power,
             'dw_running': dw_running,
@@ -998,6 +1006,95 @@ def _handle_ev(
     return effective_headroom
 
 
+# Pool heater minimum export to justify turning on (~1.2kW heater)
+MIN_EXPORT_FOR_POOL = 500
+
+
+def _handle_pool_heating(
+    decisions: Decisions, plan: list, ctx: dict, effective_headroom: float
+) -> float:
+    """Handle pool heat pump logic based on solar surplus.
+
+    Pool heating only runs on solar surplus (Auto/Solar mode) or forced on.
+    When ON, uses virtual surplus to avoid flip-flop (same as boiler).
+    Turns off after grace period when solar drops.
+    """
+    ovr = ctx['ovr']
+    can_switch = ctx['can_switch']
+    is_exporting = ctx.get('is_exporting', False)
+    p1_return = ctx.get('p1_return', 0)
+    bat_charge = ctx.get('battery_charge', 0)
+    pool_on = ctx.get('pool_heating_on', False)
+    pool_power_now = ctx.get('pool_power', 0)
+    device_state = ctx.get('device_state')
+    now_ts = ctx.get('now', 0)
+
+    pool_mode = ovr.get('pool', 'auto')
+
+    # Off override - handled by _apply_manual_overrides, just report
+    if pool_mode == 'off':
+        return effective_headroom
+
+    # On override - force heat, already handled by _apply_manual_overrides
+    if pool_mode == 'on':
+        if pool_on:
+            plan.append(f"Pool heat: ON (forced, {int(pool_power_now)}W)")
+        return effective_headroom
+
+    # Auto and Solar modes: only heat with solar surplus
+    effective_surplus = p1_return + bat_charge
+    # Virtual surplus: add pool's own consumption back when it's ON
+    virtual_surplus = effective_surplus + (pool_power_now if pool_on else 0)
+    has_solar = (is_exporting and effective_surplus > MIN_EXPORT_FOR_POOL) or \
+                (pool_on and virtual_surplus > MIN_EXPORT_FOR_POOL)
+
+    if pool_on:
+        # Pool is heating - check if we should turn it off
+        if not has_solar and device_state:
+            # Solar gone - start/continue grace period
+            if device_state.pool_importing_since == 0:
+                device_state.pool_importing_since = now_ts
+                elapsed = 0
+            else:
+                elapsed = (now_ts - device_state.pool_importing_since) / 1000
+
+            grace_remaining = SOLAR_SURPLUS_GRACE_PERIOD - elapsed
+
+            if elapsed >= SOLAR_SURPLUS_GRACE_PERIOD:
+                # Grace expired - turn off
+                decisions.pool.action = 'off'
+                device_state.pool_solar_surplus_since = 0
+                device_state.pool_importing_since = 0
+                plan.append("Pool heat: OFF (no surplus for 5min)")
+                return effective_headroom
+            else:
+                plan.append(
+                    f"Pool heat: ON ({int(pool_power_now)}W, "
+                    f"grace {int(grace_remaining)}s)"
+                )
+                return effective_headroom
+        else:
+            # Still has solar - reset grace timer
+            if has_solar and device_state:
+                device_state.pool_importing_since = 0
+            plan.append(f"Pool heat: ON ({int(pool_power_now)}W, solar)")
+    else:
+        # Pool is off - check if we should turn it on
+        if has_solar:
+            if can_switch('pool', True):
+                decisions.pool.action = 'on'
+                if device_state:
+                    device_state.pool_solar_surplus_since = now_ts
+                    device_state.pool_importing_since = 0
+                plan.append(f"Pool heat: ON (solar {int(effective_surplus)}W)")
+            else:
+                plan.append("Pool heat: BLOCKED (hysteresis)")
+        else:
+            plan.append("Pool heat: OFF (waiting for solar)")
+
+    return effective_headroom
+
+
 def _handle_heaters(
     decisions: Decisions,
     plan: list,
@@ -1185,6 +1282,11 @@ def _apply_winter_logic(decisions: Decisions, plan: list, ctx: dict):
         decisions, plan, ctx, effective_headroom, boiler_will_use
     )
 
+    # === POOL HEATING (Priority 3.5 - solar only) ===
+    effective_headroom = _handle_pool_heating(
+        decisions, plan, ctx, effective_headroom
+    )
+
     # === TABLE HEATER (Priority 4 - lowest, use remaining capacity) ===
     _handle_heaters(decisions, plan, ctx, effective_headroom)
 
@@ -1310,6 +1412,11 @@ def _apply_summer_logic(decisions: Decisions, plan: list, ctx: dict):
 
     # === BOILER (reuse full boiler logic - nighttime heating + solar surplus) ===
     boiler_will_use, effective_headroom = _handle_boiler(
+        decisions, plan, ctx, effective_headroom
+    )
+
+    # === POOL HEATING (solar only) ===
+    effective_headroom = _handle_pool_heating(
         decisions, plan, ctx, effective_headroom
     )
 
