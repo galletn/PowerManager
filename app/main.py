@@ -549,14 +549,15 @@ async def execute_decisions(
                 add_pending_command(config.entities.heater_right, 'off')
             logger.info("Right Heater: OFF")
 
-        # Dishwasher (smart scheduling)
-        if decisions.dishwasher.action == 'on':
+        # Dishwasher (smart scheduling) - only send command if state changes
+        # Dishwasher: only send command when state actually changes
+        if decisions.dishwasher.action == 'on' and inputs.dishwasher_switch != 'on':
             success = await ha_client.turn_on(config.entities.dishwasher_switch)
             if success:
                 confirmed_states['dishwasher'] = True
                 add_pending_command(config.entities.dishwasher_switch, 'on')
             logger.info(f"Dishwasher: ON ({decisions.dishwasher.reason})")
-        elif decisions.dishwasher.action == 'off':
+        elif decisions.dishwasher.action == 'off' and inputs.dishwasher_switch != 'off':
             success = await ha_client.turn_off(config.entities.dishwasher_switch)
             if success:
                 confirmed_states['dishwasher'] = False
