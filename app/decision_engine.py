@@ -870,19 +870,29 @@ def _handle_ev(
     p1 = ctx.get('p1', 0)
     p1_return = ctx.get('p1_return', 0)
     bat_charge = ctx.get('battery_charge', 0)
-    has_good_solar = pv > 1500 and (is_exporting or p1 < MAX_GRID_IMPORT_FOR_EV + bat_charge)
 
-    if has_good_solar:
+    # When battery is discharging, it masks the real grid import.
+    # Subtract discharge from available power to see true solar surplus.
+    battery_power_raw = ctx.get('battery_power')  # +discharge, -charge
+    battery_discharge = max(0, battery_power_raw) if battery_power_raw is not None else 0
+
+    # For starting: strict check (account for battery discharge)
+    effective_p1 = p1 + battery_discharge
+    has_good_solar = pv > 1500 and (is_exporting or effective_p1 < MAX_GRID_IMPORT_FOR_EV + bat_charge)
+    # For already-charging EV: enter solar section to allow amp adjustment
+    ev_solar_active = has_good_solar or (ctx['ev_charging'] and pv > 1500)
+
+    if ev_solar_active:
         if is_exporting:
             available_power = p1_return + bat_charge + MAX_GRID_IMPORT_FOR_EV
         else:
-            available_power = MAX_GRID_IMPORT_FOR_EV + bat_charge - p1
+            available_power = MAX_GRID_IMPORT_FOR_EV + bat_charge - p1 - battery_discharge
 
         total_for_ev = available_power + current_ev_watts - hyst
         available_amps = calculate_available_amps(total_for_ev, config.ev.watts_per_amp)
         target_amps = max(config.ev.min_amps, min(available_amps, config.ev.max_amps))
 
-        if ctx['ev_ready'] and target_amps >= config.ev.min_amps:
+        if ctx['ev_ready'] and has_good_solar and target_amps >= config.ev.min_amps:
             if can_switch('ev', True):
                 decisions.ev.action = 'on'
                 decisions.ev.amps = target_amps
