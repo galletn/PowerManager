@@ -474,6 +474,7 @@ def calculate_decisions(
             'ev_ready': ev_ready,
             'ev_charging': ev_charging,
             'ev_limit': ev_limit,
+            'ev_power': ev_power,
             'ev_hours_needed': ev_hours_needed,  # For off-peak scheduling optimization
             'boiler_on': boiler_on,
             'boiler_full': boiler_full,
@@ -517,6 +518,7 @@ def calculate_decisions(
             'ev_ready': ev_ready,
             'ev_charging': ev_charging,
             'ev_limit': ev_limit,
+            'ev_power': ev_power,
             'ev_hours_needed': ev_hours_needed,
             'boiler_on': boiler_on,
             'boiler_full': boiler_full,
@@ -861,8 +863,9 @@ def _handle_ev(
         return effective_headroom
 
     # When EV is already charging, its power is included in p1.
-    # To calculate target amps, we need TOTAL power available for EV.
-    current_ev_watts = ctx['ev_limit'] * config.ev.watts_per_amp if ctx['ev_charging'] else 0
+    # Use actual measured power (more accurate than calculated from amps).
+    ev_power_now = ctx.get('ev_power', 0) if ctx['ev_charging'] else 0
+    current_ev_watts = max(ev_power_now, ctx['ev_limit'] * config.ev.watts_per_amp) if ctx['ev_charging'] else 0
 
     # === SOLAR SURPLUS CHARGING (any tariff - free power!) ===
     is_exporting = ctx.get('is_exporting', False)
@@ -870,6 +873,7 @@ def _handle_ev(
     p1 = ctx.get('p1', 0)
     p1_return = ctx.get('p1_return', 0)
     bat_charge = ctx.get('battery_charge', 0)
+    bat_soe = ctx.get('battery_soe')
 
     # When battery is discharging, it masks the real grid import.
     # Subtract discharge from available power to see true solar surplus.
@@ -888,7 +892,15 @@ def _handle_ev(
         else:
             available_power = MAX_GRID_IMPORT_FOR_EV + bat_charge - p1 - battery_discharge
 
-        total_for_ev = available_power + current_ev_watts - hyst
+        # When battery SOE is low, don't rely on virtual surplus — cap to PV output.
+        # This prevents the feedback loop: reduce EV → battery stops discharging →
+        # next cycle sees no discharge → bumps EV up → battery discharges again.
+        if bat_soe is not None and bat_soe < 15:
+            # Cap EV to what PV can realistically provide (PV minus ~500W house base)
+            max_pv_watts = max(0, pv - 500) + MAX_GRID_IMPORT_FOR_EV
+            total_for_ev = min(available_power + current_ev_watts, max_pv_watts) - hyst
+        else:
+            total_for_ev = available_power + current_ev_watts - hyst
         available_amps = calculate_available_amps(total_for_ev, config.ev.watts_per_amp)
         target_amps = max(config.ev.min_amps, min(available_amps, config.ev.max_amps))
 
