@@ -693,15 +693,27 @@ def _handle_boiler(
         return boiler_will_use, effective_headroom
 
     p1_return = ctx.get('p1_return', 0)
-    bat_charge = ctx.get('battery_charge', 0)
-    effective_surplus = p1_return + bat_charge
     bat_soe = ctx.get('battery_soe')
-    # When boiler is ON, its consumption absorbs the surplus so p1_return drops.
-    # Add boiler power back to see if solar WOULD produce surplus without the boiler.
+    battery_power = ctx.get('battery_power')  # positive=discharging, negative=charging
+    bat_charging_rate = -battery_power if battery_power is not None else 0
+    # net_p1 = p1 - p1_return (positive = importing, negative = exporting)
+    net_p1 = ctx.get('net_p1', 0)
+
+    # Solar surplus for boiler: only use actual grid export (don't reclaim battery charge).
+    # Battery must be charging >2000W and SOE >20% before we divert solar to boiler.
+    MIN_BAT_CHARGE_FOR_BOILER = 2000  # Battery must be charging at least this fast (W)
+    MIN_BAT_SOE_FOR_BOILER = 20       # Battery must be above this SOE (%)
+    bat_ok = (bat_charging_rate > MIN_BAT_CHARGE_FOR_BOILER and
+              bat_soe is not None and bat_soe > MIN_BAT_SOE_FOR_BOILER)
+
+    # When boiler is ON, estimate surplus if boiler were off
     boiler_power_now = ctx.get('boiler_power', 0) if ctx['boiler_on'] else 0
-    virtual_surplus = effective_surplus + boiler_power_now
-    has_solar_surplus = (is_exporting and effective_surplus > MIN_EXPORT_FOR_BOILER) or \
-                        (ctx['boiler_on'] and virtual_surplus > MIN_EXPORT_FOR_BOILER)
+    virtual_surplus = -net_p1 + boiler_power_now
+
+    has_solar_surplus = bat_ok and (
+        (is_exporting and p1_return > MIN_EXPORT_FOR_BOILER) or
+        (ctx['boiler_on'] and virtual_surplus > MIN_EXPORT_FOR_BOILER)
+    )
 
     if tariff == 'peak' and ctx['boiler_on'] and not boiler_force:
         # During peak, turn off immediately unless solar surplus covers it.
@@ -735,7 +747,7 @@ def _handle_boiler(
             reason = "super-off-peak"
         elif has_solar_surplus:
             wants_to_heat = True
-            reason = f"solar ({int(effective_surplus)}W avail)"
+            reason = f"solar ({int(p1_return)}W export, bat {int(bat_charging_rate)}W)"
             is_solar_reason = True
         elif approaching_deadline and tariff in ('off-peak', 'super-off-peak'):
             wants_to_heat = True
@@ -1064,8 +1076,10 @@ def _handle_pool_heating(
 
     # Auto and Solar modes: only heat with solar surplus
     effective_surplus = p1_return + bat_charge
-    # Virtual surplus: add pool's own consumption back when it's ON
-    virtual_surplus = effective_surplus + (pool_power_now if pool_on else 0)
+    # Virtual surplus: estimate what surplus would be if pool were off
+    # net_p1 = p1 - p1_return (positive = importing, negative = exporting)
+    net_p1 = ctx.get('net_p1', 0)
+    virtual_surplus = -net_p1 + (pool_power_now if pool_on else 0)
     has_solar = (is_exporting and effective_surplus > MIN_EXPORT_FOR_POOL) or \
                 (pool_on and virtual_surplus > MIN_EXPORT_FOR_POOL)
 
