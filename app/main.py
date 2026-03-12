@@ -413,6 +413,12 @@ async def decision_loop():
             if app_state.config.debug:
                 logger.debug(f"Plan: {result.plan}")
 
+            # Update HA status helpers so they stay current
+            try:
+                await _update_ha_status_helpers(inputs, result)
+            except Exception as e:
+                logger.debug(f"Failed to update status helpers: {e}")
+
             # Clean up old alert cooldown entries to prevent memory leak
             app_state.cleanup_alert_cooldowns()
 
@@ -611,6 +617,31 @@ def _update_device_state(inputs: PowerInputs, confirmed_states: dict[str, bool])
     update_state('pool', inputs.pool_climate == 'heat')
     update_state('heater_table', inputs.heater_table_switch == 'on')
     update_state('dishwasher', inputs.dishwasher_switch == 'on')
+
+
+async def _update_ha_status_helpers(inputs: PowerInputs, result) -> None:
+    """Update HA input_text helpers with current status for external display."""
+    from .tariff import get_current_tariff
+    ha = app_state.ha_client
+    config = app_state.config
+    now = datetime.now()
+
+    tariff = get_current_tariff(now, config)
+    tariff_labels = {'peak': 'PIEK', 'off-peak': 'DAL', 'super-off-peak': 'SDAL'}
+    tariff_label = tariff_labels.get(tariff, tariff)
+
+    pv = inputs.pv_power or 0
+    p1 = (inputs.p1_power or 0) * 1000  # kW to W
+    p1_ret = (inputs.p1_return or 0) * 1000
+
+    net = p1 - p1_ret
+    headroom = result.headroom if hasattr(result, 'headroom') else 0
+
+    status = f"{tariff_label} | {net/1000:.1f}kW | ☀️{pv:.0f}W | {headroom/1000:.1f}kW vrij"
+    plan_text = " • ".join(result.plan[:10]) if result.plan else "Geen plan"
+
+    await ha.set_input_text(config.entities.status_text, status)
+    await ha.set_input_text(config.entities.status_plan, plan_text[:255])
 
 
 # === API Routes ===

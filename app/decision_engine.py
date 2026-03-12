@@ -954,7 +954,8 @@ def _handle_ev(
     # Battery must have minimum SOE to act as cloud buffer during solar charging.
     # Without battery headroom, every cloud means instant grid consumption.
     MIN_BAT_SOE_FOR_EV_SOLAR = 5
-    bat_has_buffer = bat_soe is None or bat_soe >= MIN_BAT_SOE_FOR_EV_SOLAR
+    # Conservative: if battery SOE unknown, assume no buffer (don't charge blindly)
+    bat_has_buffer = bat_soe is not None and bat_soe >= MIN_BAT_SOE_FOR_EV_SOLAR
 
     # For starting: strict check using SMOOTHED values (sustained surplus only)
     effective_p1 = smooth_p1 + battery_discharge
@@ -1011,8 +1012,20 @@ def _handle_ev(
             return effective_headroom
 
     # === TARIFF-BASED CHARGING (no solar surplus) ===
-    # Solar-only mode: skip tariff-based charging entirely
+    # Solar-only mode: if solar isn't active, stop charging
     if ovr['ev'] == 'solar':
+        if ctx['ev_charging']:
+            # Solar mode but no solar available → turn off
+            if not bat_has_buffer:
+                reason = f"battery too low ({bat_soe:.0f}%)" if bat_soe is not None else "battery unknown"
+            elif smooth_pv <= 1500:
+                reason = f"PV too low ({smooth_pv:.0f}W)"
+            else:
+                reason = "no solar surplus"
+            decisions.ev.action = 'off'
+            plan.append(f"EV: STOP solar mode ({reason})")
+        else:
+            plan.append("EV: waiting for solar")
         return effective_headroom
 
     if tariff == 'super-off-peak':
