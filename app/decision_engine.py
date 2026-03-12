@@ -5,6 +5,7 @@ Core decision logic ported from JavaScript (src/logic/decisions.js).
 Determines optimal device states based on power availability and tariffs.
 """
 
+import logging
 from datetime import datetime
 from typing import Optional
 
@@ -15,6 +16,8 @@ from .models import (
     AllDeviceStates, DeviceState, EVState, PowerBuffer
 )
 from .tariff import get_tariff, get_max_import, is_summer, get_ev_status_text
+
+logger = logging.getLogger(__name__)
 
 # Power thresholds (Watts)
 MIN_EXPORT_FOR_BOILER = 500
@@ -963,6 +966,14 @@ def _handle_ev(
     # For already-charging EV: enter solar section to allow amp adjustment
     ev_solar_active = has_good_solar or (ctx['ev_charging'] and smooth_pv > 1500 and bat_has_buffer)
 
+    logger.info(
+        f"EV solar check: ovr={ovr['ev']} charging={ctx['ev_charging']} "
+        f"bat_soe={bat_soe} bat_buffer={bat_has_buffer} "
+        f"smooth_pv={smooth_pv:.0f}W smooth_p1={smooth_p1:.0f}W "
+        f"exporting={smooth_is_exporting} bat_discharge={battery_discharge:.0f}W "
+        f"has_good_solar={has_good_solar} ev_solar_active={ev_solar_active}"
+    )
+
     if ev_solar_active:
         # Use SMOOTHED values for amp calculation too.
         # Instantaneous values cause wild swings: cloud hits → 0 export → kill EV →
@@ -1023,8 +1034,10 @@ def _handle_ev(
             else:
                 reason = "no solar surplus"
             decisions.ev.action = 'off'
+            logger.info(f"EV: STOPPING - solar mode but {reason}")
             plan.append(f"EV: STOP solar mode ({reason})")
         else:
+            logger.info("EV: solar mode, waiting for conditions")
             plan.append("EV: waiting for solar")
         return effective_headroom
 
