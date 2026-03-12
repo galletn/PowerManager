@@ -23,7 +23,7 @@ from fastapi.templating import Jinja2Templates
 from .config import Config, load_config
 from .ha_client import HAClient
 from .decision_engine import calculate_decisions
-from .models import PowerInputs, AllDeviceStates, Decisions
+from .models import PowerInputs, AllDeviceStates, Decisions, PowerBuffer
 from .tariff import generate_24h_schedule, format_24h_plan_text, get_max_import
 from .scheduler import generate_schedule, format_timetable_text
 
@@ -90,6 +90,7 @@ class AppState:
     running: bool = False
     alert_cooldowns: dict[str, datetime] = field(default_factory=dict)
     pending_commands: dict[str, PendingCommand] = field(default_factory=dict)
+    power_buffer: PowerBuffer = field(default_factory=PowerBuffer)
 
     def cleanup_alert_cooldowns(self) -> None:
         """Remove alert cooldown entries older than ALERT_COOLDOWN_CLEANUP_MINUTES."""
@@ -350,9 +351,13 @@ async def decision_loop():
             # Verify pending commands and retry if failed
             await verify_and_retry_pending_commands(states)
 
-            # Calculate decisions
+            # Feed power buffer for smoothing transient spikes
+            app_state.power_buffer.add(inputs)
+
+            # Calculate decisions (pass smoothed power readings)
             result = calculate_decisions(
-                inputs, app_state.config, app_state.device_state
+                inputs, app_state.config, app_state.device_state,
+                power_buffer=app_state.power_buffer
             )
             app_state.last_decisions = result.decisions
             app_state.last_plan = result.plan

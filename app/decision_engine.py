@@ -12,7 +12,7 @@ from .config import Config
 from .models import (
     PowerInputs, Decisions, DecisionResult, Alert,
     DeviceDecision, EVDecision, ACDecision,
-    AllDeviceStates, DeviceState, EVState
+    AllDeviceStates, DeviceState, EVState, PowerBuffer
 )
 from .tariff import get_tariff, get_max_import, is_summer, get_ev_status_text
 
@@ -237,7 +237,8 @@ def calculate_decisions(
     inputs: PowerInputs,
     config: Config,
     device_state: AllDeviceStates,
-    now: Optional[datetime] = None
+    now: Optional[datetime] = None,
+    power_buffer: Optional[PowerBuffer] = None
 ) -> DecisionResult:
     """Calculate optimal device states based on current power conditions.
 
@@ -312,6 +313,23 @@ def calculate_decisions(
     is_exporting = p1_return > p1
     hyst = config.timing.hysteresis
 
+    # Smoothed values for solar surplus decisions (filter transient spikes).
+    # When sun returns after cloud, export spikes before battery inverter ramps up.
+    # Using min(recent exports) ensures we only react to sustained surplus.
+    if power_buffer and power_buffer.ready:
+        smooth_p1_return = power_buffer.smoothed_p1_return
+        smooth_p1 = power_buffer.smoothed_p1_power
+        smooth_pv = power_buffer.smoothed_pv
+        smooth_net_p1 = smooth_p1 - smooth_p1_return
+        smooth_is_exporting = smooth_p1_return > smooth_p1
+    else:
+        # Not enough samples yet — use instantaneous values
+        smooth_p1_return = p1_return
+        smooth_p1 = p1
+        smooth_pv = pv
+        smooth_net_p1 = net_p1
+        smooth_is_exporting = is_exporting
+
     # Battery charge power reclaimable for devices
     battery_charge = get_solar_battery_charge(pv, inputs.battery_power)
 
@@ -356,6 +374,23 @@ def calculate_decisions(
     # Charging: either state says charging OR significant power draw
     ev_charging = ev_state in (EVState.CHARGING, EVState.OCPP_CHARGING) or ev_power > 500
     ev_done = ev_state in (EVState.FULL, EVState.OCPP_FINISHING)
+
+    # Cross-reference ABB "FULL" with BMW actual SOC.
+    # ABB charger can report stale FULL state after brief unavailability.
+    # If BMW says car is below target SOC, override ev_done and treat as ready.
+    ev_full_override_msg = None
+    if ev_done and ev_plugged:
+        car_soc = None
+        if inputs.bmw_i5_location == 'home' and inputs.bmw_i5_battery is not None:
+            car_soc = inputs.bmw_i5_battery
+        elif inputs.bmw_ix1_location == 'home' and inputs.bmw_ix1_battery is not None:
+            car_soc = inputs.bmw_ix1_battery
+        if car_soc is not None and car_soc < 75:
+            # BMW says car is not full — charger state is likely stale
+            ev_done = False
+            ev_ready = True
+            ev_full_override_msg = f"EV: charger says FULL but BMW at {int(car_soc)}% — overriding"
+
     ev_status_text = get_ev_status_text(ev_state, ev_power)
 
     # Heaters and AC
@@ -402,6 +437,10 @@ def calculate_decisions(
     # Alerts and plan
     alerts: list[Alert] = []
     plan: list[str] = []
+
+    # Add deferred EV override message (computed before plan was created)
+    if ev_full_override_msg:
+        plan.append(ev_full_override_msg)
 
     # Build status line
     tariff_label = tariff.upper().replace('-', ' ')
@@ -506,6 +545,11 @@ def calculate_decisions(
             'p1': p1,
             'p1_return': p1_return,  # Export power
             'net_p1': net_p1,        # Net grid (neg = export)
+            'smooth_p1_return': smooth_p1_return,
+            'smooth_p1': smooth_p1,
+            'smooth_pv': smooth_pv,
+            'smooth_net_p1': smooth_net_p1,
+            'smooth_is_exporting': smooth_is_exporting,
             'battery_charge': battery_charge,
             'battery_soe': inputs.battery_soe,
             'battery_power': inputs.battery_power,
@@ -547,6 +591,11 @@ def calculate_decisions(
             'p1': p1,
             'p1_return': p1_return,  # Export power
             'net_p1': net_p1,        # Net grid (neg = export)
+            'smooth_p1_return': smooth_p1_return,
+            'smooth_p1': smooth_p1,
+            'smooth_pv': smooth_pv,
+            'smooth_net_p1': smooth_net_p1,
+            'smooth_is_exporting': smooth_is_exporting,
             'battery_charge': battery_charge,
             'battery_soe': inputs.battery_soe,
             'battery_power': inputs.battery_power,
@@ -692,12 +741,15 @@ def _handle_boiler(
             boiler_will_use = ctx.get('boiler_power', config.boiler.power)
         return boiler_will_use, effective_headroom
 
-    p1_return = ctx.get('p1_return', 0)
+    # Use SMOOTHED values for solar surplus decisions to filter transient spikes.
+    # When sun returns after cloud, export spikes before battery inverter ramps up.
+    p1_return = ctx.get('smooth_p1_return', ctx.get('p1_return', 0))
+    is_exporting_smooth = ctx.get('smooth_is_exporting', is_exporting)
+    net_p1 = ctx.get('smooth_net_p1', ctx.get('net_p1', 0))
+
     bat_soe = ctx.get('battery_soe')
     battery_power = ctx.get('battery_power')  # positive=discharging, negative=charging
     bat_charging_rate = -battery_power if battery_power is not None else 0
-    # net_p1 = p1 - p1_return (positive = importing, negative = exporting)
-    net_p1 = ctx.get('net_p1', 0)
 
     # Solar surplus for boiler: only use actual grid export (don't reclaim battery charge).
     # Battery must be charging >2000W and SOE >20% before we divert solar to boiler.
@@ -711,7 +763,7 @@ def _handle_boiler(
     virtual_surplus = -net_p1 + boiler_power_now
 
     has_solar_surplus = bat_ok and (
-        (is_exporting and p1_return > MIN_EXPORT_FOR_BOILER) or
+        (is_exporting_smooth and p1_return > MIN_EXPORT_FOR_BOILER) or
         (ctx['boiler_on'] and virtual_surplus > MIN_EXPORT_FOR_BOILER)
     )
 
@@ -879,25 +931,34 @@ def _handle_ev(
     current_ev_watts = max(ev_power_now, ctx['ev_limit'] * config.ev.watts_per_amp) if ctx['ev_charging'] else 0
 
     # === SOLAR SURPLUS CHARGING (any tariff - free power!) ===
-    is_exporting = ctx.get('is_exporting', False)
+    # Use SMOOTHED values for solar start/stop decisions to filter transient spikes.
+    # Use instantaneous values for amp calculations (responsive to current conditions).
     pv = ctx.get('pv', 0)
     p1 = ctx.get('p1', 0)
     p1_return = ctx.get('p1_return', 0)
+    is_exporting = ctx.get('is_exporting', False)
     bat_charge = ctx.get('battery_charge', 0)
     bat_soe = ctx.get('battery_soe')
+
+    # Smoothed values for start/stop decisions
+    smooth_pv = ctx.get('smooth_pv', pv)
+    smooth_p1 = ctx.get('smooth_p1', p1)
+    smooth_p1_return = ctx.get('smooth_p1_return', p1_return)
+    smooth_is_exporting = ctx.get('smooth_is_exporting', is_exporting)
 
     # When battery is discharging, it masks the real grid import.
     # Subtract discharge from available power to see true solar surplus.
     battery_power_raw = ctx.get('battery_power')  # +discharge, -charge
     battery_discharge = max(0, battery_power_raw) if battery_power_raw is not None else 0
 
-    # For starting: strict check (account for battery discharge)
-    effective_p1 = p1 + battery_discharge
-    has_good_solar = pv > 1500 and (is_exporting or effective_p1 < MAX_GRID_IMPORT_FOR_EV + bat_charge)
+    # For starting: strict check using SMOOTHED values (sustained surplus only)
+    effective_p1 = smooth_p1 + battery_discharge
+    has_good_solar = smooth_pv > 1500 and (smooth_is_exporting or effective_p1 < MAX_GRID_IMPORT_FOR_EV + bat_charge)
     # For already-charging EV: enter solar section to allow amp adjustment
-    ev_solar_active = has_good_solar or (ctx['ev_charging'] and pv > 1500)
+    ev_solar_active = has_good_solar or (ctx['ev_charging'] and smooth_pv > 1500)
 
     if ev_solar_active:
+        # Use instantaneous values for amp calculation (responsive to current surplus)
         if is_exporting:
             available_power = p1_return + bat_charge + MAX_GRID_IMPORT_FOR_EV
         else:
@@ -1054,8 +1115,9 @@ def _handle_pool_heating(
     """
     ovr = ctx['ovr']
     can_switch = ctx['can_switch']
-    is_exporting = ctx.get('is_exporting', False)
-    p1_return = ctx.get('p1_return', 0)
+    # Use smoothed values for solar surplus decisions
+    is_exporting = ctx.get('smooth_is_exporting', ctx.get('is_exporting', False))
+    p1_return = ctx.get('smooth_p1_return', ctx.get('p1_return', 0))
     bat_charge = ctx.get('battery_charge', 0)
     pool_on = ctx.get('pool_heating_on', False)
     pool_power_now = ctx.get('pool_power', 0)
@@ -1077,8 +1139,7 @@ def _handle_pool_heating(
     # Auto and Solar modes: only heat with solar surplus
     effective_surplus = p1_return + bat_charge
     # Virtual surplus: estimate what surplus would be if pool were off
-    # net_p1 = p1 - p1_return (positive = importing, negative = exporting)
-    net_p1 = ctx.get('net_p1', 0)
+    net_p1 = ctx.get('smooth_net_p1', ctx.get('net_p1', 0))
     virtual_surplus = -net_p1 + (pool_power_now if pool_on else 0)
     has_solar = (is_exporting and effective_surplus > MIN_EXPORT_FOR_POOL) or \
                 (pool_on and virtual_surplus > MIN_EXPORT_FOR_POOL)
@@ -1154,8 +1215,9 @@ def _handle_heaters(
     config = ctx['config']
     can_switch = ctx['can_switch']
     tariff = ctx['tariff']
-    is_exporting = ctx.get('is_exporting', False)
-    p1_return = ctx.get('p1_return', 0)  # Export power
+    # Use smoothed values for solar surplus decisions
+    is_exporting = ctx.get('smooth_is_exporting', ctx.get('is_exporting', False))
+    p1_return = ctx.get('smooth_p1_return', ctx.get('p1_return', 0))
 
     table_power = config.heaters.table_power
     right_power = config.heaters.right_power
@@ -1367,7 +1429,9 @@ def _apply_dishwasher_logic(decisions: Decisions, plan: list, ctx: dict):
 
     # Minimum solar export to consider "solar surplus"
     # MIN_SOLAR_SURPLUS = 500W export = good solar
-    p1_return = ctx.get('p1_return', 0)  # Actual export power
+    # Use smoothed values for solar surplus decisions
+    p1_return = ctx.get('smooth_p1_return', ctx.get('p1_return', 0))
+    is_exporting = ctx.get('smooth_is_exporting', ctx.get('is_exporting', False))
     bat_charge = ctx.get('battery_charge', 0)
 
     # If dishwasher is running (drawing power), NEVER interrupt

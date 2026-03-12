@@ -1,5 +1,6 @@
 """Pydantic models for Power Manager."""
 
+from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import IntEnum
@@ -215,6 +216,75 @@ class Alert:
     car_name: Optional[str] = None
     battery: Optional[float] = None
     range_km: Optional[float] = None
+
+
+class PowerBuffer:
+    """Rolling buffer of power readings for smoothing transient spikes.
+
+    Solar production and grid export can spike briefly (e.g., 5kW export burst
+    when sun returns before battery inverter ramps up). Using raw instantaneous
+    readings causes devices to flip-flop. This buffer provides smoothed values
+    that filter out transients.
+
+    Uses minimum of recent readings for export/solar (conservative — only acts
+    on sustained surplus) and maximum for import (conservative — doesn't
+    underestimate grid draw).
+    """
+
+    def __init__(self, max_samples: int = 6):
+        """Initialize buffer. Default 6 samples = ~3 minutes at 30s polling."""
+        self.max_samples = max_samples
+        self._p1_return: deque[float] = deque(maxlen=max_samples)  # grid export
+        self._p1_power: deque[float] = deque(maxlen=max_samples)   # grid import
+        self._pv_power: deque[float] = deque(maxlen=max_samples)   # solar
+        self._battery_power: deque[float] = deque(maxlen=max_samples)  # battery
+
+    def add(self, inputs: 'PowerInputs') -> None:
+        """Add a new set of readings to the buffer."""
+        self._p1_return.append(inputs.p1_return)
+        self._p1_power.append(inputs.p1_power)
+        self._pv_power.append(inputs.pv_power)
+        self._battery_power.append(inputs.battery_power or 0.0)
+
+    @property
+    def ready(self) -> bool:
+        """True when buffer has enough samples for meaningful smoothing."""
+        return len(self._p1_return) >= 3
+
+    @property
+    def smoothed_p1_return(self) -> float:
+        """Conservative grid export: minimum of recent readings.
+
+        Only reports high export if it's been sustained, filtering out
+        transient spikes when sun returns before battery ramps up.
+        """
+        if not self._p1_return:
+            return 0.0
+        return min(self._p1_return)
+
+    @property
+    def smoothed_p1_power(self) -> float:
+        """Conservative grid import: maximum of recent readings.
+
+        Reports the worst-case import to avoid underestimating grid draw.
+        """
+        if not self._p1_power:
+            return 0.0
+        return max(self._p1_power)
+
+    @property
+    def smoothed_pv(self) -> float:
+        """Conservative solar: minimum of recent readings."""
+        if not self._pv_power:
+            return 0.0
+        return min(self._pv_power)
+
+    @property
+    def smoothed_battery_power(self) -> float:
+        """Average battery power (positive=discharge, negative=charge)."""
+        if not self._battery_power:
+            return 0.0
+        return sum(self._battery_power) / len(self._battery_power)
 
 
 @dataclass
