@@ -22,5 +22,27 @@ EOF
 fi
 
 cd /opt/power-manager
+
+# Ensure EV override has all options (including Solar) after HA reboot
+echo "Setting up EV override options..."
+python -c "
+import urllib.request, json, ssl, os, time
+time.sleep(5)
+token = os.environ.get('SUPERVISOR_TOKEN', '')
+url = 'http://supervisor/core/api/services/input_select/set_options'
+data = json.dumps({
+    'entity_id': 'input_select.pm_override_ev',
+    'options': ['\U0001f916 Auto', '\u2600\ufe0f Solar', '\u26a1 Laden', '\u23f9\ufe0f Uit']
+}).encode('utf-8')
+req = urllib.request.Request(url, data=data, method='POST')
+req.add_header('Authorization', f'Bearer {token}')
+req.add_header('Content-Type', 'application/json; charset=utf-8')
+try:
+    resp = urllib.request.urlopen(req)
+    print(f'EV override options set (status {resp.status})')
+except Exception as e:
+    print(f'Warning: could not set EV options: {e}')
+" 2>&1 || echo "EV options setup skipped"
+
 echo "Starting Power Manager add-on on port ${PORT}..."
 exec python -m app.main
