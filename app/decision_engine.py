@@ -951,25 +951,35 @@ def _handle_ev(
     battery_power_raw = ctx.get('battery_power')  # +discharge, -charge
     battery_discharge = max(0, battery_power_raw) if battery_power_raw is not None else 0
 
+    # Battery must have minimum SOE to act as cloud buffer during solar charging.
+    # Without battery headroom, every cloud means instant grid consumption.
+    MIN_BAT_SOE_FOR_EV_SOLAR = 5
+    bat_has_buffer = bat_soe is None or bat_soe >= MIN_BAT_SOE_FOR_EV_SOLAR
+
     # For starting: strict check using SMOOTHED values (sustained surplus only)
     effective_p1 = smooth_p1 + battery_discharge
-    has_good_solar = smooth_pv > 1500 and (smooth_is_exporting or effective_p1 < MAX_GRID_IMPORT_FOR_EV + bat_charge)
+    has_good_solar = bat_has_buffer and smooth_pv > 1500 and (smooth_is_exporting or effective_p1 < MAX_GRID_IMPORT_FOR_EV + bat_charge)
     # For already-charging EV: enter solar section to allow amp adjustment
-    ev_solar_active = has_good_solar or (ctx['ev_charging'] and smooth_pv > 1500)
+    ev_solar_active = has_good_solar or (ctx['ev_charging'] and smooth_pv > 1500 and bat_has_buffer)
 
     if ev_solar_active:
-        # Use instantaneous values for amp calculation (responsive to current surplus)
-        if is_exporting:
-            available_power = p1_return + bat_charge + MAX_GRID_IMPORT_FOR_EV
+        # Use SMOOTHED values for amp calculation too.
+        # Instantaneous values cause wild swings: cloud hits → 0 export → kill EV →
+        # sun returns → 5kW spike → max EV. Smoothed = conservative sustained level.
+        s_p1 = smooth_p1
+        s_p1_return = smooth_p1_return
+        s_is_exporting = smooth_is_exporting
+        if s_is_exporting:
+            available_power = s_p1_return + bat_charge + MAX_GRID_IMPORT_FOR_EV
         else:
-            available_power = MAX_GRID_IMPORT_FOR_EV + bat_charge - p1 - battery_discharge
+            available_power = MAX_GRID_IMPORT_FOR_EV + bat_charge - s_p1 - battery_discharge
 
         # When battery SOE is low, don't rely on virtual surplus — cap to PV output.
         # This prevents the feedback loop: reduce EV → battery stops discharging →
         # next cycle sees no discharge → bumps EV up → battery discharges again.
         if bat_soe is not None and bat_soe < 15:
             # Cap EV to what PV can realistically provide (PV minus ~500W house base)
-            max_pv_watts = max(0, pv - 500) + MAX_GRID_IMPORT_FOR_EV
+            max_pv_watts = max(0, smooth_pv - 500) + MAX_GRID_IMPORT_FOR_EV
             total_for_ev = min(available_power + current_ev_watts, max_pv_watts) - hyst
         else:
             total_for_ev = available_power + current_ev_watts - hyst

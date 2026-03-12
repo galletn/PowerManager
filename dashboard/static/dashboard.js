@@ -1004,7 +1004,8 @@ async function setOverride(device, mode) {
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}`);
         }
-        fetchStatus();
+        // Don't fetchStatus immediately — cached state is stale and would
+        // revert the button. Wait for next polling cycle to pick up the change.
     } catch (error) {
         console.error('Failed to set override:', error);
         alert(`Failed to set ${device} to ${mode}: ${error.message}`);
