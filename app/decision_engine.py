@@ -986,48 +986,44 @@ def _handle_ev(
     )
 
     if ev_solar_active:
-        # Use SMOOTHED values for amp calculation too.
-        # Instantaneous values cause wild swings: cloud hits → 0 export → kill EV →
-        # sun returns → 5kW spike → max EV. Smoothed = conservative sustained level.
+        # Use SMOOTHED values for amp calculation.
+        # Don't add bat_charge — battery should charge first, EV only gets real surplus.
         s_p1 = smooth_p1
         s_p1_return = smooth_p1_return
         s_is_exporting = smooth_is_exporting
         if s_is_exporting:
-            available_power = s_p1_return + bat_charge + MAX_GRID_IMPORT_FOR_EV
+            # Only use actual grid export + small allowance — don't raid battery
+            available_power = s_p1_return + MAX_GRID_IMPORT_FOR_EV
         else:
-            available_power = MAX_GRID_IMPORT_FOR_EV + bat_charge - s_p1 - battery_discharge
+            available_power = MAX_GRID_IMPORT_FOR_EV - s_p1 - battery_discharge
 
-        # When battery SOE is low, don't rely on virtual surplus — cap to PV output.
-        # This prevents the feedback loop: reduce EV → battery stops discharging →
-        # next cycle sees no discharge → bumps EV up → battery discharges again.
-        if bat_soe is not None and bat_soe < 15:
-            # Cap EV to what PV can realistically provide (PV minus ~500W house base)
-            max_pv_watts = max(0, smooth_pv - 500) + MAX_GRID_IMPORT_FOR_EV
-            total_for_ev = min(available_power + current_ev_watts, max_pv_watts) - hyst
-        else:
-            total_for_ev = available_power + current_ev_watts - hyst
+        total_for_ev = available_power + current_ev_watts - hyst
         available_amps = calculate_available_amps(total_for_ev, config.ev.watts_per_amp)
         target_amps = max(config.ev.min_amps, min(available_amps, config.ev.max_amps))
 
         if ctx['ev_ready'] and has_good_solar and target_amps >= config.ev.min_amps:
             if can_switch('ev', True):
+                # Start at minimum amps — ramp up gradually
+                start_amps = config.ev.min_amps
                 decisions.ev.action = 'on'
-                decisions.ev.amps = target_amps
-                effective_headroom -= target_amps * config.ev.watts_per_amp
-                solar_pct = min(100, int((pv / (target_amps * config.ev.watts_per_amp)) * 100))
-                plan.append(f"EV: SOLAR START {target_amps}A (~{solar_pct}% solar)")
+                decisions.ev.amps = start_amps
+                effective_headroom -= start_amps * config.ev.watts_per_amp
+                solar_pct = min(100, int((pv / (start_amps * config.ev.watts_per_amp)) * 100))
+                plan.append(f"EV: SOLAR START {start_amps}A (~{solar_pct}% solar)")
                 return effective_headroom
         elif ctx['ev_charging']:
-            amp_diff = abs(target_amps - ctx['ev_limit'])
-            # Use lower threshold (1A) for upward adjustments to maximize solar use
-            # Keep normal threshold for downward to prevent cycling
-            going_up = target_amps > ctx['ev_limit']
-            threshold = 1 if going_up else config.ev.amp_change_threshold
-            if amp_diff >= threshold:
-                if target_amps >= config.ev.min_amps:
+            current_amps = ctx['ev_limit']
+            # Limit amp changes to 1A per cycle (30s) to avoid power peaks
+            if target_amps > current_amps:
+                clamped_amps = min(target_amps, current_amps + 1)
+            else:
+                clamped_amps = max(target_amps, current_amps - 1)
+            amp_diff = abs(clamped_amps - current_amps)
+            if amp_diff >= 1:
+                if clamped_amps >= config.ev.min_amps:
                     decisions.ev.action = 'adjust'
-                    decisions.ev.amps = target_amps
-                    plan.append(f"EV: adjust to {target_amps}A (solar)")
+                    decisions.ev.amps = clamped_amps
+                    plan.append(f"EV: adjust to {clamped_amps}A (solar, target {target_amps}A)")
                 else:
                     decisions.ev.action = 'off'
                     plan.append("EV: STOP (insufficient solar)")
