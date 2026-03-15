@@ -963,20 +963,24 @@ def _handle_ev(
     # Conservative: if battery SOE unknown, assume no buffer (don't charge blindly)
     bat_has_buffer = bat_soe is not None and bat_soe >= MIN_BAT_SOE_FOR_EV_SOLAR
 
-    # Battery must be charging before we divert solar to EV.
-    # If battery is discharging, solar isn't even enough for house + battery — no surplus for EV.
-    bat_ready_for_ev = bat_has_buffer and battery_is_charging
+    # For STARTING EV: battery must be charging (solar covers house + battery).
+    # For CONTINUING EV: only need SOE buffer (EV itself causes battery to discharge,
+    # so checking charge direction while EV is on would cause flip-flop).
+    MIN_BAT_CHARGE_FOR_EV_START = 1000  # Battery must be charging >= 1kW before starting EV
+    battery_charging_enough = battery_power_raw is not None and battery_power_raw < -MIN_BAT_CHARGE_FOR_EV_START
 
-    # For starting: strict check using SMOOTHED values (sustained surplus only)
+    # For starting: strict — battery charging + SOE + smoothed values
     effective_p1 = smooth_p1 + battery_discharge
-    has_good_solar = bat_ready_for_ev and smooth_pv > 1500 and (smooth_is_exporting or effective_p1 < MAX_GRID_IMPORT_FOR_EV + bat_charge)
-    # For already-charging EV: enter solar section to allow amp adjustment
-    ev_solar_active = has_good_solar or (ctx['ev_charging'] and smooth_pv > 1500 and bat_ready_for_ev)
+    has_good_solar = (bat_has_buffer and battery_charging_enough and
+                      smooth_pv > 1500 and
+                      (smooth_is_exporting or effective_p1 < MAX_GRID_IMPORT_FOR_EV + bat_charge))
+    # For already-charging EV: only need SOE buffer (not battery charge direction)
+    ev_solar_active = has_good_solar or (ctx['ev_charging'] and smooth_pv > 1500 and bat_has_buffer)
 
     logger.info(
         f"EV solar check: ovr={ovr['ev']} charging={ctx['ev_charging']} "
-        f"bat_soe={bat_soe} bat_buffer={bat_has_buffer} bat_charging={battery_is_charging} "
-        f"bat_ready={bat_ready_for_ev} smooth_pv={smooth_pv:.0f}W smooth_p1={smooth_p1:.0f}W "
+        f"bat_soe={bat_soe} bat_buffer={bat_has_buffer} bat_charging_enough={battery_charging_enough} "
+        f"smooth_pv={smooth_pv:.0f}W smooth_p1={smooth_p1:.0f}W "
         f"exporting={smooth_is_exporting} bat_discharge={battery_discharge:.0f}W "
         f"has_good_solar={has_good_solar} ev_solar_active={ev_solar_active}"
     )
@@ -1036,8 +1040,6 @@ def _handle_ev(
             # Solar mode but no solar available → turn off
             if not bat_has_buffer:
                 reason = f"battery too low ({bat_soe:.0f}%)" if bat_soe is not None else "battery unknown"
-            elif not battery_is_charging:
-                reason = f"battery discharging ({int(battery_discharge)}W)"
             elif smooth_pv <= 1500:
                 reason = f"PV too low ({smooth_pv:.0f}W)"
             else:
