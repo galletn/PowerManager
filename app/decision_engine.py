@@ -527,6 +527,7 @@ def calculate_decisions(
             'ht_power': ht_power,
             'pool_heating_on': pool_heating_on,
             'pool_power': pool_power,
+            'pool_season': inputs.pool_season == 'on',
             'dw_switch_on': dw_switch_on,
             'dw_power': dw_power,
             'dw_running': dw_running,
@@ -573,6 +574,7 @@ def calculate_decisions(
             'boiler_power': boiler_power,
             'pool_heating_on': pool_heating_on,
             'pool_power': pool_power,
+            'pool_season': inputs.pool_season == 'on',
             'dw_switch_on': dw_switch_on,
             'dw_power': dw_power,
             'dw_running': dw_running,
@@ -1170,6 +1172,18 @@ def _handle_pool_heating(
     if pool_mode == 'on':
         if pool_on:
             plan.append(f"Pool heat: ON (forced, {int(pool_power_now)}W)")
+        return effective_headroom
+
+    # Pool season gate: in Auto/Solar mode, don't heat outside pool season
+    pool_season = ctx.get('pool_season', False)
+    if not pool_season:
+        if pool_on:
+            # Pool heater is on but season is off — turn it off
+            decisions.pool.action = 'off'
+            if device_state:
+                device_state.pool_solar_surplus_since = 0
+                device_state.pool_importing_since = 0
+            plan.append("Pool heat: OFF (pool season off)")
         return effective_headroom
 
     # Auto and Solar modes: only heat with solar surplus
