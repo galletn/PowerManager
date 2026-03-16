@@ -756,19 +756,21 @@ def _handle_boiler(
     battery_power = ctx.get('battery_power')  # positive=discharging, negative=charging
     bat_charging_rate = -battery_power if battery_power is not None else 0
 
-    # Solar surplus for boiler: only use actual grid export (don't reclaim battery charge).
-    # Battery must be charging >2000W and SOE >20% before we divert solar to boiler.
-    MIN_BAT_CHARGE_FOR_BOILER = 2000  # Battery must be charging at least this fast (W)
+    # Solar surplus for boiler: battery charging power counts as available surplus
+    # because diverting to boiler just slows battery charging (saves battery cycles).
+    # Require minimum SOE so battery gets first priority when nearly empty.
     MIN_BAT_SOE_FOR_BOILER = 20       # Battery must be above this SOE (%)
-    bat_ok = (bat_charging_rate > MIN_BAT_CHARGE_FOR_BOILER and
-              bat_soe is not None and bat_soe > MIN_BAT_SOE_FOR_BOILER)
+    bat_ok = bat_soe is not None and bat_soe > MIN_BAT_SOE_FOR_BOILER
+
+    # Available surplus = grid export + battery charging rate (both are reclaimable)
+    available_surplus = (p1_return if is_exporting_smooth else 0) + max(0, bat_charging_rate)
 
     # When boiler is ON, estimate surplus if boiler were off
     boiler_power_now = ctx.get('boiler_power', 0) if ctx['boiler_on'] else 0
-    virtual_surplus = -net_p1 + boiler_power_now
+    virtual_surplus = available_surplus + boiler_power_now
 
     has_solar_surplus = bat_ok and (
-        (is_exporting_smooth and p1_return > MIN_EXPORT_FOR_BOILER) or
+        available_surplus > MIN_EXPORT_FOR_BOILER or
         (ctx['boiler_on'] and virtual_surplus > MIN_EXPORT_FOR_BOILER)
     )
 
