@@ -657,8 +657,7 @@ async def dashboard(request: Request):
 
     # Detect ingress mode: use relative URLs behind HA ingress proxy
     is_ingress = bool(os.environ.get("SUPERVISOR_TOKEN"))
-    return templates.TemplateResponse("dashboard.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "dashboard.html", {
         "title": "Power Manager",
         "static_prefix": "static/" if is_ingress else "/static/",
         "api_base": "." if is_ingress else "",
@@ -673,8 +672,7 @@ async def dashboard_power(request: Request):
     if templates is None:
         return HTMLResponse("<h1>Dashboard not configured</h1>")
 
-    return templates.TemplateResponse("dashboard-power.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "dashboard-power.html", {
         "title": "Power Flow"
     })
 
@@ -687,8 +685,7 @@ async def dashboard_timeline(request: Request):
     if templates is None:
         return HTMLResponse("<h1>Dashboard not configured</h1>")
 
-    return templates.TemplateResponse("dashboard-timeline.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "dashboard-timeline.html", {
         "title": "Timeline & Plan"
     })
 
