@@ -1,0 +1,162 @@
+# Hall Motion Lighting Automations
+#
+# Behavior:
+#   Daytime (sunrise → sunset):    motion → 100%, no motion → OFF
+#   Evening (sunset → 22:00):      motion → 100%, no motion → dim 5% (stays on)
+#   Night   (22:00 → sunrise):     motion → 20%,  no motion → OFF
+#
+# Entities:
+#   Sensors: binary_sensor.hall_back_motion, binary_sensor.hall_front_motion
+#   Lights:  light.hall (group of 5 lights)
+
+# ─── Motion detected ───────────────────────────────────────────────
+- alias: "Hall - Motion Detected"
+  id: hall_motion_detected
+  description: "Turn on hall lights when motion detected, brightness depends on time of day"
+  mode: restart
+  trigger:
+    - platform: state
+      entity_id:
+        - binary_sensor.hall_back_motion
+        - binary_sensor.hall_front_motion
+      to: "on"
+  action:
+    - choose:
+        # Daytime: full brightness
+        - conditions:
+            - condition: sun
+              after: sunrise
+            - condition: sun
+              before: sunset
+          sequence:
+            - service: light.turn_on
+              target:
+                entity_id: light.hall
+              data:
+                brightness_pct: 100
+
+        # Evening (sunset → 22:00): full brightness
+        - conditions:
+            - condition: sun
+              after: sunset
+            - condition: time
+              before: "22:00:00"
+          sequence:
+            - service: light.turn_on
+              target:
+                entity_id: light.hall
+              data:
+                brightness_pct: 100
+                transition: 1
+
+      # Night (22:00 → sunrise): dimmed
+      default:
+        - service: light.turn_on
+          target:
+            entity_id: light.hall
+          data:
+            brightness_pct: 20
+            transition: 1
+
+# ─── Motion cleared ────────────────────────────────────────────────
+- alias: "Hall - Motion Cleared"
+  id: hall_motion_cleared
+  description: "Adjust hall lights when all motion sensors clear"
+  mode: restart
+  trigger:
+    - platform: state
+      entity_id:
+        - binary_sensor.hall_back_motion
+        - binary_sensor.hall_front_motion
+      to: "off"
+      for: "00:01:00"
+  condition:
+    - condition: state
+      entity_id: binary_sensor.hall_back_motion
+      state: "off"
+    - condition: state
+      entity_id: binary_sensor.hall_front_motion
+      state: "off"
+  action:
+    - choose:
+        # Daytime: turn off
+        - conditions:
+            - condition: sun
+              after: sunrise
+            - condition: sun
+              before: sunset
+          sequence:
+            - service: light.turn_off
+              target:
+                entity_id: light.hall
+
+        # Evening (sunset → 22:00): dim but keep on
+        - conditions:
+            - condition: sun
+              after: sunset
+            - condition: time
+              before: "22:00:00"
+          sequence:
+            - service: light.turn_on
+              target:
+                entity_id: light.hall
+              data:
+                brightness_pct: 5
+                transition: 3
+
+      # Night (22:00 → sunrise): turn off
+      default:
+        - service: light.turn_off
+          target:
+            entity_id: light.hall
+          data:
+            transition: 3
+
+# ─── Sunset: start ambient dim mode ───────────────────────────────
+- alias: "Hall - Sunset Dim"
+  id: hall_sunset_dim
+  description: "Dim hall lights to ambient level at sunset"
+  trigger:
+    - platform: sun
+      event: sunset
+  action:
+    - service: light.turn_on
+      target:
+        entity_id: light.hall
+      data:
+        brightness_pct: 5
+        transition: 5
+
+# ─── 22:00: transition to night mode ──────────────────────────────
+- alias: "Hall - Night Mode"
+  id: hall_night_mode
+  description: "At 22:00 turn off lights unless motion detected (then dim)"
+  trigger:
+    - platform: time
+      at: "22:00:00"
+  action:
+    - choose:
+        # Someone is in the hall: dim instead of off
+        - conditions:
+            - condition: or
+              conditions:
+                - condition: state
+                  entity_id: binary_sensor.hall_back_motion
+                  state: "on"
+                - condition: state
+                  entity_id: binary_sensor.hall_front_motion
+                  state: "on"
+          sequence:
+            - service: light.turn_on
+              target:
+                entity_id: light.hall
+              data:
+                brightness_pct: 20
+                transition: 3
+      # No one there: turn off
+      default:
+        - service: light.turn_off
+          target:
+            entity_id: light.hall
+          data:
+            transition: 3
