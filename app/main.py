@@ -466,13 +466,14 @@ async def execute_decisions(
     try:
         # EV Charger
         if decisions.ev.action == 'on':
-            await ha_client.set_number(
-                config.entities.ev_limit, decisions.ev.amps
-            )
+            # turn_on resets amps to 6A, so set amps AFTER turn_on
             success = await ha_client.turn_on(config.entities.ev_switch)
             if success:
                 confirmed_states['ev'] = True
                 add_pending_command(config.entities.ev_switch, 'on')
+            await ha_client.set_number(
+                config.entities.ev_limit, decisions.ev.amps
+            )
             logger.info(f"EV: Started at {decisions.ev.amps}A")
         elif decisions.ev.action == 'off':
             success = await ha_client.turn_off(config.entities.ev_switch)

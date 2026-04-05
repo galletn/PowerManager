@@ -655,7 +655,11 @@ def _apply_manual_overrides(decisions: Decisions, plan: list, ovr: dict, ctx: di
         available_amps = calculate_available_amps(total_for_ev, config.ev.watts_per_amp)
         target_amps = max(config.ev.min_amps, min(available_amps, config.ev.max_amps))
 
-        decisions.ev.action = 'on'
+        # Use 'adjust' when already charging to avoid turn_on resetting amps to 6A
+        if ctx.get('ev_charging'):
+            decisions.ev.action = 'adjust'
+        else:
+            decisions.ev.action = 'on'
         decisions.ev.amps = target_amps
         plan.append(f"EV: OVERRIDE ON ({target_amps}A, headroom {int(total_for_ev)}W)")
     elif ovr['ev'] == 'off':
