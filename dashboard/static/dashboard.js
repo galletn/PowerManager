@@ -663,7 +663,10 @@ function updateDashboard(data) {
     // Display absolute value for power reading
     setTextIfExists('grid-power', formatWatts(Math.abs(gridPower)));
     setTextIfExists('pv-power', formatWatts(pvPower));
-    setTextIfExists('net-power', formatWatts(Math.abs(gridPower)));
+
+    // Home = total consumption = solar + grid import (or solar - grid export)
+    const homePower = pvPower + gridPower;
+    setTextIfExists('net-power', formatWatts(Math.max(0, homePower)));
 
     // Grid direction and styling - support both full and compact dashboard class names
     const gridNode = document.querySelector('.power-node.grid') || document.querySelector('.power-node-large.grid');
