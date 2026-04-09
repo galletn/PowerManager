@@ -369,11 +369,11 @@ def calculate_decisions(
     # Also detect charging by power if state is ambiguous
     ev_power = inputs.ev_power
     ev_plugged = ev_state in (
-        EVState.READY, EVState.CHARGING, EVState.FULL,
+        EVState.READY, EVState.CHARGING, EVState.FULL, EVState.PAUSED,
         EVState.OCPP_PREPARING, EVState.OCPP_CHARGING,
         EVState.OCPP_SUSPENDED_EV, EVState.OCPP_SUSPENDED_EVSE, EVState.OCPP_FINISHING
     )
-    ev_ready = ev_state in (EVState.READY, EVState.OCPP_PREPARING)
+    ev_ready = ev_state in (EVState.READY, EVState.PAUSED, EVState.OCPP_PREPARING)
     # Charging: either state says charging OR significant power draw
     ev_charging = ev_state in (EVState.CHARGING, EVState.OCPP_CHARGING) or ev_power > 500
     ev_done = ev_state in (EVState.FULL, EVState.OCPP_FINISHING)
@@ -1810,7 +1810,7 @@ def check_bmw_low_battery(
     ev_state = inputs.ev_state
     ev_power = inputs.ev_power
     ev_plugged_in = ev_state in (
-        EVState.READY, EVState.CHARGING,
+        EVState.READY, EVState.CHARGING, EVState.PAUSED,
         EVState.OCPP_PREPARING, EVState.OCPP_CHARGING,
         EVState.OCPP_SUSPENDED_EV, EVState.OCPP_SUSPENDED_EVSE
     ) or ev_power > 500

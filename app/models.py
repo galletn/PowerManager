@@ -26,6 +26,7 @@ class EVState(IntEnum):
     READY = 129
     FULL = 130
     CHARGING = 132
+    PAUSED = 133  # Car plugged in, charging stopped/paused
 
 
 @dataclass
