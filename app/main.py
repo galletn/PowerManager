@@ -475,12 +475,16 @@ async def execute_decisions(
                 config.entities.ev_limit, decisions.ev.amps
             )
             logger.info(f"EV: Started at {decisions.ev.amps}A")
+        elif decisions.ev.action == 'pause':
+            # Amps=0 keeps CP signal alive; switch-off ends BMW session.
+            await ha_client.set_number(config.entities.ev_limit, 0)
+            logger.info("EV: Paused (amps=0, session kept alive)")
         elif decisions.ev.action == 'off':
             success = await ha_client.turn_off(config.entities.ev_switch)
             if success:
                 confirmed_states['ev'] = False
                 add_pending_command(config.entities.ev_switch, 'off')
-            logger.info("EV: Stopped")
+            logger.info("EV: Stopped (hard off)")
         elif decisions.ev.action == 'adjust':
             await ha_client.set_number(
                 config.entities.ev_limit, decisions.ev.amps

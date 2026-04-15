@@ -129,7 +129,7 @@ class PowerInputs:
 @dataclass
 class DeviceDecision:
     """Decision for a single device."""
-    action: str = 'none'  # 'none', 'on', 'off', 'adjust'
+    action: str = 'none'  # 'none', 'on', 'off', 'pause', 'adjust'
     reason: str = ''
 
 

@@ -1031,24 +1031,24 @@ def _handle_ev(
                     decisions.ev.amps = clamped_amps
                     plan.append(f"EV: adjust to {clamped_amps}A (solar, target {target_amps}A)")
                 else:
-                    decisions.ev.action = 'off'
-                    plan.append("EV: STOP (insufficient solar)")
+                    decisions.ev.action = 'pause'
+                    plan.append("EV: PAUSE (insufficient solar)")
             return effective_headroom
 
     # === TARIFF-BASED CHARGING (no solar surplus) ===
     # Solar-only mode: if solar isn't active, stop charging
     if ovr['ev'] == 'solar':
         if ctx['ev_charging']:
-            # Solar mode but no solar available → turn off
+            # Solar mode but no solar available → pause
             if not bat_has_buffer:
                 reason = f"battery too low ({bat_soe:.0f}%)" if bat_soe is not None else "battery unknown"
             elif smooth_pv <= 1500:
                 reason = f"PV too low ({smooth_pv:.0f}W)"
             else:
                 reason = "no solar surplus"
-            decisions.ev.action = 'off'
-            logger.info(f"EV: STOPPING - solar mode but {reason}")
-            plan.append(f"EV: STOP solar mode ({reason})")
+            decisions.ev.action = 'pause'
+            logger.info(f"EV: PAUSING - solar mode but {reason}")
+            plan.append(f"EV: PAUSE solar mode ({reason})")
         else:
             logger.info("EV: solar mode, waiting for conditions")
             plan.append("EV: waiting for solar")
@@ -1110,16 +1110,16 @@ def _handle_ev(
                     decisions.ev.amps = target_amps
                     plan.append(f"EV: adjust to {target_amps}A (needs {ev_hours_needed:.1f}h)")
             elif boiler_will_use > 0 or ctx['boiler_on']:
-                # Boiler needs power - stop EV
+                # Boiler needs power - pause EV
                 if can_switch('ev', False):
-                    decisions.ev.action = 'off'
+                    decisions.ev.action = 'pause'
                     plan.append("EV: PAUSE (boiler priority)")
             else:
-                # Can wait for super-off-peak - STOP to save money!
+                # Can wait for super-off-peak - pause to save money!
                 if can_switch('ev', False):
-                    decisions.ev.action = 'off'
+                    decisions.ev.action = 'pause'
                     hours_until_super = max(0, 1.0 - current_hour) if current_hour < 1 else (25.0 - current_hour)
-                    plan.append(f"EV: STOP (wait for super-off-peak in {hours_until_super:.1f}h)")
+                    plan.append(f"EV: PAUSE (wait for super-off-peak in {hours_until_super:.1f}h)")
         elif ctx['ev_ready'] and must_start_now and boiler_will_use == 0 and not ctx['boiler_on']:
             # Need to start now because not enough super-off-peak hours
             total_for_ev = effective_headroom + current_ev_watts - hyst
@@ -1141,10 +1141,10 @@ def _handle_ev(
             plan.append(f"EV: WAIT for super-off-peak ({hours_until_super:.1f}h)")
 
     elif tariff == 'peak' and ctx['ev_charging']:
-        # Stop charging during peak
+        # Pause charging during peak
         if can_switch('ev', False):
-            decisions.ev.action = 'off'
-            plan.append("EV: STOP (peak tariff)")
+            decisions.ev.action = 'pause'
+            plan.append("EV: PAUSE (peak tariff)")
 
     return effective_headroom
 
