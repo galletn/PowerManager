@@ -528,23 +528,30 @@ async def execute_decisions(
                 add_pending_command(config.entities.pool_pump, 'off')
             logger.info("Pool Pump: OFF")
 
-        # Pool Heat Pump
+        # Pool Heat Pump — skip service call when already in target state.
+        # Without this guard, override=Aan fires set_hvac_mode every cycle.
         if decisions.pool.action == 'on':
-            success = await ha_client.set_climate(
-                config.entities.pool_climate, 'heat'
-            )
-            if success:
-                confirmed_states['pool'] = True
-                add_pending_command(config.entities.pool_climate, 'heat')
-            logger.info("Pool Heat: ON")
+            if inputs.pool_climate != 'heat':
+                success = await ha_client.set_climate(
+                    config.entities.pool_climate, 'heat'
+                )
+                if success:
+                    confirmed_states['pool'] = True
+                    add_pending_command(
+                        config.entities.pool_climate, 'heat'
+                    )
+                logger.info("Pool Heat: ON")
         elif decisions.pool.action == 'off':
-            success = await ha_client.set_climate(
-                config.entities.pool_climate, 'off'
-            )
-            if success:
-                confirmed_states['pool'] = False
-                add_pending_command(config.entities.pool_climate, 'off')
-            logger.info("Pool Heat: OFF")
+            if inputs.pool_climate != 'off':
+                success = await ha_client.set_climate(
+                    config.entities.pool_climate, 'off'
+                )
+                if success:
+                    confirmed_states['pool'] = False
+                    add_pending_command(
+                        config.entities.pool_climate, 'off'
+                    )
+                logger.info("Pool Heat: OFF")
 
         # Table Heater
         if decisions.heater_table.action == 'on':

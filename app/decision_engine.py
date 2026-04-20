@@ -988,11 +988,32 @@ def _handle_ev(
     # For already-charging EV: only need SOE buffer (not battery charge direction)
     ev_solar_active = has_good_solar or (ctx['ev_charging'] and smooth_pv > 1500 and bat_has_buffer)
 
-    logger.info(
-        f"EV solar check: ovr={ovr['ev']} charging={ctx['ev_charging']} "
-        f"bat_soe={bat_soe} bat_buffer={bat_has_buffer} bat_charging_enough={battery_charging_enough} "
-        f"smooth_pv={smooth_pv:.0f}W smooth_p1={smooth_p1:.0f}W "
-        f"exporting={smooth_is_exporting} bat_discharge={battery_discharge:.0f}W "
+    # Human-readable reason when not starting solar charge
+    if ev_solar_active:
+        reason = f"OK — PV {smooth_pv:.0f}W, batt {bat_soe:.0f}%"
+    else:
+        blockers = []
+        if not bat_has_buffer:
+            blockers.append(
+                f"batt {bat_soe:.0f}% < {MIN_BAT_SOE_FOR_EV_SOLAR}%"
+                if bat_soe is not None else "batt unknown"
+            )
+        if smooth_pv <= 1500:
+            blockers.append(f"PV {smooth_pv:.0f}W too low")
+        if not battery_charging_enough and not ctx['ev_charging']:
+            blockers.append("batt not charging ≥1kW")
+        if not smooth_is_exporting and effective_p1 >= (
+            MAX_GRID_IMPORT_FOR_EV + bat_charge
+        ):
+            blockers.append(f"importing {effective_p1:.0f}W")
+        reason = "wait — " + ", ".join(blockers) if blockers else "wait"
+    logger.info(f"EV solar: {reason}")
+    logger.debug(
+        f"EV solar raw: charging={ctx['ev_charging']} "
+        f"bat_soe={bat_soe} bat_buffer={bat_has_buffer} "
+        f"bat_charging_enough={battery_charging_enough} "
+        f"smooth_pv={smooth_pv:.0f} smooth_p1={smooth_p1:.0f} "
+        f"exporting={smooth_is_exporting} bat_discharge={battery_discharge:.0f} "
         f"has_good_solar={has_good_solar} ev_solar_active={ev_solar_active}"
     )
 
