@@ -991,9 +991,14 @@ async function fetchStatus() {
     }
 }
 
-// Set override
+// Optimistic lock — status poll reads last_inputs (up to 30s stale),
+// so after a click we ignore the fetched value until PM catches up.
+const pendingOverrides = {};
+const PENDING_OVERRIDE_TTL = 40000;  // 40s > one PM poll cycle
+
 async function setOverride(device, mode) {
-    // Immediately update button visuals for instant feedback
+    // Record the intent so fetchStatus doesn't revert the button
+    pendingOverrides[device] = { mode, ts: Date.now() };
     const container = $(`${device}-override-buttons`);
     if (container) {
         container.querySelectorAll('.override-btn').forEach(btn => {
@@ -1007,21 +1012,18 @@ async function setOverride(device, mode) {
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}`);
         }
-        // Don't fetchStatus immediately — cached state is stale and would
-        // revert the button. Wait for next polling cycle to pick up the change.
     } catch (error) {
         console.error('Failed to set override:', error);
         alert(`Failed to set ${device} to ${mode}: ${error.message}`);
-        fetchStatus(); // Revert button state on error
+        delete pendingOverrides[device];
+        fetchStatus();
     }
 }
 
-// Update EV override button states
 function updateEvOverrideButtons(overrideState) {
     const container = $('ev-override-buttons');
     if (!container) return;
 
-    // Map HA state (Dutch with emojis) to button mode
     const stateToMode = {
         '🤖 Auto': 'auto',
         '☀️ Solar': 'solar',
@@ -1029,7 +1031,22 @@ function updateEvOverrideButtons(overrideState) {
         '⏹️ Uit': 'off'
     };
 
-    const activeMode = stateToMode[overrideState] || 'auto';
+    let activeMode = stateToMode[overrideState] || 'auto';
+
+    // If a recent click is still in flight, honour the intent over the stale poll
+    const pending = pendingOverrides['ev'];
+    if (pending) {
+        if (Date.now() - pending.ts < PENDING_OVERRIDE_TTL) {
+            if (activeMode === pending.mode) {
+                // PM caught up — clear the lock
+                delete pendingOverrides['ev'];
+            } else {
+                activeMode = pending.mode;
+            }
+        } else {
+            delete pendingOverrides['ev'];
+        }
+    }
 
     container.querySelectorAll('.override-btn').forEach(btn => {
         const mode = btn.getAttribute('data-mode');
