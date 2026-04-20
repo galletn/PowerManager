@@ -365,18 +365,23 @@ def calculate_decisions(
         confirm_seconds=config.boiler.full_confirm_seconds
     )
 
-    # EV states - handle both OCPP (1-6) and ABB custom (128+) state formats
-    # Also detect charging by power if state is ambiguous
+    # EV states - ABB firmware reports either IEC (0-5) or custom (128+) codes.
+    # IEC state 4 (C2) and ABB 132 BOTH mean "actively charging" — must match both.
     ev_power = inputs.ev_power
     ev_plugged = ev_state in (
+        EVState.IEC_CONNECTED_B1, EVState.IEC_CONNECTED_B2,
+        EVState.IEC_READY_C1, EVState.IEC_CHARGING_C2,
         EVState.READY, EVState.CHARGING, EVState.FULL, EVState.PAUSED,
-        EVState.OCPP_PREPARING, EVState.OCPP_CHARGING,
-        EVState.OCPP_SUSPENDED_EV, EVState.OCPP_SUSPENDED_EVSE, EVState.OCPP_FINISHING
     )
-    ev_ready = ev_state in (EVState.READY, EVState.PAUSED, EVState.OCPP_PREPARING)
-    # Charging: either state says charging OR significant power draw
-    ev_charging = ev_state in (EVState.CHARGING, EVState.OCPP_CHARGING) or ev_power > 500
-    ev_done = ev_state in (EVState.FULL, EVState.OCPP_FINISHING)
+    ev_ready = ev_state in (
+        EVState.IEC_CONNECTED_B2, EVState.IEC_READY_C1,
+        EVState.READY, EVState.PAUSED,
+    )
+    # Charging: either IEC C2 / ABB 132 state OR significant power draw
+    ev_charging = ev_state in (
+        EVState.IEC_CHARGING_C2, EVState.CHARGING
+    ) or ev_power > 500
+    ev_done = ev_state == EVState.FULL
 
     # Cross-reference ABB "FULL" with BMW actual SOC.
     # ABB charger can report stale FULL state after brief unavailability.
@@ -1810,9 +1815,9 @@ def check_bmw_low_battery(
     ev_state = inputs.ev_state
     ev_power = inputs.ev_power
     ev_plugged_in = ev_state in (
+        EVState.IEC_CONNECTED_B1, EVState.IEC_CONNECTED_B2,
+        EVState.IEC_READY_C1, EVState.IEC_CHARGING_C2,
         EVState.READY, EVState.CHARGING, EVState.PAUSED,
-        EVState.OCPP_PREPARING, EVState.OCPP_CHARGING,
-        EVState.OCPP_SUSPENDED_EV, EVState.OCPP_SUSPENDED_EVSE
     ) or ev_power > 500
 
     # Check BMW i5

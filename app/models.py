@@ -10,23 +10,26 @@ from typing import Optional
 class EVState(IntEnum):
     """ABB Terra AC charger states.
 
-    The charger can report either OCPP states (1-6) or custom states (128+).
-    We handle both formats.
-    """
-    # OCPP standard states
-    OCPP_AVAILABLE = 1
-    OCPP_PREPARING = 2
-    OCPP_CHARGING = 3
-    OCPP_SUSPENDED_EV = 4  # Car connected, charging suspended by EV
-    OCPP_SUSPENDED_EVSE = 5  # Charging suspended by charger
-    OCPP_FINISHING = 6
+    ABB firmware reports either IEC 61851-1 standard states (0-5) or
+    ABB custom states (128+), depending on firmware. Both formats are handled.
 
-    # ABB custom states (seen in some firmware versions)
+    States 4 (IEC C2) and 132 (ABB custom) BOTH mean "actively charging" —
+    the charger alternates between them in some firmware versions.
+    """
+    # IEC 61851-1 standard states
+    IEC_IDLE = 0              # State A - no car connected
+    IEC_CONNECTED_B1 = 1      # State B1 - connected, pending authorization
+    IEC_CONNECTED_B2 = 2      # State B2 - connected, ready (authorized)
+    IEC_READY_C1 = 3          # State C1 - ready, PWM not yet active
+    IEC_CHARGING_C2 = 4       # State C2 - ACTIVELY charging
+    IEC_OTHER = 5
+
+    # ABB custom states
     NO_CAR = 128
     READY = 129
-    FULL = 130
+    FULL = 130                # "Charging Complete" per ABB docs
     CHARGING = 132
-    PAUSED = 133  # Car plugged in, charging stopped/paused
+    PAUSED = 133
 
 
 @dataclass

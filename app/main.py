@@ -466,15 +466,24 @@ async def execute_decisions(
     try:
         # EV Charger
         if decisions.ev.action == 'on':
-            # turn_on resets amps to 6A, so set amps AFTER turn_on
-            success = await ha_client.turn_on(config.entities.ev_switch)
-            if success:
-                confirmed_states['ev'] = True
-                add_pending_command(config.entities.ev_switch, 'on')
+            # Skip turn_on when session is already alive — the ABB integration's
+            # switch.turn_on sends a real Modbus START_CHARGING (register 16645)
+            # which restarts the session. Firing that every 30s = ping-pong.
+            # When session is alive, just setting amps is enough.
+            session_alive_codes = {2, 3, 4, 129, 130, 132, 133}
+            session_alive = int(inputs.ev_state) in session_alive_codes
+            if not session_alive:
+                success = await ha_client.turn_on(config.entities.ev_switch)
+                if success:
+                    confirmed_states['ev'] = True
+                    add_pending_command(config.entities.ev_switch, 'on')
             await ha_client.set_number(
                 config.entities.ev_limit, decisions.ev.amps
             )
-            logger.info(f"EV: Started at {decisions.ev.amps}A")
+            logger.info(
+                f"EV: {decisions.ev.amps}A "
+                f"(session {'alive' if session_alive else 'started'})"
+            )
         elif decisions.ev.action == 'pause':
             # Amps=0 keeps CP signal alive; switch-off ends BMW session.
             await ha_client.set_number(config.entities.ev_limit, 0)
