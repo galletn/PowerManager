@@ -466,10 +466,8 @@ async def execute_decisions(
     try:
         # EV Charger
         if decisions.ev.action == 'on':
-            # Skip turn_on when session is already alive — the ABB integration's
-            # switch.turn_on sends a real Modbus START_CHARGING (register 16645)
-            # which restarts the session. Firing that every 30s = ping-pong.
-            # When session is alive, just setting amps is enough.
+            # Skip turn_on when session is already alive — ABB's switch.turn_on
+            # sends Modbus START_CHARGING which restarts the session.
             session_alive_codes = {2, 3, 4, 129, 130, 132, 133}
             session_alive = int(inputs.ev_state) in session_alive_codes
             if not session_alive:
@@ -477,37 +475,42 @@ async def execute_decisions(
                 if success:
                     confirmed_states['ev'] = True
                     add_pending_command(config.entities.ev_switch, 'on')
-            await ha_client.set_number(
-                config.entities.ev_limit, decisions.ev.amps
-            )
-            logger.info(
-                f"EV: {decisions.ev.amps}A "
-                f"(session {'alive' if session_alive else 'started'})"
-            )
+            # Only write amps if target differs from current
+            if int(inputs.ev_limit or 0) != decisions.ev.amps:
+                await ha_client.set_number(
+                    config.entities.ev_limit, decisions.ev.amps
+                )
+                logger.info(
+                    f"EV: {decisions.ev.amps}A "
+                    f"(session {'alive' if session_alive else 'started'})"
+                )
         elif decisions.ev.action == 'pause':
-            # Amps=0 keeps CP signal alive; switch-off ends BMW session.
-            await ha_client.set_number(config.entities.ev_limit, 0)
-            logger.info("EV: Paused (amps=0, session kept alive)")
+            if int(inputs.ev_limit or 0) != 0:
+                await ha_client.set_number(config.entities.ev_limit, 0)
+                logger.info("EV: Paused (amps=0, session kept alive)")
         elif decisions.ev.action == 'off':
-            success = await ha_client.turn_off(config.entities.ev_switch)
-            if success:
-                confirmed_states['ev'] = False
-                add_pending_command(config.entities.ev_switch, 'off')
-            logger.info("EV: Stopped (hard off)")
+            if inputs.ev_switch != 'off':
+                success = await ha_client.turn_off(config.entities.ev_switch)
+                if success:
+                    confirmed_states['ev'] = False
+                    add_pending_command(config.entities.ev_switch, 'off')
+                logger.info("EV: Stopped (hard off)")
         elif decisions.ev.action == 'adjust':
-            await ha_client.set_number(
-                config.entities.ev_limit, decisions.ev.amps
-            )
-            logger.info(f"EV: Adjusted to {decisions.ev.amps}A")
+            if int(inputs.ev_limit or 0) != decisions.ev.amps:
+                await ha_client.set_number(
+                    config.entities.ev_limit, decisions.ev.amps
+                )
+                logger.info(f"EV: Adjusted to {decisions.ev.amps}A")
 
         # Boiler
-        if decisions.boiler.action == 'on':
+        if decisions.boiler.action == 'on' and inputs.boiler_switch != 'on':
             success = await ha_client.turn_on(config.entities.boiler_switch)
             if success:
                 confirmed_states['boiler'] = True
                 add_pending_command(config.entities.boiler_switch, 'on')
             logger.info("Boiler: ON")
-        elif decisions.boiler.action == 'off':
+        elif (decisions.boiler.action == 'off'
+              and inputs.boiler_switch != 'off'):
             success = await ha_client.turn_off(config.entities.boiler_switch)
             if success:
                 confirmed_states['boiler'] = False
@@ -515,13 +518,15 @@ async def execute_decisions(
             logger.info("Boiler: OFF")
 
         # Pool Pump (frost protection)
-        if decisions.pool_pump.action == 'on':
+        if (decisions.pool_pump.action == 'on'
+                and inputs.pool_pump_switch != 'on'):
             success = await ha_client.turn_on(config.entities.pool_pump)
             if success:
                 confirmed_states['pool_pump'] = True
                 add_pending_command(config.entities.pool_pump, 'on')
             logger.info("Pool Pump: ON (frost protection)")
-        elif decisions.pool_pump.action == 'off':
+        elif (decisions.pool_pump.action == 'off'
+              and inputs.pool_pump_switch != 'off'):
             success = await ha_client.turn_off(config.entities.pool_pump)
             if success:
                 confirmed_states['pool_pump'] = False
@@ -554,13 +559,15 @@ async def execute_decisions(
                 logger.info("Pool Heat: OFF")
 
         # Table Heater
-        if decisions.heater_table.action == 'on':
+        if (decisions.heater_table.action == 'on'
+                and inputs.heater_table_switch != 'on'):
             success = await ha_client.turn_on(config.entities.heater_table)
             if success:
                 confirmed_states['heater_table'] = True
                 add_pending_command(config.entities.heater_table, 'on')
             logger.info("Table Heater: ON")
-        elif decisions.heater_table.action == 'off':
+        elif (decisions.heater_table.action == 'off'
+              and inputs.heater_table_switch != 'off'):
             success = await ha_client.turn_off(config.entities.heater_table)
             if success:
                 confirmed_states['heater_table'] = False
@@ -568,13 +575,15 @@ async def execute_decisions(
             logger.info("Table Heater: OFF")
 
         # Right Heater (solar surplus only)
-        if decisions.heater_right.action == 'on':
+        if (decisions.heater_right.action == 'on'
+                and inputs.heater_right_switch != 'on'):
             success = await ha_client.turn_on(config.entities.heater_right)
             if success:
                 confirmed_states['heater_right'] = True
                 add_pending_command(config.entities.heater_right, 'on')
             logger.info("Right Heater: ON")
-        elif decisions.heater_right.action == 'off':
+        elif (decisions.heater_right.action == 'off'
+              and inputs.heater_right_switch != 'off'):
             success = await ha_client.turn_off(config.entities.heater_right)
             if success:
                 confirmed_states['heater_right'] = False
