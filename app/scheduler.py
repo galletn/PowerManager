@@ -201,13 +201,13 @@ def generate_schedule(
     boiler_estimate = {'needed': False, 'hours_needed': 0}
 
     if inputs:
-        # EV needs - check both OCPP and ABB custom states, plus power draw
+        # EV needs - both IEC (0-5) and ABB custom (128+) plugged states
         from .models import EVState
         ev_connected = (
             inputs.ev_state in (
-                EVState.READY, EVState.CHARGING,
-                EVState.OCPP_PREPARING, EVState.OCPP_CHARGING,
-                EVState.OCPP_SUSPENDED_EV, EVState.OCPP_SUSPENDED_EVSE
+                EVState.IEC_CONNECTED_B1, EVState.IEC_CONNECTED_B2,
+                EVState.IEC_READY_C1, EVState.IEC_CHARGING_C2,
+                EVState.READY, EVState.CHARGING, EVState.PAUSED,
             ) or inputs.ev_power > 500
         )
         if ev_connected:

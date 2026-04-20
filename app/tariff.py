@@ -163,25 +163,23 @@ def get_ev_status_text(ev_state: int, ev_power: float = 0) -> str:
         return "Full"
     elif ev_state == EVState.CHARGING:
         return "Charging"
+    elif ev_state == EVState.PAUSED:
+        return "Paused"
 
-    # OCPP standard states
-    elif ev_state == EVState.OCPP_AVAILABLE:
-        return "Available"
-    elif ev_state == EVState.OCPP_PREPARING:
-        return "Preparing"
-    elif ev_state == EVState.OCPP_CHARGING:
-        return "Charging"
-    elif ev_state == EVState.OCPP_SUSPENDED_EV:
-        # If power > 500W, it's actually charging despite state
-        if ev_power > 500:
-            return f"Charging ({int(ev_power)}W)"
-        return "Suspended (EV)"
-    elif ev_state == EVState.OCPP_SUSPENDED_EVSE:
-        return "Suspended (EVSE)"
-    elif ev_state == EVState.OCPP_FINISHING:
-        return "Finishing"
+    # IEC 61851-1 states
+    elif ev_state == EVState.IEC_IDLE:
+        return "Idle"
+    elif ev_state == EVState.IEC_CONNECTED_B1:
+        return "Connected (pending auth)"
+    elif ev_state == EVState.IEC_CONNECTED_B2:
+        return "Connected (ready)"
+    elif ev_state == EVState.IEC_READY_C1:
+        return "Ready (no PWM)"
+    elif ev_state == EVState.IEC_CHARGING_C2:
+        return "Charging (C2)"
+    elif ev_state == EVState.IEC_OTHER:
+        return "Other"
 
-    # Unknown state - check if charging by power
     elif ev_power > 500:
         return f"Charging ({int(ev_power)}W)"
     else:
