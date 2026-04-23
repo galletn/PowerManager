@@ -49,6 +49,7 @@ class PowerInputs:
     pool_season: str = 'off'
     pool_power: float = 0.0
     pool_climate: str = 'off'
+    pool_fan_mode: str = 'low'
     pool_pump_switch: str = 'on'
     pool_pump_power: float = 0.0
     pool_ambient_temp: Optional[float] = None

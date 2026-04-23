@@ -128,6 +128,7 @@ class EntitiesConfig:
 
     # Pool
     pool_climate: str = "climate.98d8639f920c"
+    pool_fan_mode: str = "sensor.pool_fan_mode"
     pool_power: str = "sensor.pool_heating_current_consumption"
     pool_season: str = "input_boolean.pool_season"
     pool_pump: str = "switch.poolhouse_pool_pump"

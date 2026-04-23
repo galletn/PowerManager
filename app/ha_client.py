@@ -296,6 +296,12 @@ class HAClient:
 
         return await self.call_service("climate", "set_hvac_mode", entity_id, **kwargs)
 
+    async def set_fan_mode(self, entity_id: str, fan_mode: str) -> bool:
+        """Set climate entity fan mode."""
+        return await self.call_service(
+            "climate", "set_fan_mode", entity_id, fan_mode=fan_mode
+        )
+
     async def send_notification(self, entity_id: str, title: str, message: str) -> bool:
         """
         Send a mobile notification.
@@ -428,6 +434,7 @@ class HAClient:
             pool_season=get_str(e.pool_season, "off"),
             pool_power=get_num(e.pool_power, 0.0),
             pool_climate=get_str(e.pool_climate, "off"),
+            pool_fan_mode=get_str(e.pool_fan_mode, "low"),
             pool_pump_switch=get_str(e.pool_pump, "on"),
             pool_pump_power=get_num(e.pool_pump_power, 0.0),
             pool_ambient_temp=get_num(e.pool_ambient_temp),

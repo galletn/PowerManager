@@ -558,6 +558,18 @@ async def execute_decisions(
                     )
                 logger.info("Pool Heat: OFF")
 
+        # Pool fan: enforce 'low' when heating. The heat pump drifts to 'auto'
+        # on its own (~04:45 daily, likely internal defrost routine). Without
+        # this, 'auto' draws much more power than solar can supply.
+        if (inputs.pool_climate == 'heat'
+                and inputs.pool_fan_mode != 'low'):
+            await ha_client.set_fan_mode(
+                config.entities.pool_climate, 'low'
+            )
+            logger.info(
+                f"Pool fan: corrected {inputs.pool_fan_mode} -> low"
+            )
+
         # Table Heater
         if (decisions.heater_table.action == 'on'
                 and inputs.heater_table_switch != 'on'):
