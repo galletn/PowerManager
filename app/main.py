@@ -485,9 +485,14 @@ async def execute_decisions(
                     f"(session {'alive' if session_alive else 'started'})"
                 )
         elif decisions.ev.action == 'pause':
-            if int(inputs.ev_limit or 0) != 0:
-                await ha_client.set_number(config.entities.ev_limit, 0)
-                logger.info("EV: Paused (amps=0, session kept alive)")
+            # 5A keeps PWM in IEC valid range (8.3% duty) but below 6A minimum
+            # so the car waits rather than ending the session. 0A causes some
+            # BMWs (i5 PRICE_OPTIMIZED) to log END_REQUESTED_BY_DRIVER.
+            if int(inputs.ev_limit or 0) != 5:
+                await ha_client.set_number(config.entities.ev_limit, 5)
+                logger.info(
+                    "EV: Paused (amps=5, below charging min, session alive)"
+                )
         elif decisions.ev.action == 'off':
             if inputs.ev_switch != 'off':
                 success = await ha_client.turn_off(config.entities.ev_switch)
