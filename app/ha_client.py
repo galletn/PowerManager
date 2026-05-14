@@ -334,41 +334,39 @@ class HAClient:
 
     def _extract_notify_service_name(self, entity_id: str) -> str:
         """
-        Extract the notification service name from various entity ID formats.
+        Resolve the configured notify entity into a HA service name.
 
-        Handles:
-        - "mobile_app_<name>" -> "<name>" (standard mobile app)
-        - "notify.<name>" -> "<name>" (notify domain)
-        - "mobile_app.<name>" -> "<name>" (alternate format)
-        - "<name>" -> "<name>" (plain name, returned as-is)
+        The returned string is used inside the `notify` domain — so the final
+        HA call is `notify.<returned>`. HA's mobile_app integration registers
+        services as `notify.mobile_app_<device>`, NOT bare `notify.<device>`,
+        so for the most common configuration we MUST keep the `mobile_app_`
+        prefix intact.
 
-        Returns empty string if entity_id is empty/None.
+        Mapping:
+        - "mobile_app_<device>"        -> "mobile_app_<device>"   (kept as-is)
+        - "mobile_app.<device>"        -> "mobile_app_<device>"   (dot typo)
+        - "notify.<service>"           -> "<service>"             (strip domain)
+        - "<service>"                  -> "<service>"             (literal)
+        - empty / None                 -> ""
         """
         if not entity_id:
             return ""
 
         entity_id = entity_id.strip()
+        if not entity_id:
+            return ""
 
-        # Handle "mobile_app_<name>" format (most common)
-        if entity_id.startswith("mobile_app_"):
-            return entity_id[11:]  # len("mobile_app_") = 11
-
-        # Handle "notify.<name>" format
+        # "notify.<service>" -> "<service>" (caller fully qualified the service)
         if entity_id.startswith("notify."):
-            return entity_id[7:]  # len("notify.") = 7
+            return entity_id[len("notify."):]
 
-        # Handle "mobile_app.<name>" format (alternate)
+        # "mobile_app.<device>" -> "mobile_app_<device>" (dot is a typo for _)
         if entity_id.startswith("mobile_app."):
-            return entity_id[11:]  # len("mobile_app.") = 11
+            return "mobile_app_" + entity_id[len("mobile_app."):]
 
-        # If no recognized prefix, assume it's already a service name
-        # but validate it doesn't contain invalid characters
-        if "." in entity_id:
-            # Contains a dot but not a recognized prefix - use part after last dot
-            parts = entity_id.split(".")
-            return parts[-1]
-
-        # Plain name, return as-is
+        # "mobile_app_<device>" is already a valid notify service name in HA.
+        # Return it intact — stripping the prefix here was the pre-fix bug that
+        # silently broke all mobile_app notifications.
         return entity_id
 
     async def set_input_text(self, entity_id: str, value: str) -> bool:

@@ -201,14 +201,10 @@ def generate_schedule(
     boiler_estimate = {'needed': False, 'hours_needed': 0}
 
     if inputs:
-        # EV needs - both IEC (0-5) and ABB custom (128+) plugged states
+        # EV needs scheduling only when a car is plugged AND not yet FULL.
         from .models import EVState
         ev_connected = (
-            inputs.ev_state in (
-                EVState.IEC_CONNECTED_B1, EVState.IEC_CONNECTED_B2,
-                EVState.IEC_READY_C1, EVState.IEC_CHARGING_C2,
-                EVState.READY, EVState.CHARGING, EVState.PAUSED,
-            ) or inputs.ev_power > 500
+            EVState.is_active_session(inputs.ev_state) or inputs.ev_power > 500
         )
         if ev_connected:
             # Determine which car is plugged in by checking plug_state/charging_state

@@ -23,7 +23,7 @@ from fastapi.templating import Jinja2Templates
 from .config import Config, load_config
 from .ha_client import HAClient
 from .decision_engine import calculate_decisions
-from .models import PowerInputs, AllDeviceStates, Decisions, PowerBuffer
+from .models import PowerInputs, AllDeviceStates, Decisions, PowerBuffer, EVState
 from .tariff import generate_24h_schedule, format_24h_plan_text, get_max_import
 from .scheduler import generate_schedule, format_timetable_text
 
@@ -657,11 +657,15 @@ def _update_device_state(inputs: PowerInputs, confirmed_states: dict[str, bool])
             state.on = new_on
             state.last_change = now
 
-    # Update each device using confirmed states or fallback to current inputs
-    update_state('ev', inputs.ev_state == 132)
+    # Update each device using confirmed states or fallback to current inputs.
+    # EV uses is_charging() so soft-pause (state 133) doesn't bump last_change
+    # every cycle and lock hysteresis. heater_right is included so its min_on/
+    # min_off_time window actually fires (was previously missing, hysteresis dead).
+    update_state('ev', EVState.is_charging(inputs.ev_state))
     update_state('boiler', inputs.boiler_switch == 'on')
     update_state('pool_pump', inputs.pool_pump_switch == 'on')
     update_state('pool', inputs.pool_climate == 'heat')
+    update_state('heater_right', inputs.heater_right_switch == 'on')
     update_state('heater_table', inputs.heater_table_switch == 'on')
     update_state('dishwasher', inputs.dishwasher_switch == 'on')
 
@@ -1090,8 +1094,10 @@ async def set_override(device: str, mode: str):
     config = app_state.config
     ha_client = app_state.ha_client
 
-    valid_devices = ['ev', 'boiler', 'pool', 'table_heater', 'dishwasher',
-                     'ac_living', 'ac_bedroom', 'ac_office', 'ac_mancave']
+    # AC overrides were previously accepted here, parsed by the engine, and
+    # silently dropped (no executor existed). Removed until the AC branch is
+    # actually wired into execute_decisions.  See CODE_REVIEW_PASS2 §N2.
+    valid_devices = ['ev', 'boiler', 'pool', 'table_heater', 'dishwasher']
     valid_modes = ['auto', 'on', 'off', 'solar']
 
     if device not in valid_devices:
@@ -1111,10 +1117,6 @@ async def set_override(device: str, mode: str):
         'pool': entities.ovr_pool,
         'table_heater': entities.ovr_table_heater,
         'dishwasher': entities.ovr_dishwasher,
-        'ac_living': entities.ovr_ac_living,
-        'ac_bedroom': entities.ovr_ac_bedroom,
-        'ac_office': entities.ovr_ac_office,
-        'ac_mancave': entities.ovr_ac_mancave,
     }
 
     # Map API mode to HA input_select option (Dutch labels with emojis)
@@ -1124,10 +1126,6 @@ async def set_override(device: str, mode: str):
         'pool': {'auto': '🤖 Auto', 'on': '🔥 Aan', 'off': '⏹️ Uit'},
         'table_heater': {'auto': '🤖 Auto', 'on': '🔥 Aan', 'off': '⏹️ Uit'},
         'dishwasher': {'auto': '🤖 Auto', 'on': '▶️ Start', 'off': '⏹️ Uit'},
-        'ac_living': {'auto': '🤖 Auto', 'on': '🔥 Aan', 'off': '⏹️ Uit'},
-        'ac_bedroom': {'auto': '🤖 Auto', 'on': '🔥 Aan', 'off': '⏹️ Uit'},
-        'ac_office': {'auto': '🤖 Auto', 'on': '🔥 Aan', 'off': '⏹️ Uit'},
-        'ac_mancave': {'auto': '🤖 Auto', 'on': '🔥 Aan', 'off': '⏹️ Uit'},
     }
 
     ha_mode = mode_map.get(device, {}).get(mode, mode.capitalize())

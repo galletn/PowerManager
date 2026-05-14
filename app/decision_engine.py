@@ -336,16 +336,15 @@ def calculate_decisions(
     # Battery charge power reclaimable for devices
     battery_charge = get_solar_battery_charge(pv, inputs.battery_power)
 
-    # Parse overrides
+    # Parse overrides.
+    # AC overrides are intentionally NOT parsed here: no AC branch exists in
+    # execute_decisions, so parsing them would re-create the "dashboard lies
+    # to the user" surface (CODE_REVIEW_PASS2 §N2). Re-add when AC ships.
     ovr = {
         'ev': parse_override(inputs.ovr_ev),
         'boiler': parse_override(inputs.ovr_boiler),
         'pool': parse_override(inputs.ovr_pool),
         'table_heater': parse_override(inputs.ovr_table_heater),
-        'ac_living': parse_override(inputs.ovr_ac_living),
-        'ac_bedroom': parse_override(inputs.ovr_ac_bedroom),
-        'ac_office': parse_override(inputs.ovr_ac_office),
-        'ac_mancave': parse_override(inputs.ovr_ac_mancave),
         'dishwasher': parse_override(inputs.ovr_dishwasher),
     }
 
@@ -368,20 +367,14 @@ def calculate_decisions(
     # EV states - ABB firmware reports either IEC (0-5) or custom (128+) codes.
     # IEC state 4 (C2) and ABB 132 BOTH mean "actively charging" — must match both.
     ev_power = inputs.ev_power
-    ev_plugged = ev_state in (
-        EVState.IEC_CONNECTED_B1, EVState.IEC_CONNECTED_B2,
-        EVState.IEC_READY_C1, EVState.IEC_CHARGING_C2,
-        EVState.READY, EVState.CHARGING, EVState.FULL, EVState.PAUSED,
-    )
+    ev_plugged = EVState.is_plugged(ev_state)
     ev_ready = ev_state in (
         EVState.IEC_CONNECTED_B2, EVState.IEC_READY_C1,
         EVState.READY, EVState.PAUSED,
     )
-    # Charging: either IEC C2 / ABB 132 state OR significant power draw
-    ev_charging = ev_state in (
-        EVState.IEC_CHARGING_C2, EVState.CHARGING
-    ) or ev_power > 500
-    ev_done = ev_state == EVState.FULL
+    # Charging: either reported state OR significant power draw
+    ev_charging = EVState.is_charging(ev_state) or ev_power > 500
+    ev_done = EVState.is_done(ev_state)
 
     # Cross-reference ABB "FULL" with BMW actual SOC.
     # ABB charger can report stale FULL state after brief unavailability.
@@ -1590,15 +1583,18 @@ def _apply_summer_logic(decisions: Decisions, plan: list, ctx: dict):
     is_exporting = ctx['is_exporting']
     pv = ctx['pv']
 
-    # === EV CHARGING (reuse full EV logic - nighttime + solar) ===
-    boiler_will_use = 0  # Will be updated after boiler logic
-    effective_headroom = _handle_ev(
-        decisions, plan, ctx, effective_headroom, boiler_will_use
-    )
-
-    # === BOILER (reuse full boiler logic - nighttime heating + solar surplus) ===
+    # === BOILER FIRST (Priority 2 - hot water is essential, mirrors winter) ===
+    # Order matters: EV's off-peak fast-path checks `boiler_will_use == 0`.
+    # Running EV first with a hardcoded 0 (the pre-fix bug) caused summer
+    # off-peak nights to start EV at full amps even when the boiler also
+    # wanted to heat, briefly violating the 5 kW off-peak ceiling.
     boiler_will_use, effective_headroom = _handle_boiler(
         decisions, plan, ctx, effective_headroom
+    )
+
+    # === EV CHARGING (Priority 3 - reads real boiler_will_use) ===
+    effective_headroom = _handle_ev(
+        decisions, plan, ctx, effective_headroom, boiler_will_use
     )
 
     # === POOL HEATING (solar only) ===
@@ -1641,9 +1637,28 @@ def check_frost_protection(
     # Pump is only truly running if switch is on AND drawing power
     pump_actually_running = pump_switch_on and pump_power >= min_pump_power
 
-    # No temperature reading available
+    # No temperature reading available — fail-safe during heating season.
+    # Sensor batteries die / Zigbee meshes drop; without this branch a January
+    # sensor failure leaves the pump unprotected and silent.
     if ambient_temp is None:
-        plan_entries.append('Frost: No temp sensor')
+        # now is a millisecond epoch (see decision_engine.py:296)
+        heating_season = datetime.fromtimestamp(now / 1000).month in (11, 12, 1, 2, 3)
+        if heating_season:
+            if not pump_actually_running:
+                pool_pump_decision.action = 'on'
+                plan_entries.append('Frost: PUMP ON - NO SENSOR (heating season fail-safe)')
+            else:
+                plan_entries.append('Frost: NO SENSOR but pump running (heating season)')
+            alerts.append(Alert(
+                level='warning',
+                message=(
+                    'Pool ambient temperature sensor unavailable during heating season. '
+                    'Pump forced on as fail-safe. Replace sensor / check Zigbee mesh.'
+                ),
+                notify_entity=fp.notify_entity,
+            ))
+        else:
+            plan_entries.append('Frost: No temp sensor')
         return {'alerts': alerts, 'pool_pump_decision': pool_pump_decision, 'plan_entries': plan_entries}
 
     temp_threshold = fp.temp_threshold
@@ -1835,11 +1850,8 @@ def check_bmw_low_battery(
     threshold = bmw_config.battery_threshold
     ev_state = inputs.ev_state
     ev_power = inputs.ev_power
-    ev_plugged_in = ev_state in (
-        EVState.IEC_CONNECTED_B1, EVState.IEC_CONNECTED_B2,
-        EVState.IEC_READY_C1, EVState.IEC_CHARGING_C2,
-        EVState.READY, EVState.CHARGING, EVState.PAUSED,
-    ) or ev_power > 500
+    # Active-session predicate excludes FULL: a fully charged car doesn't need an alert.
+    ev_plugged_in = EVState.is_active_session(ev_state) or ev_power > 500
 
     # Check BMW i5
     i5_battery = inputs.bmw_i5_battery
