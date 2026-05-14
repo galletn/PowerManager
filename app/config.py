@@ -1,5 +1,6 @@
 """Configuration management for Power Manager."""
 
+import dataclasses
 import logging
 import os
 from dataclasses import dataclass, field
@@ -304,61 +305,34 @@ def load_config(config_path: Optional[str] = None) -> Config:
 
 
 def _apply_config(config: Config, data: dict) -> None:
-    """Apply YAML data to config object."""
-    if "home_assistant" in data:
-        ha = data["home_assistant"]
-        if "url" in ha:
-            config.home_assistant.url = ha["url"]
-        if "token" in ha:
-            config.home_assistant.token = ha["token"]
-        if "verify_ssl" in ha:
-            config.home_assistant.verify_ssl = ha["verify_ssl"]
+    """Apply YAML data to the Config object.
 
-    if "polling_interval" in data:
-        config.polling_interval = data["polling_interval"]
+    Walks the dataclass schema and assigns leaf values directly; recurses
+    into nested dataclass fields. Raises ValueError on any key that is not
+    defined on the corresponding dataclass — this catches typos and stale
+    YAML rather than silently ignoring them (PASS2 §N5 / §3.14).
+    """
+    _merge_dataclass(config, data, path="")
 
-    if "port" in data:
-        config.port = data["port"]
 
-    if "max_import" in data:
-        mi = data["max_import"]
-        if "peak" in mi:
-            config.max_import.peak = mi["peak"]
-        if "off_peak" in mi:
-            config.max_import.off_peak = mi["off_peak"]
-        if "super_off_peak" in mi:
-            config.max_import.super_off_peak = mi["super_off_peak"]
-
-    if "tariff_prices" in data:
-        tp = data["tariff_prices"]
-        if "peak" in tp:
-            config.tariff_prices.peak = tp["peak"]
-        if "off_peak" in tp:
-            config.tariff_prices.off_peak = tp["off_peak"]
-        if "super_off_peak" in tp:
-            config.tariff_prices.super_off_peak = tp["super_off_peak"]
-
-    if "frost_protection" in data:
-        fp = data["frost_protection"]
-        if "enabled" in fp:
-            config.frost_protection.enabled = fp["enabled"]
-        if "temp_threshold" in fp:
-            config.frost_protection.temp_threshold = fp["temp_threshold"]
-        if "critical_threshold" in fp:
-            config.frost_protection.critical_threshold = fp["critical_threshold"]
-        if "notify_entity" in fp:
-            config.frost_protection.notify_entity = fp["notify_entity"]
-
-    if "bmw_low_battery" in data:
-        bmw = data["bmw_low_battery"]
-        if "enabled" in bmw:
-            config.bmw_low_battery.enabled = bmw["enabled"]
-        if "battery_threshold" in bmw:
-            config.bmw_low_battery.battery_threshold = bmw["battery_threshold"]
-        if "check_hours" in bmw:
-            config.bmw_low_battery.check_hours = bmw["check_hours"]
-        if "notify_entity" in bmw:
-            config.bmw_low_battery.notify_entity = bmw["notify_entity"]
-
-    if "debug" in data:
-        config.debug = data["debug"]
+def _merge_dataclass(target, data: dict, path: str) -> None:
+    if not isinstance(data, dict):
+        raise ValueError(
+            f"Expected mapping at {path or '<root>'}, "
+            f"got {type(data).__name__}"
+        )
+    field_names = {f.name for f in dataclasses.fields(target)}
+    for key, value in data.items():
+        full_path = f"{path}.{key}" if path else key
+        if key not in field_names:
+            raise ValueError(f"Unknown config key: {full_path}")
+        current = getattr(target, key)
+        if dataclasses.is_dataclass(current):
+            if not isinstance(value, dict):
+                raise ValueError(
+                    f"Expected mapping at {full_path}, "
+                    f"got {type(value).__name__}"
+                )
+            _merge_dataclass(current, value, full_path)
+        else:
+            setattr(target, key, value)
