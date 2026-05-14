@@ -31,18 +31,36 @@ class EVState(IntEnum):
     CHARGING = 132
     PAUSED = 133
 
+    @staticmethod
+    def _coerce(code) -> Optional[int]:
+        """Best-effort coerce HA state into an int code; None for unparseable.
+
+        HA sometimes returns numeric sensor states as strings (e.g. "132").
+        Callers should be insulated from that without silently misclassifying.
+        """
+        if code is None:
+            return None
+        if isinstance(code, int):
+            return code
+        try:
+            return int(code)
+        except (TypeError, ValueError):
+            return None
+
     @classmethod
     def is_charging(cls, code) -> bool:
         """Charger is actively delivering current to the car."""
-        return code in (cls.IEC_CHARGING_C2, cls.CHARGING)
+        c = cls._coerce(code)
+        return c in (cls.IEC_CHARGING_C2.value, cls.CHARGING.value)
 
     @classmethod
     def is_plugged(cls, code) -> bool:
         """A car is physically connected to the charger (incl. fully charged)."""
-        return code in (
-            cls.IEC_CONNECTED_B1, cls.IEC_CONNECTED_B2,
-            cls.IEC_READY_C1, cls.IEC_CHARGING_C2,
-            cls.READY, cls.CHARGING, cls.FULL, cls.PAUSED,
+        c = cls._coerce(code)
+        return c in (
+            cls.IEC_CONNECTED_B1.value, cls.IEC_CONNECTED_B2.value,
+            cls.IEC_READY_C1.value, cls.IEC_CHARGING_C2.value,
+            cls.READY.value, cls.CHARGING.value, cls.FULL.value, cls.PAUSED.value,
         )
 
     @classmethod
@@ -53,7 +71,7 @@ class EVState(IntEnum):
     @classmethod
     def is_done(cls, code) -> bool:
         """Charger reports the car is fully charged."""
-        return code == cls.FULL
+        return cls._coerce(code) == cls.FULL.value
 
 
 @dataclass

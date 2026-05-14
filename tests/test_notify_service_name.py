@@ -103,6 +103,27 @@ class TestMobileAppDotForm:
         ) == "mobile_app_kitchen"
 
 
+class TestUnknownDottedEntity:
+    """CR-P5: Pre-rewrite, the resolver had a final "split on dot and return
+    the last segment" fallback. Removing it broke any user-configured
+    `switch.foo` or `notification.bar` form — `notify.switch.foo` is not a
+    valid HA service name. Restore that fallback."""
+
+    def test_switch_dot_entity_returns_suffix(self, client):
+        """A typo like `switch.kitchen` for a notify entity should yield
+        `kitchen` (still wrong-ish but a recoverable HA error), NOT the
+        literal `switch.kitchen` which produces `notify.switch.kitchen` —
+        a parser error."""
+        assert client._extract_notify_service_name(
+            "switch.kitchen"
+        ) == "kitchen"
+
+    def test_multiple_dots_returns_last_segment(self, client):
+        assert client._extract_notify_service_name(
+            "binary_sensor.front_door.contact"
+        ) == "contact"
+
+
 class TestRegression_PreFixBehaviour:
     """Pin the bug: pre-fix, mobile_app_<device> was wrongly stripped."""
 

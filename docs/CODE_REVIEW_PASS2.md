@@ -444,3 +444,63 @@ Pass 1's §12 still applies; add these rows:
 ---
 
 *End of Pass 2 review.*
+
+---
+
+## 8. Review of v1.0.60 + v1.0.61 fixes (CR-1)
+
+**Date:** 2026-05-14
+**Range:** `ebab7da..HEAD` (commits b754322 + 2c27fe6)
+**Method:** Three adversarial layers in parallel — Blind Hunter (diff only), Edge Case Hunter (diff + project read), Acceptance Auditor (diff + this spec).
+
+The diff implements 8 of the Top-15. The CR confirms 6 fixes match the spec cleanly (N1, N3, §2.1, §2.2 code, N4 code, N6) and surfaces 4 new defects introduced by the fixes themselves plus several test-quality gaps.
+
+### 8.1 Deploy blockers (PATCH — must fix before v1.0.60/v1.0.61 ship)
+
+- **[CR-P1] Pool-climate retries always dropped.** `add_pending_command(pool_climate, 'heat')` stores `expected_state='heat'`, but `decisions.pool.action` is always `'on'` or `'off'`, and `_ACTION_TO_STATE['on']='on'`. So `'on' != 'heat'` → `_pending_command_still_wanted` returns False → drops the pending command every cycle. Three-way convergence (BH#3 / Auditor / ECH #1). [`app/main.py:125-171`](../app/main.py#L125-L171)
+- **[CR-P2] EVState soft-pause integration fails the regression it claims to fix.** `update_state('ev', EVState.is_charging(...))` returns True for state 132 and False for 133. Soft-pause oscillation 132↔133 still flips `state.on` every cycle and bumps `last_change`. The unit test `test_paused_is_not_charging` pins helper semantics correctly but no integration test catches the oscillation. (BH#7 / Auditor / ECH #5 indirectly.) [`app/main.py:725`](../app/main.py#L725)
+- **[CR-P3] Dishwasher `action='none'` fights its own engine.** During peak, engine emits `action='none'` ("waiting for cheap rate"). `_ACTION_TO_STATE['none']=None` → helper returns `None` → retry loop keeps resending `turn_on`. The retry overrides the engine's waiting intent. (ECH #8.) [`app/main.py:165-171`](../app/main.py#L165-L171)
+- **[CR-P4] Frost season excludes April.** `(11,12,1,2,3)` is too narrow — Belgian late frost is real ("Ice Saints" mid-May). April sensor failure leaves pump unprotected. (ECH #6.) [`app/decision_engine.py:1645`](../app/decision_engine.py#L1645)
+- **[CR-P5] `_extract_notify_service_name` dropped the "unknown dotted entity" fallback.** Pre-fix code returned the last `.`-segment of any unknown dotted form. New code returns the literal value, which then becomes an invalid HA service name. Tests don't catch this case. (BH#5.) [`app/ha_client.py:335-372`](../app/ha_client.py#L335-L372)
+
+### 8.2 Test quality (PATCH — fix before v1.0.61 ships)
+
+- **[CR-P6] `EVState.is_charging("132")` silently returns False.** No type guard on the classmethods; non-int input is a silent footgun. (ECH #5.) [`app/models.py:34-55`](../app/models.py#L34-L55)
+- **[CR-P7] `test_solar_rejected_for_non_ev_with_400` permissive `or` assertion.** `assert "solar" not in detail or "ev" in detail` passes for shapes that don't pin the contract. (Auditor.) [`tests/test_override_solar_mode.py:33`](../tests/test_override_solar_mode.py#L33)
+- **[CR-P8] `test_known_pair_does_not_400_on_validation` asserts `!= 400`.** Passes on 500 (HA not wired in test); doesn't actually verify the (device,mode) is accepted. (Auditor.) [`tests/test_override_solar_mode.py:60-62`](../tests/test_override_solar_mode.py#L60)
+- **[CR-P9] Heater_right tracking has no test.** N7 is unpinned at the call site. (Auditor.) [`app/main.py:725`](../app/main.py#L725)
+- **[CR-P10] Soft-pause oscillation has no integration test.** Even if CR-P2 is fixed, no test pins "132↔133 across 2 cycles leaves `last_change` unchanged". (BH#7 / Auditor.) [`app/main.py:725`](../app/main.py#L725)
+- **[CR-P11] Pool retry path has no test.** `_ACTION_TO_STATE['heat']` is unreached by any test. (ECH §3.1.) [`tests/test_retry_decision_check.py`](../tests/test_retry_decision_check.py)
+
+### 8.3 Decisions needed (DN — Galletn input required)
+
+- **[CR-DN1] `update_state` / hysteresis: narrow predicate or structural fix?** The soft-pause oscillation is a *symptom* of the broader §2.5 race (any external state change bumps `last_change` for any device — boiler thermostat trip, heater_right manual toggle, etc.). Two paths to fix CR-P2:
+  - **(A) Narrow:** swap the EV predicate to `is_active_session` (or similar that includes PAUSED). Closes the soft-pause oscillation. Doesn't address other devices' external-flip races.
+  - **(B) Structural:** only bump `last_change` when `name in confirmed_states` (i.e., PM issued the call). Fixes §2.5 for all devices in one shot. Bigger blast radius — could affect behaviour everywhere hysteresis is read.
+
+### 8.4 Defer (real but out of scope for this batch)
+
+- **§2.5 broader (boiler thermostat trip)** — same family as CR-DN1; only addressed if DN1 picks B.
+- **§3.5 BMW car selection 4× dedup** — diff touched one of the four sites but didn't dedup. Follow-up story.
+- **§2.8 retry double-send compliance race** — ECH #3 confirms my N4 fix only catches engine-flipped-against, not the original §2.8 case. Pre-existing.
+- **N2 dashboard tile cleanup + AC dead code** — per Galletn's earlier "remove surface" choice. Full AC cleanup (PowerInputs.ovr_ac_*, Decisions.ac_*, EntitiesConfig.ovr_ac_*, ha_client AC reads, dashboard consumers list) is bigger. Auditor lists each location.
+- **Timezone in `datetime.fromtimestamp`** — pre-existing pattern; HA add-on TZ usually CET so impact bounded.
+- **§2.6 pool smoothed/raw mixing** — pre-existing; my summer-ordering swap exacerbates slightly but doesn't introduce.
+
+### 8.5 Dismissed (noise / false positives)
+
+- **BH#1** "datetime not imported" — verified imported at `decision_engine.py:2`. False positive.
+- **BH#8** "summer ordering test tautological" — disagreed by Auditor; the `boiler_will_use == 2500` assertion would have failed pre-fix. Real bug-pin.
+- **BH#10–12, 14, 15, 19, 22–26** — design preferences, redundant guards, over-engineering concerns.
+- **ECH #4** "`'adjust'` mis-classification" — analyzed; the behaviour is actually correct (adjust → on; turn_off pending → drop is intended).
+- **ECH #5 EV-charging detection inconsistency** — same defect as CR-P2; covered.
+
+### 8.6 Summary
+
+**6 deploy blockers (CR-P1 to CR-P5 plus one decision DN1), 6 test-quality items (CR-P6 to CR-P11), and several deferred follow-ups.**
+
+The CR found that **2 of the 8 fixes have real defects the tests missed** — pool retry (CR-P1) and soft-pause integration (CR-P2). Both are regressions introduced by the fixes themselves. Worth running CR before deploying.
+
+---
+
+*End of CR-1.*

@@ -122,15 +122,22 @@ def get_entity_state(states: dict, entity_id: str) -> Optional[str]:
     return entity_data.get("state")
 
 
-# Maps a decision `action` value to the equivalent retry-target state.
-# 'none' means "no fresh opinion" — leave the pending command alone.
-_ACTION_TO_STATE = {
+# Maps a decision `action` value to the equivalent retry-target state for
+# regular switch-style entities. The pool_climate entity uses 'heat'/'off' in
+# HA, so its mapping is built per-call in `_pending_command_still_wanted`.
+_ACTION_TO_SWITCH_STATE = {
     'on': 'on',
     'adjust': 'on',   # adjust = still on, just at different amps
     'off': 'off',
     'pause': 'off',   # EV soft-pause is logically off for retry purposes
-    'heat': 'heat',
-    'none': None,
+}
+
+# Pool climate uses HA-native 'heat' for on. Keeping it separate from the
+# switch mapping avoids accidental cross-contamination if a switch ever gets
+# an 'on' pending command compared against an entity that wants 'heat'.
+_ACTION_TO_CLIMATE_STATE = {
+    'on': 'heat',
+    'off': 'off',
 }
 
 
@@ -139,12 +146,20 @@ def _pending_command_still_wanted(entity_id: str, expected_state: str) -> Option
 
     Returns:
         True  — engine agrees with the pending command, keep retrying.
-        False — engine wants the opposite, drop the pending command.
-        None  — engine has no fresh opinion (action='none' or unmapped
-                entity), keep retrying (preserves prior behaviour).
+        False — engine wants something different (incl. action='none', i.e.
+                no current opinion), drop the pending command.
+        None  — entity is not in our control surface (unmapped), or
+                last_decisions/config not yet available; keep retrying.
 
     Fixes CODE_REVIEW_PASS2 §N4: a 06:55 super-off-peak boiler-on retry no
     longer fires at 07:01 peak when the engine has flipped to 'off'.
+    CR-P1 (review of v1.0.61): pool_climate uses 'heat'/'off' as HA states
+    while the decision uses 'on'/'off' — handled via the per-entity map.
+    CR-P3 (review of v1.0.61): action='none' is treated as "drop pending"
+    rather than "keep retrying" — the engine's no-opinion state should not
+    be overridden by a stale prior command (e.g. dishwasher waiting for
+    cheap rate, or any cycle where the engine returned early without
+    re-asserting the prior intent).
     """
     decisions = app_state.last_decisions
     config = app_state.config
@@ -152,22 +167,24 @@ def _pending_command_still_wanted(entity_id: str, expected_state: str) -> Option
         return None
 
     entities = config.entities
+    # (decision, action_to_state map) per entity
     entity_to_decision = {
-        entities.boiler_switch: decisions.boiler,
-        entities.ev_switch: decisions.ev,
-        entities.pool_pump: decisions.pool_pump,
-        entities.pool_climate: decisions.pool,
-        entities.heater_right: decisions.heater_right,
-        entities.heater_table: decisions.heater_table,
-        entities.dishwasher_switch: decisions.dishwasher,
+        entities.boiler_switch: (decisions.boiler, _ACTION_TO_SWITCH_STATE),
+        entities.ev_switch: (decisions.ev, _ACTION_TO_SWITCH_STATE),
+        entities.pool_pump: (decisions.pool_pump, _ACTION_TO_SWITCH_STATE),
+        entities.pool_climate: (decisions.pool, _ACTION_TO_CLIMATE_STATE),
+        entities.heater_right: (decisions.heater_right, _ACTION_TO_SWITCH_STATE),
+        entities.heater_table: (decisions.heater_table, _ACTION_TO_SWITCH_STATE),
+        entities.dishwasher_switch: (decisions.dishwasher, _ACTION_TO_SWITCH_STATE),
     }
-    decision = entity_to_decision.get(entity_id)
-    if decision is None:
+    entry = entity_to_decision.get(entity_id)
+    if entry is None:
         return None  # entity not in our control surface
+    decision, action_map = entry
 
-    current_target = _ACTION_TO_STATE.get(decision.action)
-    if current_target is None:
-        return None  # no fresh opinion — preserve retry
+    current_target = action_map.get(decision.action)
+    # current_target is None when action is 'none' OR an unknown action.
+    # Either way, treat as "engine doesn't currently want this state" → drop.
     return current_target == expected_state
 
 
@@ -719,10 +736,12 @@ def _update_device_state(inputs: PowerInputs, confirmed_states: dict[str, bool])
             state.last_change = now
 
     # Update each device using confirmed states or fallback to current inputs.
-    # EV uses is_charging() so soft-pause (state 133) doesn't bump last_change
-    # every cycle and lock hysteresis. heater_right is included so its min_on/
-    # min_off_time window actually fires (was previously missing, hysteresis dead).
-    update_state('ev', EVState.is_charging(inputs.ev_state))
+    # EV uses is_active_session() — covers plugged+charging+paused so the
+    # v1.0.52 soft-pause oscillation 132<->133 doesn't bump last_change every
+    # cycle and lock hysteresis. (CR-P2; the earlier is_charging() fix was a
+    # half-measure that excluded the PAUSED state.) heater_right is included
+    # so its min_on/min_off_time window actually fires (was missing, dead).
+    update_state('ev', EVState.is_active_session(inputs.ev_state))
     update_state('boiler', inputs.boiler_switch == 'on')
     update_state('pool_pump', inputs.pool_pump_switch == 'on')
     update_state('pool', inputs.pool_climate == 'heat')

@@ -66,6 +66,29 @@ class TestSensorUnavailableInHeatingSeason:
         assert result['pool_pump_decision'].action == 'on'
         assert len(result['alerts']) == 1
 
+    def test_april_failsafe_for_ice_saints(self, base_inputs, config, device_state):
+        """CR-P4: Belgian 'Ijsheiligen' (Ice Saints) mid-May is folklore but
+        April frost is common. Sensor failure in April must still fail-safe."""
+        config.frost_protection.enabled = True
+        inputs = replace(base_inputs, pool_ambient_temp=None, pool_pump_switch='off', pool_pump_power=0)
+        now = _ts(datetime(2026, 4, 5, 6, 0, 0))
+
+        result = check_frost_protection(inputs, config, device_state, now)
+
+        assert result['pool_pump_decision'].action == 'on'
+        assert len(result['alerts']) == 1
+
+    def test_october_failsafe_early_winter(self, base_inputs, config, device_state):
+        """CR-P4: First October frosts are real in Belgium. Failsafe in Oct too."""
+        config.frost_protection.enabled = True
+        inputs = replace(base_inputs, pool_ambient_temp=None, pool_pump_switch='off', pool_pump_power=0)
+        now = _ts(datetime(2026, 10, 25, 6, 0, 0))
+
+        result = check_frost_protection(inputs, config, device_state, now)
+
+        assert result['pool_pump_decision'].action == 'on'
+        assert len(result['alerts']) == 1
+
     def test_failsafe_when_pump_already_on(self, base_inputs, config, device_state):
         """Don't override a running pump — but still alert about the dead sensor."""
         config.frost_protection.enabled = True
@@ -86,7 +109,8 @@ class TestSensorUnavailableInHeatingSeason:
 
 
 class TestSensorUnavailableOutsideHeatingSeason:
-    """April through October — quiet operation, no spurious alerts."""
+    """May through September — quiet operation, no spurious alerts.
+    April and October are inside heating season (CR-P4)."""
 
     def test_july_no_action_no_alert(self, base_inputs, config, device_state):
         config.frost_protection.enabled = True
@@ -99,10 +123,11 @@ class TestSensorUnavailableOutsideHeatingSeason:
         assert len(result['alerts']) == 0
         assert any('No temp sensor' in e for e in result['plan_entries'])
 
-    def test_april_no_action(self, base_inputs, config, device_state):
+    def test_may_no_action(self, base_inputs, config, device_state):
+        """Mid-May is past Ice Saints — no spurious alerts."""
         config.frost_protection.enabled = True
         inputs = replace(base_inputs, pool_ambient_temp=None)
-        now = _ts(datetime(2026, 4, 15, 12, 0, 0))
+        now = _ts(datetime(2026, 5, 20, 12, 0, 0))
 
         result = check_frost_protection(inputs, config, device_state, now)
 

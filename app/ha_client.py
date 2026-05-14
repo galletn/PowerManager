@@ -367,6 +367,15 @@ class HAClient:
         # "mobile_app_<device>" is already a valid notify service name in HA.
         # Return it intact — stripping the prefix here was the pre-fix bug that
         # silently broke all mobile_app notifications.
+
+        # Unknown dotted form (e.g. user typo `switch.kitchen`): fall back to
+        # the segment after the last dot. The resulting `notify.<segment>` may
+        # still be a wrong service, but the alternative — passing the literal
+        # value into `notify.<entity_id>` — yields a parser error in HA.
+        # (CR-P5 — restored from pre-rewrite behaviour.)
+        if "." in entity_id:
+            return entity_id.rsplit(".", 1)[-1]
+
         return entity_id
 
     async def set_input_text(self, entity_id: str, value: str) -> bool:

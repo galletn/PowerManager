@@ -30,19 +30,31 @@ class TestSolarModeOnlyValidForEV:
         ["boiler", "pool", "table_heater", "dishwasher"],
     )
     def test_solar_rejected_for_non_ev_with_400(self, client, device):
+        """CR-P7: assert the detail body names the device and excludes 'solar'
+        from the allowlist — pinning the contract instead of using a permissive
+        `solar not in detail OR ev in detail` boolean."""
         response = client.post(f"/api/override/{device}?mode=solar")
         assert response.status_code == 400
-        # Message should mention valid modes for this device.
-        body = response.text.lower()
-        assert "invalid mode" in body or "mode" in body
-        # Solar shouldn't appear in the per-device allowed list returned.
-        detail = response.json().get("detail", "").lower()
-        # The detail should list auto/on/off (device's actual options), NOT solar.
-        assert "solar" not in detail or "ev" in detail
+        detail = response.json().get("detail", "")
+        assert f"Invalid mode for '{device}'" in detail, (
+            f"detail should name the rejected device; got: {detail!r}"
+        )
+        # The per-device allowlist must NOT contain 'solar' for non-EV devices.
+        assert "'solar'" not in detail, (
+            f"solar appears in non-EV allowlist: {detail!r}"
+        )
+        # Should list auto/on/off for switch-style devices
+        assert "'auto'" in detail and "'on'" in detail and "'off'" in detail
 
 
 class TestValidModesForEachDevice:
-    """Each device exposes a tight per-device mode allowlist."""
+    """Each device exposes a tight per-device mode allowlist.
+
+    These pairs must pass the validation gate. CR-P8: previous version
+    asserted `status_code != 400`, which trivially passed on 500/422/anything-
+    not-400. Tighten: status must be in {200, 500} where 500 indicates the
+    test environment lacks a configured HA client (validation passed). 400
+    means the validation gate wrongly rejected a known-valid pair."""
 
     @pytest.mark.parametrize(
         "device,mode",
@@ -59,13 +71,16 @@ class TestValidModesForEachDevice:
             ("dishwasher", "auto"),
         ],
     )
-    def test_known_pair_does_not_400_on_validation(self, client, device, mode):
-        """These pairs must pass the validation gate (may still 500 later if
-        app_state.config is None in tests, but it must NOT be a 400)."""
+    def test_known_pair_passes_validation(self, client, device, mode):
         response = client.post(f"/api/override/{device}?mode={mode}")
-        assert response.status_code != 400, (
-            f"({device}, {mode}) should be a valid combination"
+        # 200 if HA was wired up; 500 if downstream HA call failed (test env).
+        # Either way, the validation gate accepted (device, mode).
+        assert response.status_code in (200, 500), (
+            f"({device}, {mode}) returned {response.status_code}; expected "
+            "200 (accepted + HA call ok) or 500 (accepted + HA call failed)"
         )
+        # Critical: must NOT be 400 (validation rejection).
+        assert response.status_code != 400
 
 
 class TestUnknownModeRejected:

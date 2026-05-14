@@ -12,12 +12,12 @@ desired state has flipped against the pending command, drop it instead.
 """
 
 from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from app.main import (
-    AppState, PendingCommand, app_state, verify_and_retry_pending_commands,
+    PendingCommand, app_state, verify_and_retry_pending_commands,
 )
 from app.models import Decisions
 from app.config import Config
@@ -129,8 +129,11 @@ async def test_retry_still_fires_when_decision_unchanged(fresh_state):
 
 
 @pytest.mark.asyncio
-async def test_retry_still_fires_when_decision_is_none(fresh_state):
-    """Engine has no fresh opinion (action='none'): keep retrying."""
+async def test_retry_dropped_when_decision_is_none(fresh_state):
+    """CR-P3: action='none' means the engine has no current opinion, so a
+    stale pending command should NOT be re-issued. The decision engine sets
+    'none' for the dishwasher waiting branches and many devices' no-op cycles;
+    re-firing a prior turn_on would override the engine's current intent."""
     boiler_entity = fresh_state.entities.boiler_switch
     app_state.pending_commands[boiler_entity] = _stale_pending(
         boiler_entity, 'on'
@@ -141,8 +144,25 @@ async def test_retry_still_fires_when_decision_is_none(fresh_state):
 
     await verify_and_retry_pending_commands(states)
 
-    app_state.ha_client.turn_on.assert_called_once()
-    assert boiler_entity in app_state.pending_commands
+    app_state.ha_client.turn_on.assert_not_called()
+    assert boiler_entity not in app_state.pending_commands
+
+
+@pytest.mark.asyncio
+async def test_dishwasher_waiting_drops_stale_turn_on(fresh_state):
+    """CR-P3 concrete case: dishwasher waiting branch sets action='none'.
+    A pending turn_on from a prior cycle must not be retried, otherwise the
+    dishwasher gets started during peak when the engine explicitly said wait."""
+    dw_entity = fresh_state.entities.dishwasher_switch
+    app_state.pending_commands[dw_entity] = _stale_pending(dw_entity, 'on')
+    app_state.last_decisions.dishwasher.action = 'none'  # waiting branch
+
+    states = {dw_entity: {'state': 'off'}}
+
+    await verify_and_retry_pending_commands(states)
+
+    app_state.ha_client.turn_on.assert_not_called()
+    assert dw_entity not in app_state.pending_commands
 
 
 @pytest.mark.asyncio
@@ -175,6 +195,43 @@ async def test_ev_adjust_action_treated_as_on(fresh_state):
 
     app_state.ha_client.turn_on.assert_called_once()
     assert ev_entity in app_state.pending_commands
+
+
+@pytest.mark.asyncio
+async def test_pool_climate_retry_kept_when_decision_still_on(fresh_state):
+    """CR-P1 regression: pool executor stores expected_state='heat' but the
+    decision uses action='on'. The helper must NOT drop the pending command
+    just because 'on' != 'heat' as raw strings."""
+    pool_entity = fresh_state.entities.pool_climate
+    app_state.pending_commands[pool_entity] = _stale_pending(
+        pool_entity, 'heat'
+    )
+    app_state.last_decisions.pool.action = 'on'  # engine still wants heat
+
+    # HA reports climate is still 'off' (set_climate didn't land)
+    states = {pool_entity: {'state': 'off'}}
+
+    await verify_and_retry_pending_commands(states)
+
+    # Pool retry must still be queued (engine still wants heating)
+    assert pool_entity in app_state.pending_commands
+
+
+@pytest.mark.asyncio
+async def test_pool_climate_retry_dropped_when_decision_off(fresh_state):
+    """Inverse of CR-P1: if engine has flipped to 'off' while a pool 'heat'
+    command is still pending, drop it."""
+    pool_entity = fresh_state.entities.pool_climate
+    app_state.pending_commands[pool_entity] = _stale_pending(
+        pool_entity, 'heat'
+    )
+    app_state.last_decisions.pool.action = 'off'
+
+    states = {pool_entity: {'state': 'off'}}
+
+    await verify_and_retry_pending_commands(states)
+
+    assert pool_entity not in app_state.pending_commands
 
 
 @pytest.mark.asyncio

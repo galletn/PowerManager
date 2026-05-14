@@ -1639,10 +1639,12 @@ def check_frost_protection(
 
     # No temperature reading available — fail-safe during heating season.
     # Sensor batteries die / Zigbee meshes drop; without this branch a January
-    # sensor failure leaves the pump unprotected and silent.
+    # sensor failure leaves the pump unprotected and silent. Heating season is
+    # widened to include April (post-March frosts) and October (first frosts)
+    # per CR-P4 — Belgian Ice Saints folklore puts last frosts mid-May.
     if ambient_temp is None:
         # now is a millisecond epoch (see decision_engine.py:296)
-        heating_season = datetime.fromtimestamp(now / 1000).month in (11, 12, 1, 2, 3)
+        heating_season = datetime.fromtimestamp(now / 1000).month in (10, 11, 12, 1, 2, 3, 4)
         if heating_season:
             if not pump_actually_running:
                 pool_pump_decision.action = 'on'

@@ -48,6 +48,25 @@ class TestIsCharging:
         assert EVState.is_charging(133) is False  # the v1.0.52 soft-pause state
         assert EVState.is_charging(128) is False
 
+    def test_handles_string_input(self):
+        """HA sometimes returns numeric sensor states as strings.
+        Helpers must not silently return False for a stringified valid code."""
+        assert EVState.is_charging("132") is True
+        assert EVState.is_charging("4") is True
+        assert EVState.is_charging("133") is False
+
+    def test_handles_none_input(self):
+        """None must be False (the car has no state at all)."""
+        assert EVState.is_charging(None) is False
+        assert EVState.is_plugged(None) is False
+        assert EVState.is_active_session(None) is False
+        assert EVState.is_done(None) is False
+
+    def test_handles_garbage_input(self):
+        """Unparseable input is treated as 'not in the enum' → False, not raise."""
+        assert EVState.is_charging("unavailable") is False
+        assert EVState.is_charging("") is False
+
 
 class TestIsPlugged:
     """is_plugged is True if a car is physically connected to the charger.
