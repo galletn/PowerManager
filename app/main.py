@@ -122,6 +122,55 @@ def get_entity_state(states: dict, entity_id: str) -> Optional[str]:
     return entity_data.get("state")
 
 
+# Maps a decision `action` value to the equivalent retry-target state.
+# 'none' means "no fresh opinion" — leave the pending command alone.
+_ACTION_TO_STATE = {
+    'on': 'on',
+    'adjust': 'on',   # adjust = still on, just at different amps
+    'off': 'off',
+    'pause': 'off',   # EV soft-pause is logically off for retry purposes
+    'heat': 'heat',
+    'none': None,
+}
+
+
+def _pending_command_still_wanted(entity_id: str, expected_state: str) -> Optional[bool]:
+    """Whether the engine's current decision still wants `expected_state`.
+
+    Returns:
+        True  — engine agrees with the pending command, keep retrying.
+        False — engine wants the opposite, drop the pending command.
+        None  — engine has no fresh opinion (action='none' or unmapped
+                entity), keep retrying (preserves prior behaviour).
+
+    Fixes CODE_REVIEW_PASS2 §N4: a 06:55 super-off-peak boiler-on retry no
+    longer fires at 07:01 peak when the engine has flipped to 'off'.
+    """
+    decisions = app_state.last_decisions
+    config = app_state.config
+    if decisions is None or config is None:
+        return None
+
+    entities = config.entities
+    entity_to_decision = {
+        entities.boiler_switch: decisions.boiler,
+        entities.ev_switch: decisions.ev,
+        entities.pool_pump: decisions.pool_pump,
+        entities.pool_climate: decisions.pool,
+        entities.heater_right: decisions.heater_right,
+        entities.heater_table: decisions.heater_table,
+        entities.dishwasher_switch: decisions.dishwasher,
+    }
+    decision = entity_to_decision.get(entity_id)
+    if decision is None:
+        return None  # entity not in our control surface
+
+    current_target = _ACTION_TO_STATE.get(decision.action)
+    if current_target is None:
+        return None  # no fresh opinion — preserve retry
+    return current_target == expected_state
+
+
 async def verify_and_retry_pending_commands(states: dict) -> None:
     """Verify pending commands succeeded and retry with exponential backoff if not.
 
@@ -163,6 +212,18 @@ async def verify_and_retry_pending_commands(states: dict) -> None:
         time_since_retry = (now - cmd.last_retry).total_seconds()
 
         if time_since_retry >= backoff_seconds:
+            # Before retrying, ask the engine whether it still wants this state.
+            # If the decision has flipped against us, drop the pending command
+            # instead of overriding the current decision with a stale command.
+            # (CODE_REVIEW_PASS2 §N4.)
+            if _pending_command_still_wanted(entity_id, cmd.expected_state) is False:
+                logger.info(
+                    f"Dropping stale pending command {entity_id}->"
+                    f"{cmd.expected_state}: engine no longer wants this state"
+                )
+                commands_to_remove.append(entity_id)
+                continue
+
             # Time to retry
             cmd.retry_count += 1
             cmd.last_retry = now
@@ -1094,19 +1155,28 @@ async def set_override(device: str, mode: str):
     config = app_state.config
     ha_client = app_state.ha_client
 
-    # AC overrides were previously accepted here, parsed by the engine, and
-    # silently dropped (no executor existed). Removed until the AC branch is
-    # actually wired into execute_decisions.  See CODE_REVIEW_PASS2 §N2.
-    valid_devices = ['ev', 'boiler', 'pool', 'table_heater', 'dishwasher']
-    valid_modes = ['auto', 'on', 'off', 'solar']
+    # Per-device mode map. AC overrides removed in CODE_REVIEW_PASS2 §N2.
+    # `valid_modes` is derived per-device so e.g. `solar` is only accepted
+    # for the EV (others have no Solar input_select option in HA) —
+    # CODE_REVIEW_PASS2 §2.2.
+    mode_map = {
+        'ev': {'auto': '🤖 Auto', 'solar': '☀️ Solar', 'on': '⚡ Laden', 'off': '⏹️ Uit'},
+        'boiler': {'auto': '🤖 Auto', 'on': '🔥 Aan', 'off': '⏹️ Uit'},
+        'pool': {'auto': '🤖 Auto', 'on': '🔥 Aan', 'off': '⏹️ Uit'},
+        'table_heater': {'auto': '🤖 Auto', 'on': '🔥 Aan', 'off': '⏹️ Uit'},
+        'dishwasher': {'auto': '🤖 Auto', 'on': '▶️ Start', 'off': '⏹️ Uit'},
+    }
 
-    if device not in valid_devices:
+    if device not in mode_map:
         raise HTTPException(
-            400, f"Invalid device. Must be one of: {valid_devices}"
+            400,
+            f"Invalid device. Must be one of: {sorted(mode_map.keys())}",
         )
+    valid_modes = sorted(mode_map[device].keys())
     if mode not in valid_modes:
         raise HTTPException(
-            400, f"Invalid mode. Must be one of: {valid_modes}"
+            400,
+            f"Invalid mode for {device!r}. Must be one of: {valid_modes}",
         )
 
     # Set the override in HA
@@ -1119,16 +1189,7 @@ async def set_override(device: str, mode: str):
         'dishwasher': entities.ovr_dishwasher,
     }
 
-    # Map API mode to HA input_select option (Dutch labels with emojis)
-    mode_map = {
-        'ev': {'auto': '🤖 Auto', 'solar': '☀️ Solar', 'on': '⚡ Laden', 'off': '⏹️ Uit'},
-        'boiler': {'auto': '🤖 Auto', 'on': '🔥 Aan', 'off': '⏹️ Uit'},
-        'pool': {'auto': '🤖 Auto', 'on': '🔥 Aan', 'off': '⏹️ Uit'},
-        'table_heater': {'auto': '🤖 Auto', 'on': '🔥 Aan', 'off': '⏹️ Uit'},
-        'dishwasher': {'auto': '🤖 Auto', 'on': '▶️ Start', 'off': '⏹️ Uit'},
-    }
-
-    ha_mode = mode_map.get(device, {}).get(mode, mode.capitalize())
+    ha_mode = mode_map[device][mode]
 
     try:
         await ha_client.call_service(

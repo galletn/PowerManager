@@ -578,13 +578,17 @@ def generate_timetable(slots: List[ScheduleSlot]) -> List[Dict]:
             if device not in current_entry['devices']:
                 current_entry['devices'][device] = power
 
-    # Calculate totals
+    # Append the final hour BEFORE calculating totals — otherwise the last
+    # hour ships with total_power=0 and no `utilization` key, and the
+    # dashboard's over-limit visualisation never warns for that hour.
+    # (CODE_REVIEW_PASS2 §N6.)
+    if current_entry:
+        timetable.append(current_entry)
+
+    # Calculate totals (now includes the final hour).
     for entry in timetable:
         entry['total_power'] = sum(entry['devices'].values())
         entry['utilization'] = round(entry['total_power'] / entry['limit'] * 100) if entry['limit'] > 0 else 0
-
-    if current_entry:
-        timetable.append(current_entry)
 
     return timetable
 
