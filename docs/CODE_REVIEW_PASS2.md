@@ -393,25 +393,27 @@ Carried forward from Blind Hunter + new items:
 
 ## 5. Updated Top action items
 
-Pass 1's Top-10 still holds in spirit, but priority needs reshuffling given Pass 2 critical finds. Recommended ordering by **risk × ease**:
+Pass 1's Top-10 still holds in spirit, but priority needs reshuffling given Pass 2 critical finds. Recommended ordering by **risk × ease**.
 
-| # | Action | Refs | Effort |
-|---|---|---|---|
-| 1 | **Fix frost protection sensor-unavailable failure mode** — raise alert + fail-safe pump-on in winter months | N1 | 1 hour |
-| 2 | **Verify mobile notifications actually arrive** (check live HA logs for `service_not_found`). If broken, fix `_extract_notify_service_name`. | N3, I1 | 30 min check + 1 hr fix |
-| 3 | **Remove AC override surface OR wire up AC executor** (decide one) — the dashboard currently lies to the user | N2 | 1-3 hours |
-| 4 | **Reverse EV-vs-boiler order in `_apply_summer_logic`** (§2.1) — restores winter priority invariant | §2.1 | 5 lines |
-| 5 | **Harmonise EV charging predicate everywhere** via `EVState.is_charging()` classmethod — closes N7, N8, §2.5, §8.3, §3.5 in one pass | N7, N8, §2.5, §8.3 | 1-2 hours |
-| 6 | **Fix `mode_map` for `/api/override` solar mode** | §2.2 | half a screen |
-| 7 | **Fix `_apply_config` partial-merge** (recursive merge or fail-on-unknown) | N5, §3.14 | 1-2 hours |
-| 8 | **Make `verify_and_retry_pending_commands` re-check current decision before resending** | N4, §2.8 | 30 min |
-| 9 | **Fix `generate_timetable` last-hour bug** | N6 | 3 lines |
-| 10 | **Demote per-cycle `EV solar` info logs to DEBUG; log INFO only on transition** | §4.1, §4.2 | 1 hour |
-| 11 | **Tests for the riskiest surfaces:** `_handle_ev` solar state machine, `verify_and_retry_pending_commands`, `is_boiler_full`, `PowerBuffer` | §5.2, §5.5 | 1-2 days |
-| 12 | **Minimal CI: `ruff check` + `pytest` + coverage gate + add-on cache-bust check** | §5.7, §5.8, N40 | 1 day |
-| 13 | **Switch add-on deploy to GHCR** (kills the "make repo public" exposure) | §10.1, §3.15 | 1 day |
-| 14 | **Pydantic-validate `/api/override` and `/api/limits` payloads** | §7.1, §7.2, §6.3 | 2 hours |
-| 15 | **Refactor `decision_engine.py` into a package** (do last — everything else gets easier afterwards) | §3.1, N5 | several days |
+**Progress so far (as of 2026-05-14):** 8 of 15 landed across `b754322` (v1.0.60) → `2c27fe6` (v1.0.61) → `70825e5` (v1.0.62). All three commits pushed; not yet deployed. See §8 for the CR-1 review that drove the v1.0.62 follow-up fixes.
+
+| # | Action | Refs | Status | Effort |
+|---|---|---|---|---|
+| 1 | **Fix frost protection sensor-unavailable failure mode** — raise alert + fail-safe pump-on in winter months | N1 | ✅ `b754322` + `70825e5` (Apr/Oct widen, CR-P4) | 1 hour |
+| 2 | **Verify mobile notifications actually arrive** (check live HA logs for `service_not_found`). If broken, fix `_extract_notify_service_name`. | N3, I1 | ✅ `b754322` + `70825e5` (dotted-entity fallback, CR-P5) | 30 min check + 1 hr fix |
+| 3 | **Remove AC override surface OR wire up AC executor** (decide one) — the dashboard currently lies to the user | N2 | ✅ `b754322` (removed surface). Full dead-code cleanup deferred (see §8.4) | 1-3 hours |
+| 4 | **Reverse EV-vs-boiler order in `_apply_summer_logic`** (§2.1) — restores winter priority invariant | §2.1 | ✅ `b754322` | 5 lines |
+| 5 | **Harmonise EV charging predicate everywhere** via `EVState.is_charging()` classmethod — closes N7, N8, §2.5, §8.3, §3.5 in one pass | N7, N8, §2.5, §8.3 | ✅ `b754322` + `70825e5` (DN1=A: `is_active_session`, type guard, CR-P2/P6). §3.5 BMW dedup deferred. | 1-2 hours |
+| 6 | **Fix `mode_map` for `/api/override` solar mode** | §2.2 | ✅ `2c27fe6` + `70825e5` (tighter tests, CR-P7/P8) | half a screen |
+| 7 | **Fix `_apply_config` partial-merge** (recursive merge or fail-on-unknown) | N5, §3.14 | ❌ open | 1-2 hours |
+| 8 | **Make `verify_and_retry_pending_commands` re-check current decision before resending** | N4, §2.8 | ✅ `2c27fe6` + `70825e5` (pool mapping + `none`-drop, CR-P1/P3) | 30 min |
+| 9 | **Fix `generate_timetable` last-hour bug** | N6 | ✅ `2c27fe6` | 3 lines |
+| 10 | **Demote per-cycle `EV solar` info logs to DEBUG; log INFO only on transition** | §4.1, §4.2 | ❌ open | 1 hour |
+| 11 | **Tests for the riskiest surfaces:** `_handle_ev` solar state machine, `verify_and_retry_pending_commands`, `is_boiler_full`, `PowerBuffer` | §5.2, §5.5 | ⚠️ partial — `verify_and_retry` covered (7 tests `2c27fe6` + 4 more `70825e5`). `_handle_ev` solar, `is_boiler_full`, `PowerBuffer` still open. | 1-2 days |
+| 12 | **Minimal CI: `ruff check` + `pytest` + coverage gate + add-on cache-bust check** | §5.7, §5.8, N40 | ❌ open | 1 day |
+| 13 | **Switch add-on deploy to GHCR** (kills the "make repo public" exposure) | §10.1, §3.15 | ❌ open | 1 day |
+| 14 | **Pydantic-validate `/api/override` and `/api/limits` payloads** | §7.1, §7.2, §6.3 | ❌ open | 2 hours |
+| 15 | **Refactor `decision_engine.py` into a package** (do last — everything else gets easier afterwards) | §3.1, N5 | ❌ open | several days |
 
 Note: items 1-3 are now ahead of "fix mode_map for /api/override solar mode" — they're either safety-critical (frost), trust-critical (notifications, AC overrides), or both.
 
@@ -419,19 +421,21 @@ Note: items 1-3 are now ahead of "fix mode_map for /api/override solar mode" —
 
 ## 6. Updated platinum checklist
 
-Pass 1's §12 still applies; add these rows:
+Pass 1's §12 still applies; add these rows. Status updated as of `70825e5` (v1.0.62).
 
 | New row | Status | Target |
 |---|---|---|
-| All EV-charging predicates flow through `EVState.is_charging()` | ❌ scattered | Single canonical check |
-| Grace-period timers (`*_solar_surplus_since`, `*_importing_since`) reset on every device turn-off path | ❌ tariff and override paths leak | Audit + assert per device |
-| `get_num` callers default to `None` for missing sensors, except numeric configs with intentional defaults | ❌ current default semantics are inverted | Audit + standardise |
-| Mobile-app notification path verified end-to-end with a non-throwing test | ❌ | Send a test alert in CI |
-| Frost protection has tested fallback when sensor unavailable | ❌ | Unit test + alert path |
-| AC overrides either executed or removed from API surface | ❌ accepted-but-ignored | Decision needed |
-| Last-hour totals included in `generate_timetable` | ❌ | Off-by-one fix |
-| Retry path re-checks current decision before resending | ❌ | Lookup + drop-stale |
-| Add-on cache-bust gated by version-match check in CI | ❌ | Shell gate |
+| All EV-charging predicates flow through `EVState` classmethods | ✅ `b754322` + `70825e5` — `is_charging`/`is_plugged`/`is_active_session`/`is_done`; `update_state('ev')` uses `is_active_session` | Single canonical check |
+| Grace-period timers (`*_solar_surplus_since`, `*_importing_since`) reset on every device turn-off path | ❌ tariff and override paths leak (boiler §2.9, pool N17 still open) | Audit + assert per device |
+| `get_num` callers default to `None` for missing sensors, except numeric configs with intentional defaults | ❌ current default semantics are inverted (N10) | Audit + standardise |
+| Mobile-app notification path verified end-to-end with a non-throwing test | ⚠️ unit-test parser coverage in place (`b754322` + `70825e5`), live HA send not exercised in CI | Send a test alert in CI |
+| Frost protection has tested fallback when sensor unavailable | ✅ `b754322` + `70825e5` — 10 tests covering Oct–Apr heating season, May–Sep quiet, disabled-override-failsafe | Unit test + alert path |
+| AC overrides either executed or removed from API surface | ✅ `b754322` — removed from API + engine. Dead-code cleanup of `PowerInputs.ovr_ac_*` etc. deferred (§8.4) | Decision needed |
+| Last-hour totals included in `generate_timetable` | ✅ `2c27fe6` — `current_entry` appended before totals loop | Off-by-one fix |
+| Retry path re-checks current decision before resending | ✅ `2c27fe6` + `70825e5` — per-entity action map, `none`-drop, pool-climate `heat` mapping | Lookup + drop-stale |
+| Add-on cache-bust gated by version-match check in CI | ❌ (Top-15 #12) | Shell gate |
+| EV soft-pause oscillation (132↔133) does not bump `last_change` | ✅ `70825e5` — `is_active_session` covers PAUSED; integration test pins behaviour | DN1=A |
+| `heater_right.last_change` actually tracked | ✅ `b754322` — added to `_update_device_state`; tests in `70825e5` | Hysteresis fix |
 
 ---
 
@@ -500,6 +504,28 @@ The diff implements 8 of the Top-15. The CR confirms 6 fixes match the spec clea
 **6 deploy blockers (CR-P1 to CR-P5 plus one decision DN1), 6 test-quality items (CR-P6 to CR-P11), and several deferred follow-ups.**
 
 The CR found that **2 of the 8 fixes have real defects the tests missed** — pool retry (CR-P1) and soft-pause integration (CR-P2). Both are regressions introduced by the fixes themselves. Worth running CR before deploying.
+
+### 8.7 Resolution (v1.0.62 / commit `70825e5`)
+
+DN1 decided: **(A) Narrow — EV uses `is_active_session`.** The broader §2.5 race for other devices stays open as a future story.
+
+All 11 CR-P items addressed in v1.0.62:
+
+| Item | Status | Notes |
+|---|---|---|
+| CR-P1 — Pool retry mapping | ✅ Resolved | Per-entity `_ACTION_TO_*_STATE` maps so pool 'heat' ≡ engine 'on'. Two regression tests added. |
+| CR-P2 — EV soft-pause oscillation | ✅ Resolved | `update_state('ev', ...)` now uses `is_active_session` (covers PAUSED). Integration test in `test_ev_soft_pause_hysteresis.py`. |
+| CR-P3 — Dishwasher `action='none'` retry loop | ✅ Resolved | Contract changed: `'none'` now drops pending command (was: keep retrying). Existing boiler-`none` test updated to match. |
+| CR-P4 — Frost season too narrow | ✅ Resolved | Widened to {10,11,12,1,2,3,4}. April + October tests added. |
+| CR-P5 — Notify resolver lost dotted fallback | ✅ Resolved | `entity_id.rsplit('.', 1)[-1]` fallback restored. Two tests added. |
+| CR-P6 — `EVState` accepts string input | ✅ Resolved | `_coerce()` helper handles `"132"`, `None`, garbage. |
+| CR-P7 — Permissive `or` assertion | ✅ Resolved | Replaced with explicit detail-body checks naming the device + auto/on/off allowlist. |
+| CR-P8 — `!= 400` passes on 500 | ✅ Resolved | Tightened to `status in (200, 500)` so a real validation regression would surface. |
+| CR-P9 — `heater_right` tracking has no test | ✅ Resolved | 3 tests pin off→on, on→off, no-bump-on-unchanged. |
+| CR-P10 — Soft-pause integration test missing | ✅ Resolved | New test file `test_ev_soft_pause_hysteresis.py` with 4 oscillation/transition tests. |
+| CR-P11 — Pool retry path no test | ✅ Resolved | Two tests in `test_retry_decision_check.py` (kept-when-on, dropped-when-off). |
+
+**Test count:** 166 (pre-v1.0.60) → 228 (post-CR-1) → **235** (post-v1.0.62). +69 net.
 
 ---
 

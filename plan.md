@@ -1,5 +1,10 @@
 # Power Manager - Code Review Remediation Plan
 
+> **⚠️ Superseded artifact (2026-05-14).** This plan tracks a previous code-review cycle.
+> Current code review and remediation status live in [docs/CODE_REVIEW_PASS2.md](docs/CODE_REVIEW_PASS2.md)
+> (Pass 1 baseline findings at [docs/CODE_REVIEW.md](docs/CODE_REVIEW.md); Pass 2 + CR-1 in PASS2 §3 / §8).
+> Kept for historical reference only. Do not consult this file for current status.
+
 ## Overview
 
 This document tracks all issues identified in the comprehensive code review and their remediation status.
