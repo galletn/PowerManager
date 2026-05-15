@@ -1006,8 +1006,10 @@ async function setOverride(device, mode) {
         });
     }
     try {
-        const response = await fetch(`${API_BASE_URL}/api/override/${device}?mode=${mode}`, {
-            method: 'POST'
+        const response = await fetch(`${API_BASE_URL}/api/override/${device}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mode })
         });
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}`);
@@ -1088,13 +1090,14 @@ async function saveLimits() {
     const statusEl = $('save-status');
 
     try {
-        const params = new URLSearchParams();
-        params.append('peak', peak);
-        params.append('off_peak', offPeak);
-        params.append('super_off_peak', superOffPeak);
-
-        const response = await fetch(`${API_BASE_URL}/api/limits?${params.toString()}`, {
-            method: 'POST'
+        const response = await fetch(`${API_BASE_URL}/api/limits`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                peak,
+                off_peak: offPeak,
+                super_off_peak: superOffPeak
+            })
         });
 
         if (!response.ok) {

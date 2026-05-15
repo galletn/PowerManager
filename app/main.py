@@ -20,6 +20,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from .api_models import LimitsRequest, OverrideRequest
 from .config import Config, load_config
 from .ha_client import HAClient
 from .decision_engine import calculate_decisions
@@ -1169,8 +1170,9 @@ def _get_timetable_data():
 @app.post("/api/override/{device}",
           summary="Set device override",
           description="Set manual override mode for a device.")
-async def set_override(device: str, mode: str):
+async def set_override(device: str, body: OverrideRequest):
     """Set manual override for a device."""
+    mode = body.mode
     config = app_state.config
     ha_client = app_state.ha_client
 
@@ -1278,11 +1280,7 @@ async def get_limits():
 
 
 @app.post("/api/limits")
-async def set_limits(
-    peak: int = None,
-    off_peak: int = None,
-    super_off_peak: int = None
-):
+async def set_limits(body: LimitsRequest):
     """Set power limits via HA input_numbers."""
     config = app_state.config
     ha_client = app_state.ha_client
@@ -1294,32 +1292,32 @@ async def set_limits(
     entities = config.entities
 
     try:
-        if peak is not None:
+        if body.peak is not None:
             await ha_client.call_service(
                 "input_number", "set_value",
                 entities.limit_peak,
-                value=peak
+                value=body.peak
             )
-            config.max_import.peak = peak
-            results["peak"] = peak
+            config.max_import.peak = body.peak
+            results["peak"] = body.peak
 
-        if off_peak is not None:
+        if body.off_peak is not None:
             await ha_client.call_service(
                 "input_number", "set_value",
                 entities.limit_off_peak,
-                value=off_peak
+                value=body.off_peak
             )
-            config.max_import.off_peak = off_peak
-            results["off_peak"] = off_peak
+            config.max_import.off_peak = body.off_peak
+            results["off_peak"] = body.off_peak
 
-        if super_off_peak is not None:
+        if body.super_off_peak is not None:
             await ha_client.call_service(
                 "input_number", "set_value",
                 entities.limit_super_off_peak,
-                value=super_off_peak
+                value=body.super_off_peak
             )
-            config.max_import.super_off_peak = super_off_peak
-            results["super_off_peak"] = super_off_peak
+            config.max_import.super_off_peak = body.super_off_peak
+            results["super_off_peak"] = body.super_off_peak
 
         return {"status": "ok", "updated": results}
     except Exception as e:

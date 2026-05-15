@@ -33,7 +33,7 @@ class TestSolarModeOnlyValidForEV:
         """CR-P7: assert the detail body names the device and excludes 'solar'
         from the allowlist — pinning the contract instead of using a permissive
         `solar not in detail OR ev in detail` boolean."""
-        response = client.post(f"/api/override/{device}?mode=solar")
+        response = client.post(f"/api/override/{device}", json={"mode": "solar"})
         assert response.status_code == 400
         detail = response.json().get("detail", "")
         assert f"Invalid mode for '{device}'" in detail, (
@@ -72,7 +72,7 @@ class TestValidModesForEachDevice:
         ],
     )
     def test_known_pair_passes_validation(self, client, device, mode):
-        response = client.post(f"/api/override/{device}?mode={mode}")
+        response = client.post(f"/api/override/{device}", json={"mode": mode})
         # 200 if HA was wired up; 500 if downstream HA call failed (test env).
         # Either way, the validation gate accepted (device, mode).
         assert response.status_code in (200, 500), (
@@ -87,9 +87,14 @@ class TestUnknownModeRejected:
     """Truly unknown modes still produce 400."""
 
     def test_unknown_mode(self, client):
-        response = client.post("/api/override/boiler?mode=bogus")
+        response = client.post("/api/override/boiler", json={"mode": "bogus"})
         assert response.status_code == 400
 
-    def test_empty_mode(self, client):
-        response = client.post("/api/override/boiler?mode=")
-        assert response.status_code == 400
+    def test_empty_body(self, client):
+        """Empty body now returns 422 (Pydantic 'mode' required), was 400."""
+        response = client.post("/api/override/boiler", json={})
+        assert response.status_code == 422
+        errors = response.json()["detail"]
+        assert any(
+            e.get("loc") and e["loc"][-1] == "mode" for e in errors
+        ), f"Expected 'mode' in error loc; got: {errors}"

@@ -33,7 +33,9 @@ class TestAPIRejectsACOverrides:
         ["ac_living", "ac_bedroom", "ac_office", "ac_mancave"],
     )
     def test_ac_device_rejected_with_400(self, client, device):
-        response = client.post(f"/api/override/{device}?mode=on")
+        response = client.post(
+            f"/api/override/{device}", json={"mode": "on"}
+        )
         assert response.status_code == 400
         # Surface the new device list to the caller in the error body.
         body = response.text.lower()

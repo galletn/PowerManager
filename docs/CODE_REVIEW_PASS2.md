@@ -408,11 +408,11 @@ Pass 1's Top-10 still holds in spirit, but priority needs reshuffling given Pass
 | 7 | **Fix `_apply_config` partial-merge** (recursive merge or fail-on-unknown) | N5, §3.14 | ✅ `055b086` — recursive merge over `dataclasses.fields`, unknown keys raise `ValueError` with dotted path; 22 new tests in `tests/test_config.py` | 1-2 hours |
 | 8 | **Make `verify_and_retry_pending_commands` re-check current decision before resending** | N4, §2.8 | ✅ `2c27fe6` + `70825e5` (pool mapping + `none`-drop, CR-P1/P3) | 30 min |
 | 9 | **Fix `generate_timetable` last-hour bug** | N6 | ✅ `2c27fe6` | 3 lines |
-| 10 | **Demote per-cycle `EV solar` info logs to DEBUG; log INFO only on transition** | §4.1, §4.2 | ✅ Story 1.2 — three `logger.info` → `logger.debug` in `_handle_ev` (lines 1003, 1069, 1072); transitions still logged at INFO via `main.execute_decisions`; 6 tests in `test_ev_solar_logs.py` pin the no-INFO contract | 1 hour |
+| 10 | **Demote per-cycle `EV solar` info logs to DEBUG; log INFO only on transition** | §4.1, §4.2 | ✅ `b282619` — three `logger.info` → `logger.debug` in `_handle_ev` (lines 1003, 1069, 1072); transitions still logged at INFO via `main.execute_decisions`; 4 tests in `test_ev_solar_logs.py` pin the no-INFO contract | 1 hour |
 | 11 | **Tests for the riskiest surfaces:** `_handle_ev` solar state machine, `verify_and_retry_pending_commands`, `is_boiler_full`, `PowerBuffer` | §5.2, §5.5 | ⚠️ partial — `verify_and_retry` covered (7 tests `2c27fe6` + 4 more `70825e5`). `_handle_ev` solar, `is_boiler_full`, `PowerBuffer` still open. | 1-2 days |
 | 12 | **Minimal CI: `ruff check` + `pytest` + coverage gate + add-on cache-bust check** | §5.7, §5.8, N40 | ❌ open | 1 day |
 | 13 | **Switch add-on deploy to GHCR** (kills the "make repo public" exposure) | §10.1, §3.15 | ❌ open | 1 day |
-| 14 | **Pydantic-validate `/api/override` and `/api/limits` payloads** | §7.1, §7.2, §6.3 | ❌ open | 2 hours |
+| 14 | **Pydantic-validate `/api/override` and `/api/limits` payloads** | §7.1, §7.2, §6.3 | ✅ Story 1.3 — `LimitsRequest`/`OverrideRequest` in `app/api_models.py` with `Field(ge=500, le=12000)` bounds and `extra="forbid"`; both endpoints switched to JSON body; dashboard.js + 3 existing tests migrated; 14 new tests in `test_api_validation.py`. Auth (§6.3) still open. | 2 hours |
 | 15 | **Refactor `decision_engine.py` into a package** (do last — everything else gets easier afterwards) | §3.1, N5 | ❌ open | several days |
 
 Note: items 1-3 are now ahead of "fix mode_map for /api/override solar mode" — they're either safety-critical (frost), trust-critical (notifications, AC overrides), or both.
