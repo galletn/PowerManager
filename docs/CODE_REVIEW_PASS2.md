@@ -405,10 +405,10 @@ Pass 1's Top-10 still holds in spirit, but priority needs reshuffling given Pass
 | 4 | **Reverse EV-vs-boiler order in `_apply_summer_logic`** (§2.1) — restores winter priority invariant | §2.1 | ✅ `b754322` | 5 lines |
 | 5 | **Harmonise EV charging predicate everywhere** via `EVState.is_charging()` classmethod — closes N7, N8, §2.5, §8.3, §3.5 in one pass | N7, N8, §2.5, §8.3 | ✅ `b754322` + `70825e5` (DN1=A: `is_active_session`, type guard, CR-P2/P6). §3.5 BMW dedup deferred. | 1-2 hours |
 | 6 | **Fix `mode_map` for `/api/override` solar mode** | §2.2 | ✅ `2c27fe6` + `70825e5` (tighter tests, CR-P7/P8) | half a screen |
-| 7 | **Fix `_apply_config` partial-merge** (recursive merge or fail-on-unknown) | N5, §3.14 | ✅ Story 1.1 — recursive merge over `dataclasses.fields`, unknown keys raise `ValueError` with dotted path; 16 new tests in `tests/test_config.py` | 1-2 hours |
+| 7 | **Fix `_apply_config` partial-merge** (recursive merge or fail-on-unknown) | N5, §3.14 | ✅ `055b086` — recursive merge over `dataclasses.fields`, unknown keys raise `ValueError` with dotted path; 22 new tests in `tests/test_config.py` | 1-2 hours |
 | 8 | **Make `verify_and_retry_pending_commands` re-check current decision before resending** | N4, §2.8 | ✅ `2c27fe6` + `70825e5` (pool mapping + `none`-drop, CR-P1/P3) | 30 min |
 | 9 | **Fix `generate_timetable` last-hour bug** | N6 | ✅ `2c27fe6` | 3 lines |
-| 10 | **Demote per-cycle `EV solar` info logs to DEBUG; log INFO only on transition** | §4.1, §4.2 | ❌ open | 1 hour |
+| 10 | **Demote per-cycle `EV solar` info logs to DEBUG; log INFO only on transition** | §4.1, §4.2 | ✅ Story 1.2 — three `logger.info` → `logger.debug` in `_handle_ev` (lines 1003, 1069, 1072); transitions still logged at INFO via `main.execute_decisions`; 6 tests in `test_ev_solar_logs.py` pin the no-INFO contract | 1 hour |
 | 11 | **Tests for the riskiest surfaces:** `_handle_ev` solar state machine, `verify_and_retry_pending_commands`, `is_boiler_full`, `PowerBuffer` | §5.2, §5.5 | ⚠️ partial — `verify_and_retry` covered (7 tests `2c27fe6` + 4 more `70825e5`). `_handle_ev` solar, `is_boiler_full`, `PowerBuffer` still open. | 1-2 days |
 | 12 | **Minimal CI: `ruff check` + `pytest` + coverage gate + add-on cache-bust check** | §5.7, §5.8, N40 | ❌ open | 1 day |
 | 13 | **Switch add-on deploy to GHCR** (kills the "make repo public" exposure) | §10.1, §3.15 | ❌ open | 1 day |
@@ -436,7 +436,7 @@ Pass 1's §12 still applies; add these rows. Status updated as of `70825e5` (v1.
 | Add-on cache-bust gated by version-match check in CI | ❌ (Top-15 #12) | Shell gate |
 | EV soft-pause oscillation (132↔133) does not bump `last_change` | ✅ `70825e5` — `is_active_session` covers PAUSED; integration test pins behaviour | DN1=A |
 | `heater_right.last_change` actually tracked | ✅ `b754322` — added to `_update_device_state`; tests in `70825e5` | Hysteresis fix |
-| User-edited `config.yaml` fully applied or fails with named key | ✅ Story 1.1 — recursive merge + unknown-key raise; 16 tests in `test_config.py` | Recursive merge + raise on unknown |
+| User-edited `config.yaml` fully applied or fails with named key | ✅ `055b086` — recursive merge + unknown-key raise; 22 tests in `test_config.py` | Recursive merge + raise on unknown |
 
 ---
 

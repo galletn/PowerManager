@@ -1000,7 +1000,7 @@ def _handle_ev(
         ):
             blockers.append(f"importing {effective_p1:.0f}W")
         reason = "wait — " + ", ".join(blockers) if blockers else "wait"
-    logger.info(f"EV solar: {reason}")
+    logger.debug(f"EV solar: {reason}")
     logger.debug(
         f"EV solar raw: charging={ctx['ev_charging']} "
         f"bat_soe={bat_soe} bat_buffer={bat_has_buffer} "
@@ -1066,10 +1066,10 @@ def _handle_ev(
             else:
                 reason = "no solar surplus"
             decisions.ev.action = 'pause'
-            logger.info(f"EV: PAUSING - solar mode but {reason}")
+            logger.debug(f"EV: PAUSING - solar mode but {reason}")
             plan.append(f"EV: PAUSE solar mode ({reason})")
         else:
-            logger.info("EV: solar mode, waiting for conditions")
+            logger.debug("EV: solar mode, waiting for conditions")
             plan.append("EV: waiting for solar")
         return effective_headroom
 
