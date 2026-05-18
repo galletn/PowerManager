@@ -453,7 +453,20 @@ def calculate_decisions(
     bat_power = inputs.battery_power
     bat_soe = inputs.battery_soe
     if bat_soe is not None:
-        if bat_power < -50:
+        # bat_power sensor unavailable signaled two ways:
+        #   - inputs.battery_power is None (test scenario; ha_client.py:493
+        #     coerces to 0.0 in production so this rarely hits live data);
+        #   - bat_power was coerced to 0.0 AND battery_status reports the
+        #     sensor itself as unknown/unavailable (the production path).
+        # Render "Bat: power unknown" rather than mislabeling as "Idle".
+        bat_status = (inputs.battery_status or '').lower()
+        bat_unavailable = (
+            bat_power is None
+            or (bat_power == 0.0 and bat_status in ('unknown', 'unavailable'))
+        )
+        if bat_unavailable:
+            bat_label = f"Bat: power unknown ({int(bat_soe)}%)"
+        elif bat_power < -50:
             bat_label = f"Bat: Charging {fmt_w(abs(bat_power))} ({int(bat_soe)}%)"
         elif bat_power > 50:
             bat_label = f"Bat: Discharging {fmt_w(bat_power)} ({int(bat_soe)}%)"
@@ -934,6 +947,25 @@ def _handle_ev(
     if ovr['ev'] not in ('auto', 'solar') or not ctx['ev_plugged'] or ctx['ev_done']:
         return effective_headroom
 
+    # Cold-start state tracking: when device_state.ev is fresh
+    # (post-restart, no prior tracking) but the sensor reports an in-progress
+    # charging session, seed device_state.ev.on=True so subsequent off→on
+    # transitions correctly engage hysteresis. Seed last_change to a value
+    # PAST min_on_time so this first cycle's can_switch('ev', False) calls
+    # (Story 1.6 wrap, peak-tariff pause at line 1204, off-peak boiler-priority
+    # pause at line 1138) fire normally — matching the boiler's explicit
+    # "tariff transitions should be immediate" policy. From cycle 2 onward,
+    # main.py's update_state path correctly rewrites last_change on real
+    # state changes; the seed is only there to bridge the cold-start gap.
+    ds_local = ctx.get('device_state')
+    now_local = ctx.get('now', 0)
+    if (ds_local is not None
+            and ds_local.ev.last_change == 0
+            and ctx['ev_charging']
+            and now_local > 0):
+        ds_local.ev.on = True
+        ds_local.ev.last_change = now_local - (config.timing.min_on_time + 1) * 1000
+
     # When EV is already charging, its power is included in p1.
     # Use actual measured power (more accurate than calculated from amps).
     ev_power_now = ctx.get('ev_power', 0) if ctx['ev_charging'] else 0
@@ -1037,6 +1069,35 @@ def _handle_ev(
                 plan.append(f"EV: SOLAR START {start_amps}A (~{solar_pct}% solar)")
                 return effective_headroom
         elif ctx['ev_charging']:
+            # available_amps (not target_amps) is the truth here: target_amps
+            # is floor-clamped to min_amps at line 1027 to keep the START gate
+            # working, so it never reflects a sub-min surplus. Pause before any
+            # ramp logic when real surplus drops below the min charging rate.
+            # Honor min_on_time hysteresis (same discipline as pause sites at
+            # lines 1138/1143/1169) to avoid flapping when solar oscillates
+            # around the min_amps floor under cloud transients.
+            if available_amps < config.ev.min_amps:
+                if can_switch('ev', False):
+                    decisions.ev.action = 'pause'
+                    plan.append("EV: PAUSE (insufficient solar)")
+                    return effective_headroom
+                # Hysteresis-locked: emit observability witness + clamp amps
+                # straight to min_amps so we minimize grid draw during the
+                # lock window instead of ramping down 1A/cycle (which could
+                # keep us at 9A or 8A from grid for several minutes).
+                ds_local = ctx.get('device_state')
+                now_local = ctx.get('now', 0)
+                if ds_local is not None and ds_local.ev.last_change > 0:
+                    elapsed_s = (now_local - ds_local.ev.last_change) / 1000
+                    plan.append(
+                        f"EV: pause held off by hysteresis "
+                        f"({elapsed_s:.0f}s of {config.timing.min_on_time}s)"
+                    )
+                if ctx['ev_limit'] > config.ev.min_amps:
+                    decisions.ev.action = 'adjust'
+                    decisions.ev.amps = config.ev.min_amps
+                return effective_headroom
+
             current_amps = ctx['ev_limit']
             # Limit amp changes to 1A per cycle (30s) to avoid power peaks
             if target_amps > current_amps:
@@ -1045,13 +1106,9 @@ def _handle_ev(
                 clamped_amps = max(target_amps, current_amps - 1)
             amp_diff = abs(clamped_amps - current_amps)
             if amp_diff >= 1:
-                if clamped_amps >= config.ev.min_amps:
-                    decisions.ev.action = 'adjust'
-                    decisions.ev.amps = clamped_amps
-                    plan.append(f"EV: adjust to {clamped_amps}A (solar, target {target_amps}A)")
-                else:
-                    decisions.ev.action = 'pause'
-                    plan.append("EV: PAUSE (insufficient solar)")
+                decisions.ev.action = 'adjust'
+                decisions.ev.amps = clamped_amps
+                plan.append(f"EV: adjust to {clamped_amps}A (solar, target {target_amps}A)")
             return effective_headroom
 
     # === TARIFF-BASED CHARGING (no solar surplus) ===
