@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import math
 from typing import Any, Optional
 
 import aiohttp
@@ -392,9 +393,13 @@ class HAClient:
             if val in (None, "unavailable", "unknown", ""):
                 return default if default != 0.0 else None
             try:
-                return float(val) * multiplier
+                result = float(val) * multiplier
             except (ValueError, TypeError):
                 return default
+            if not math.isfinite(result):
+                # NaN / inf / -inf from a miscalibrated sensor - treat as unavailable.
+                return default if default != 0.0 else None
+            return result
 
         def get_str(entity_id: str, default: str = "") -> str:
             state = states.get(entity_id, {})

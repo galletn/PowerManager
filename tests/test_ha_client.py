@@ -430,6 +430,97 @@ class TestParseInputs:
         # get_num returns None when state is empty string and default is 0.0
         assert result.p1_power is None
 
+    def test_parse_inputs_handles_nan_state(self, ha_client):
+        """parse_inputs() should treat 'nan' / 'NaN' states as unavailable."""
+        states = {
+            "sensor.electricity_currently_delivered": {
+                "entity_id": "sensor.electricity_currently_delivered",
+                "state": "nan",
+                "attributes": {}
+            },
+            "sensor.solaredge_i1_ac_power": {
+                "entity_id": "sensor.solaredge_i1_ac_power",
+                "state": "NaN",
+                "attributes": {}
+            },
+            "sensor.temperature_living": {
+                "entity_id": "sensor.temperature_living",
+                "state": "nan",
+                "attributes": {}
+            }
+        }
+
+        result = ha_client.parse_inputs(states)
+
+        # default=0.0 -> returns None (same as "unavailable" path)
+        assert result.p1_power is None
+        assert result.pv_power is None
+        # default=20.0 (non-zero) -> returns the default
+        assert result.temp_living == 20.0
+
+    def test_parse_inputs_handles_inf_state(self, ha_client):
+        """parse_inputs() should treat 'inf' / '-inf' / 'Infinity' states as unavailable."""
+        states = {
+            "sensor.electricity_currently_delivered": {
+                "entity_id": "sensor.electricity_currently_delivered",
+                "state": "inf",
+                "attributes": {}
+            },
+            "sensor.solaredge_i1_ac_power": {
+                "entity_id": "sensor.solaredge_i1_ac_power",
+                "state": "-inf",
+                "attributes": {}
+            },
+            "sensor.electricity_currently_returned": {
+                "entity_id": "sensor.electricity_currently_returned",
+                "state": "Infinity",
+                "attributes": {}
+            }
+        }
+
+        result = ha_client.parse_inputs(states)
+
+        assert result.p1_power is None
+        assert result.pv_power is None
+        assert result.p1_return is None
+
+    def test_parse_inputs_get_int_inherits_nan_guard(self, ha_client):
+        """get_int() should fall back to default when underlying get_num returns None for NaN."""
+        states = {
+            "number.abb_terra_ac_current_limit": {
+                "entity_id": "number.abb_terra_ac_current_limit",
+                "state": "nan",
+                "attributes": {}
+            }
+        }
+
+        result = ha_client.parse_inputs(states)
+
+        # ev_limit is parsed via get_int(e.ev_limit, 6) -> fallback 6
+        assert result.ev_limit == 6
+
+    def test_parse_inputs_battery_soe_nan_returns_none(self, ha_client):
+        """Pin that 'nan' state for battery_soe maps to None at the parse layer.
+
+        Closes Story 1.8 CR DN2: the int(bat_soe) calls at
+        decision_engine.py:459/461/463/465 (Charging/Discharging/Idle/Unknown
+        branches) were the highest-exposure NaN crash sites. With this test
+        plus the get_num guard, NaN cannot reach those int() calls because
+        the Story 1.5 outer guard `if bat_soe is not None:` at
+        decision_engine.py:455 catches it.
+        """
+        states = {
+            ha_client.entities.battery_soe: {
+                "entity_id": ha_client.entities.battery_soe,
+                "state": "nan",
+                "attributes": {}
+            }
+        }
+
+        result = ha_client.parse_inputs(states)
+
+        assert result.battery_soe is None
+
     def test_parse_inputs_applies_unit_multipliers(self, ha_client):
         """parse_inputs() should apply correct unit multipliers."""
         states = {
