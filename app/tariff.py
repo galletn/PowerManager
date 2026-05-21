@@ -1,55 +1,7 @@
 """Belgian electricity tariff calculations."""
 
-from datetime import datetime, date, timedelta
+from datetime import datetime, timedelta
 from typing import Tuple, List
-
-# Belgian public holidays (fixed dates)
-FIXED_HOLIDAYS = [
-    (1, 1),   # New Year's Day
-    (5, 1),   # Labour Day
-    (7, 21),  # National Day
-    (8, 15),  # Assumption
-    (11, 1),  # All Saints
-    (11, 11), # Armistice
-    (12, 25), # Christmas
-]
-
-
-def easter_date(year: int) -> date:
-    """Calculate Easter Sunday using Anonymous Gregorian algorithm."""
-    a = year % 19
-    b = year // 100
-    c = year % 100
-    d = b // 4
-    e = b % 4
-    f = (b + 8) // 25
-    g = (b - f + 1) // 3
-    h = (19 * a + b - d - g + 15) % 30
-    i = c // 4
-    k = c % 4
-    l = (32 + 2 * e + 2 * i - h - k) % 7
-    m = (a + 11 * h + 22 * l) // 451
-    month = (h + l - 7 * m + 114) // 31
-    day = ((h + l - 7 * m + 114) % 31) + 1
-    return date(year, month, day)
-
-
-def get_belgian_holidays(year: int) -> set[date]:
-    """Get all Belgian public holidays for a year."""
-    holidays = set()
-
-    # Fixed holidays
-    for month, day in FIXED_HOLIDAYS:
-        holidays.add(date(year, month, day))
-
-    # Easter-based holidays
-    easter = easter_date(year)
-    holidays.add(easter)  # Easter Sunday
-    holidays.add(date.fromordinal(easter.toordinal() + 1))   # Easter Monday
-    holidays.add(date.fromordinal(easter.toordinal() + 39))  # Ascension
-    holidays.add(date.fromordinal(easter.toordinal() + 50))  # Whit Monday
-
-    return holidays
 
 
 def is_summer(dt: datetime) -> bool:

@@ -12,7 +12,7 @@ from typing import Optional
 from .config import Config
 from .models import (
     PowerInputs, Decisions, DecisionResult, Alert,
-    DeviceDecision, EVDecision, ACDecision,
+    DeviceDecision,
     AllDeviceStates, DeviceState, EVState, PowerBuffer
 )
 from .tariff import get_tariff, get_max_import, is_summer, get_ev_status_text
@@ -22,7 +22,6 @@ logger = logging.getLogger(__name__)
 # Power thresholds (Watts)
 MIN_EXPORT_FOR_BOILER = 500
 DW_EXPECTED_POWER = 1900
-MIN_SOLAR_SURPLUS = 500
 MAX_GRID_IMPORT_FOR_EV = 1000
 DW_RUNNING_THRESHOLD = 50
 
@@ -409,19 +408,6 @@ def calculate_decisions(
     dw_running = dw_power > DW_RUNNING_THRESHOLD  # Actually running a cycle (drawing power)
     dw_waiting = dw_switch_on and dw_power < DW_RUNNING_THRESHOLD  # Switch on but not running yet
 
-    ac_states = {
-        'living': inputs.ac_living_state,
-        'mancave': inputs.ac_mancave_state,
-        'office': inputs.ac_office_state,
-        'bedroom': inputs.ac_bedroom_state,
-    }
-
-    temps = {
-        'living': inputs.temp_living,
-        'bedroom': inputs.temp_bedroom,
-        'mancave': inputs.temp_mancave,
-    }
-
     # Helper for timing checks
     def can_switch(name: str, target_on: bool) -> bool:
         state = getattr(device_state, name.replace('-', '_'))
@@ -543,8 +529,6 @@ def calculate_decisions(
             'dw_power': dw_power,
             'dw_running': dw_running,
             'dw_waiting': dw_waiting,
-            'ac_states': ac_states,
-            'temps': temps,
             'headroom': headroom,
             'hyst': hyst,
             'tariff': tariff,
@@ -590,8 +574,6 @@ def calculate_decisions(
             'dw_power': dw_power,
             'dw_running': dw_running,
             'dw_waiting': dw_waiting,
-            'ac_states': ac_states,
-            'temps': temps,
             'headroom': headroom,
             'hyst': hyst,
             'tariff': tariff,
@@ -743,7 +725,6 @@ def _handle_boiler(
     is_summer = ctx.get('is_summer', False)
     deadline = config.boiler.deadline_summer if is_summer else config.boiler.deadline_winter
     boiler_force = ctx.get('boiler_force', False)
-    is_exporting = ctx.get('is_exporting', False)
 
     if ovr['boiler'] != 'auto':
         return boiler_will_use, effective_headroom
@@ -764,7 +745,7 @@ def _handle_boiler(
     # Use SMOOTHED values for solar surplus decisions to filter transient spikes.
     # When sun returns after cloud, export spikes before battery inverter ramps up.
     p1_return = ctx.get('smooth_p1_return', ctx.get('p1_return', 0))
-    is_exporting_smooth = ctx.get('smooth_is_exporting', is_exporting)
+    is_exporting_smooth = ctx.get('smooth_is_exporting', False)
     net_p1 = ctx.get('smooth_net_p1', ctx.get('net_p1', 0))
 
     bat_soe = ctx.get('battery_soe')
@@ -906,11 +887,10 @@ def _handle_boiler(
             elif tariff == 'off-peak' and not approaching_deadline:
                 plan.append("Boiler: OFF (waiting for super-off-peak)")
     else:
-        # Boiler is full
-        if ctx['boiler_on']:
-            plan.append("Boiler: FULL (switch still on)")
-        else:
-            plan.append("Boiler: FULL")
+        # Boiler is full. is_boiler_full requires boiler_on=True (see
+        # is_boiler_full at decision_engine.py:211) so we're guaranteed on
+        # here — no need to branch on boiler_on.
+        plan.append("Boiler: FULL (switch still on)")
 
     return boiler_will_use, effective_headroom
 
@@ -947,24 +927,37 @@ def _handle_ev(
     if ovr['ev'] not in ('auto', 'solar') or not ctx['ev_plugged'] or ctx['ev_done']:
         return effective_headroom
 
-    # Cold-start state tracking: when device_state.ev is fresh
-    # (post-restart, no prior tracking) but the sensor reports an in-progress
-    # charging session, seed device_state.ev.on=True so subsequent off→on
-    # transitions correctly engage hysteresis. Seed last_change to a value
-    # PAST min_on_time so this first cycle's can_switch('ev', False) calls
-    # (Story 1.6 wrap, peak-tariff pause at line 1204, off-peak boiler-priority
-    # pause at line 1138) fire normally — matching the boiler's explicit
-    # "tariff transitions should be immediate" policy. From cycle 2 onward,
-    # main.py's update_state path correctly rewrites last_change on real
-    # state changes; the seed is only there to bridge the cold-start gap.
+    # Cold-start state seeding: when device_state.ev is fresh (post-restart,
+    # no prior tracking), seed device_state.ev so the can_switch_device
+    # last_change==0 short-circuit is bypassed in favor of explicit
+    # hysteresis-cleared semantics. Seed last_change PAST the applicable
+    # timing threshold so this first cycle's can_switch calls (Story 1.6
+    # pause wrap, peak-tariff pause, off-peak boiler-priority pause, AND
+    # the three solar/tariff START gates further down) all fire normally —
+    # matching the boiler's "tariff transitions should be immediate"
+    # policy. From cycle 2 onward, main.py's update_state path correctly
+    # rewrites last_change on real state changes; the seed only bridges
+    # the cold-start gap. The early-return above (ovr/plugged/done check)
+    # guarantees ev_plugged AND NOT ev_done — so the seed only fires for
+    # tracked sessions.
+    #
+    # Direction is selected by `ctx['ev_charging']`, which is
+    # `is_charging(state) OR ev_power > 500` (set above) — so a sensor-lag
+    # READY + power>500 transient is treated as charging and takes the ON
+    # branch.
+    #   ev_charging=True  (Story 1.7):  on=True,  last_change = now - (min_on_time+1)*1000.
+    #   ev_charging=False (Story 1.10): on=False, last_change = now - (min_off_time+1)*1000.
     ds_local = ctx.get('device_state')
     now_local = ctx.get('now', 0)
     if (ds_local is not None
             and ds_local.ev.last_change == 0
-            and ctx['ev_charging']
             and now_local > 0):
-        ds_local.ev.on = True
-        ds_local.ev.last_change = now_local - (config.timing.min_on_time + 1) * 1000
+        if ctx['ev_charging']:
+            ds_local.ev.on = True
+            ds_local.ev.last_change = now_local - (config.timing.min_on_time + 1) * 1000
+        else:
+            ds_local.ev.on = False
+            ds_local.ev.last_change = now_local - (config.timing.min_off_time + 1) * 1000
 
     # When EV is already charging, its power is included in p1.
     # Use actual measured power (more accurate than calculated from amps).
@@ -1120,8 +1113,6 @@ def _handle_ev(
                 reason = f"battery too low ({bat_soe:.0f}%)" if bat_soe is not None else "battery unknown"
             elif smooth_pv <= 1500:
                 reason = f"PV too low ({smooth_pv:.0f}W)"
-            else:
-                reason = "no solar surplus"
             decisions.ev.action = 'pause'
             logger.debug(f"EV: PAUSING - solar mode but {reason}")
             plan.append(f"EV: PAUSE solar mode ({reason})")
@@ -1251,11 +1242,15 @@ def _handle_pool_heating(
 
     pool_mode = ovr.get('pool', 'auto')
 
-    # Off override - handled by _apply_manual_overrides, just report
+    # Manual overrides: decisions.pool.action is set by
+    # _apply_manual_overrides upstream; we must NOT fall through to the
+    # auto-mode logic below, which would overwrite the override action
+    # (Story 1.12 CR-1: restored after DB-3 deletion was found to
+    # silently flip a user-set 'off' override to 'on' when pool_season +
+    # has_solar were both true).
     if pool_mode == 'off':
         return effective_headroom
 
-    # On override - force heat, already handled by _apply_manual_overrides
     if pool_mode == 'on':
         if pool_on:
             plan.append(f"Pool heat: ON (forced, {int(pool_power_now)}W)")
@@ -1444,33 +1439,35 @@ def _handle_heaters(
     # Turns off when importing > 500W
     RIGHT_HEATER_ON_THRESHOLD = 2200  # Turn on when exporting > 2200W
     RIGHT_HEATER_OFF_THRESHOLD = 500  # Turn off when importing > 500W
-    if ovr.get('right_heater', 'auto') == 'auto':
-        p1 = ctx.get('p1', 0)  # Import power
-        bat_charge = ctx.get('battery_charge', 0)
-        raw_surplus = p1_return + bat_charge
-        # When heater is ON, add its rated power back to see virtual surplus
-        hr_actual_power = right_power if hr_on else 0
-        virtual_right_surplus = raw_surplus + hr_actual_power
-        has_solar_for_right = is_exporting and raw_surplus > RIGHT_HEATER_ON_THRESHOLD
-        # When ON, check virtual surplus (would we export without the heater?)
-        still_has_solar = hr_on and virtual_right_surplus > RIGHT_HEATER_ON_THRESHOLD
-        importing_too_much = not is_exporting and p1 > RIGHT_HEATER_OFF_THRESHOLD and not still_has_solar
+    # Right heater has no override entity — ovr never contains 'right_heater'
+    # so the previous `if ovr.get('right_heater', 'auto') == 'auto':` wrapper
+    # was always True (Story 1.12 DB-2 inlined the body).
+    p1 = ctx.get('p1', 0)  # Import power
+    bat_charge = ctx.get('battery_charge', 0)
+    raw_surplus = p1_return + bat_charge
+    # When heater is ON, add its rated power back to see virtual surplus
+    hr_actual_power = right_power if hr_on else 0
+    virtual_right_surplus = raw_surplus + hr_actual_power
+    has_solar_for_right = is_exporting and raw_surplus > RIGHT_HEATER_ON_THRESHOLD
+    # When ON, check virtual surplus (would we export without the heater?)
+    still_has_solar = hr_on and virtual_right_surplus > RIGHT_HEATER_ON_THRESHOLD
+    importing_too_much = not is_exporting and p1 > RIGHT_HEATER_OFF_THRESHOLD and not still_has_solar
 
-        if has_solar_for_right or still_has_solar:
-            if not hr_on:
-                if can_switch('heater_right', True):
-                    decisions.heater_right.action = 'on'
-                    plan.append(f"Right heater: ON (solar {int(raw_surplus)}W)")
+    if has_solar_for_right or still_has_solar:
+        if not hr_on:
+            if can_switch('heater_right', True):
+                decisions.heater_right.action = 'on'
+                plan.append(f"Right heater: ON (solar {int(raw_surplus)}W)")
+        else:
+            plan.append(f"Right heater: HEATING (virtual {int(virtual_right_surplus)}W)")
+    elif hr_on and (importing_too_much or not is_exporting):
+        # Turn off if importing > 500W or no longer exporting
+        if can_switch('heater_right', False):
+            decisions.heater_right.action = 'off'
+            if importing_too_much:
+                plan.append(f"Right heater: OFF (importing {int(p1)}W)")
             else:
-                plan.append(f"Right heater: HEATING (virtual {int(virtual_right_surplus)}W)")
-        elif hr_on and (importing_too_much or not is_exporting):
-            # Turn off if importing > 500W or no longer exporting
-            if can_switch('heater_right', False):
-                decisions.heater_right.action = 'off'
-                if importing_too_much:
-                    plan.append(f"Right heater: OFF (importing {int(p1)}W)")
-                else:
-                    plan.append("Right heater: OFF (no solar surplus)")
+                plan.append("Right heater: OFF (no solar surplus)")
 
 
 def _apply_winter_logic(decisions: Decisions, plan: list, ctx: dict):
@@ -1564,8 +1561,10 @@ def _apply_dishwasher_logic(decisions: Decisions, plan: list, ctx: dict):
     # Dishwasher power consumption (peak during heating phases)
     # DW_EXPECTED_POWER = ~1850W peak, use 1900 for safety margin
 
-    # Minimum solar export to consider "solar surplus"
-    # MIN_SOLAR_SURPLUS = 500W export = good solar
+    # Minimum solar export to consider "solar surplus" (W).
+    # Local constant — dishwasher is the only consumer.
+    MIN_SOLAR_SURPLUS = 500
+
     # Use smoothed values for solar surplus decisions
     p1_return = ctx.get('smooth_p1_return', ctx.get('p1_return', 0))
     is_exporting = ctx.get('smooth_is_exporting', ctx.get('is_exporting', False))

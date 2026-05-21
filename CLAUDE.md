@@ -179,19 +179,17 @@ Additional protection via `config.yaml` hysteresis settings:
 
 ### State Tracking Fields
 
-In `app/models.py`, `AllDeviceStates` tracks:
+In `app/models.py`, `AllDeviceStates` tracks (only boiler and pool currently
+have grace-period implementations; the dishwasher/heater_* equivalents were
+removed in Story 1.12 as dead code):
 ```python
 # When device turned ON due to solar surplus
 boiler_solar_surplus_since: float = 0.0
-dishwasher_solar_surplus_since: float = 0.0
-heater_right_solar_surplus_since: float = 0.0
-heater_table_solar_surplus_since: float = 0.0
+pool_solar_surplus_since: float = 0.0
 
 # When device started importing (no surplus) while ON
 boiler_importing_since: float = 0.0
-dishwasher_importing_since: float = 0.0
-heater_right_importing_since: float = 0.0
-heater_table_importing_since: float = 0.0
+pool_importing_since: float = 0.0
 ```
 
 ## Notes

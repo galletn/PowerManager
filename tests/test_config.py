@@ -27,11 +27,8 @@ def test_full_yaml_applied():
     data = {
         "polling_interval": 45,
         "port": 9000,
-        "summer_cool_threshold": 27.0,
-        "summer_target_temp": 23.0,
         "units_p1": 500,
         "units_pv": 2,
-        "enable_notifications": False,
         "debug": True,
         "home_assistant": {
             "url": "https://example.local:8123",
@@ -42,11 +39,6 @@ def test_full_yaml_applied():
             "off_peak": 5100,
             "super_off_peak": 8100,
             "super_off_peak_winter": 9500,
-        },
-        "tariff_prices": {
-            "peak": 0.20,
-            "off_peak": 0.15,
-            "super_off_peak": 0.11,
         },
         "ev": {
             "min_amps": 8,
@@ -101,11 +93,8 @@ def test_full_yaml_applied():
 
     assert cfg.polling_interval == 45
     assert cfg.port == 9000
-    assert cfg.summer_cool_threshold == 27.0
-    assert cfg.summer_target_temp == 23.0
     assert cfg.units_p1 == 500
     assert cfg.units_pv == 2
-    assert cfg.enable_notifications is False
     assert cfg.debug is True
     assert cfg.home_assistant.url == "https://example.local:8123"
     assert cfg.home_assistant.verify_ssl is True
@@ -113,9 +102,6 @@ def test_full_yaml_applied():
     assert cfg.max_import.off_peak == 5100
     assert cfg.max_import.super_off_peak == 8100
     assert cfg.max_import.super_off_peak_winter == 9500
-    assert cfg.tariff_prices.peak == 0.20
-    assert cfg.tariff_prices.off_peak == 0.15
-    assert cfg.tariff_prices.super_off_peak == 0.11
     assert cfg.ev.min_amps == 8
     assert cfg.ev.max_amps == 20
     assert cfg.ev.watts_per_amp == 700
@@ -243,7 +229,6 @@ def test_currently_applied_sections_still_work():
         "polling_interval": 60,
         "port": 8123,
         "max_import": {"peak": 2600, "off_peak": 5100, "super_off_peak": 8100},
-        "tariff_prices": {"peak": 0.18, "off_peak": 0.13, "super_off_peak": 0.10},
         "frost_protection": {
             "enabled": True,
             "temp_threshold": 5.0,
@@ -266,7 +251,6 @@ def test_currently_applied_sections_still_work():
     assert cfg.polling_interval == 60
     assert cfg.port == 8123
     assert cfg.max_import.peak == 2600
-    assert cfg.tariff_prices.super_off_peak == 0.10
     assert cfg.frost_protection.enabled is True
     assert cfg.bmw_low_battery.battery_threshold == 50
     assert cfg.debug is True

@@ -2,7 +2,6 @@
 
 from collections import deque
 from dataclasses import dataclass, field
-from datetime import datetime
 from enum import IntEnum
 from typing import Optional
 
@@ -241,16 +240,10 @@ class AllDeviceStates:
     # Solar surplus tracking: timestamp when device was turned on due to solar surplus
     # Used to implement grace period before turning off (avoid ping-pong)
     boiler_solar_surplus_since: float = 0.0
-    dishwasher_solar_surplus_since: float = 0.0
-    heater_right_solar_surplus_since: float = 0.0
-    heater_table_solar_surplus_since: float = 0.0
     pool_solar_surplus_since: float = 0.0
     # Timestamp when we started importing (no solar surplus) while device is on
     # Used to turn off device after grace period of sustained import
     boiler_importing_since: float = 0.0
-    dishwasher_importing_since: float = 0.0
-    heater_right_importing_since: float = 0.0
-    heater_table_importing_since: float = 0.0
     pool_importing_since: float = 0.0
 
 
@@ -284,14 +277,12 @@ class PowerBuffer:
         self._p1_return: deque[float] = deque(maxlen=max_samples)  # grid export
         self._p1_power: deque[float] = deque(maxlen=max_samples)   # grid import
         self._pv_power: deque[float] = deque(maxlen=max_samples)   # solar
-        self._battery_power: deque[float] = deque(maxlen=max_samples)  # battery
 
     def add(self, inputs: 'PowerInputs') -> None:
         """Add a new set of readings to the buffer."""
         self._p1_return.append(inputs.p1_return)
         self._p1_power.append(inputs.p1_power)
         self._pv_power.append(inputs.pv_power)
-        self._battery_power.append(inputs.battery_power or 0.0)
 
     @property
     def ready(self) -> bool:
@@ -326,13 +317,6 @@ class PowerBuffer:
             return 0.0
         return min(self._pv_power)
 
-    @property
-    def smoothed_battery_power(self) -> float:
-        """Average battery power (positive=discharge, negative=charge)."""
-        if not self._battery_power:
-            return 0.0
-        return sum(self._battery_power) / len(self._battery_power)
-
 
 @dataclass
 class DecisionResult:
@@ -344,16 +328,3 @@ class DecisionResult:
     meta: dict
 
 
-@dataclass
-class PowerStatus:
-    """Current power status for dashboard."""
-    grid_import: float
-    grid_export: float
-    pv_production: float
-    net_power: float
-    is_exporting: bool
-    tariff: str
-    devices: dict
-    plan: list[str]
-    alerts: list[dict]
-    last_update: datetime

@@ -25,7 +25,7 @@ from .config import Config, load_config
 from .ha_client import HAClient
 from .decision_engine import calculate_decisions
 from .models import PowerInputs, AllDeviceStates, Decisions, PowerBuffer, EVState
-from .tariff import generate_24h_schedule, format_24h_plan_text, get_max_import
+from .tariff import generate_24h_schedule, format_24h_plan_text, get_max_import, get_tariff
 from .scheduler import generate_schedule, format_timetable_text
 
 # Configure logging
@@ -542,8 +542,13 @@ async def execute_decisions(
     config = app_state.config
     ha_client = app_state.ha_client
 
+    # Each device dispatch is wrapped in its own try/except so one HA flake
+    # doesn't abort the rest of the cycle (Story 1.11 B-3).
+    # logger.info lines are gated by success==True so logs reflect actual HA
+    # outcomes; logger.warning fires when HA rejected the command (B-2).
+
+    # EV Charger
     try:
-        # EV Charger
         if decisions.ev.action == 'on':
             # Skip turn_on when session is already alive — ABB's switch.turn_on
             # sends Modbus START_CHARGING which restarts the session.
@@ -554,71 +559,131 @@ async def execute_decisions(
                 if success:
                     confirmed_states['ev'] = True
                     add_pending_command(config.entities.ev_switch, 'on')
+                else:
+                    logger.warning(
+                        "EV: turn_on returned False — HA may have rejected "
+                        "the command"
+                    )
             # Only write amps if target differs from current
             if int(inputs.ev_limit or 0) != decisions.ev.amps:
-                await ha_client.set_number(
+                success = await ha_client.set_number(
                     config.entities.ev_limit, decisions.ev.amps
                 )
-                logger.info(
-                    f"EV: {decisions.ev.amps}A "
-                    f"(session {'alive' if session_alive else 'started'})"
-                )
+                if success:
+                    logger.info(
+                        f"EV: {decisions.ev.amps}A "
+                        f"(session {'alive' if session_alive else 'started'})"
+                    )
+                else:
+                    logger.warning(
+                        f"EV: set_number({decisions.ev.amps}A) returned "
+                        f"False — HA may have rejected the command"
+                    )
         elif decisions.ev.action == 'pause':
             # 5A keeps PWM in IEC valid range (8.3% duty) but below 6A minimum
             # so the car waits rather than ending the session. 0A causes some
             # BMWs (i5 PRICE_OPTIMIZED) to log END_REQUESTED_BY_DRIVER.
             if int(inputs.ev_limit or 0) != 5:
-                await ha_client.set_number(config.entities.ev_limit, 5)
-                logger.info(
-                    "EV: Paused (amps=5, below charging min, session alive)"
+                success = await ha_client.set_number(
+                    config.entities.ev_limit, 5
                 )
+                if success:
+                    logger.info(
+                        "EV: Paused (amps=5, below charging min, "
+                        "session alive)"
+                    )
+                else:
+                    logger.warning(
+                        "EV: set_number(5A) returned False — HA may have "
+                        "rejected the pause command"
+                    )
         elif decisions.ev.action == 'off':
             if inputs.ev_switch != 'off':
                 success = await ha_client.turn_off(config.entities.ev_switch)
                 if success:
                     confirmed_states['ev'] = False
                     add_pending_command(config.entities.ev_switch, 'off')
-                logger.info("EV: Stopped (hard off)")
+                    logger.info("EV: Stopped (hard off)")
+                else:
+                    logger.warning(
+                        "EV: turn_off returned False — HA may have rejected "
+                        "the command"
+                    )
         elif decisions.ev.action == 'adjust':
             if int(inputs.ev_limit or 0) != decisions.ev.amps:
-                await ha_client.set_number(
+                success = await ha_client.set_number(
                     config.entities.ev_limit, decisions.ev.amps
                 )
-                logger.info(f"EV: Adjusted to {decisions.ev.amps}A")
+                if success:
+                    logger.info(f"EV: Adjusted to {decisions.ev.amps}A")
+                else:
+                    logger.warning(
+                        f"EV: set_number({decisions.ev.amps}A) returned "
+                        f"False — HA may have rejected the adjust"
+                    )
+    except Exception as e:
+        logger.error(f"EV: execute failed: {e}", exc_info=True)
 
-        # Boiler
+    # Boiler
+    try:
         if decisions.boiler.action == 'on' and inputs.boiler_switch != 'on':
             success = await ha_client.turn_on(config.entities.boiler_switch)
             if success:
                 confirmed_states['boiler'] = True
                 add_pending_command(config.entities.boiler_switch, 'on')
-            logger.info("Boiler: ON")
+                logger.info("Boiler: ON")
+            else:
+                logger.warning(
+                    "Boiler: turn_on returned False — HA may have rejected "
+                    "the command"
+                )
         elif (decisions.boiler.action == 'off'
               and inputs.boiler_switch != 'off'):
             success = await ha_client.turn_off(config.entities.boiler_switch)
             if success:
                 confirmed_states['boiler'] = False
                 add_pending_command(config.entities.boiler_switch, 'off')
-            logger.info("Boiler: OFF")
+                logger.info("Boiler: OFF")
+            else:
+                logger.warning(
+                    "Boiler: turn_off returned False — HA may have rejected "
+                    "the command"
+                )
+    except Exception as e:
+        logger.error(f"Boiler: execute failed: {e}", exc_info=True)
 
-        # Pool Pump (frost protection)
+    # Pool Pump (frost protection)
+    try:
         if (decisions.pool_pump.action == 'on'
                 and inputs.pool_pump_switch != 'on'):
             success = await ha_client.turn_on(config.entities.pool_pump)
             if success:
                 confirmed_states['pool_pump'] = True
                 add_pending_command(config.entities.pool_pump, 'on')
-            logger.info("Pool Pump: ON (frost protection)")
+                logger.info("Pool Pump: ON (frost protection)")
+            else:
+                logger.warning(
+                    "Pool Pump: turn_on returned False — HA may have rejected "
+                    "the command"
+                )
         elif (decisions.pool_pump.action == 'off'
               and inputs.pool_pump_switch != 'off'):
             success = await ha_client.turn_off(config.entities.pool_pump)
             if success:
                 confirmed_states['pool_pump'] = False
                 add_pending_command(config.entities.pool_pump, 'off')
-            logger.info("Pool Pump: OFF")
+                logger.info("Pool Pump: OFF")
+            else:
+                logger.warning(
+                    "Pool Pump: turn_off returned False — HA may have "
+                    "rejected the command"
+                )
+    except Exception as e:
+        logger.error(f"Pool Pump: execute failed: {e}", exc_info=True)
 
-        # Pool Heat Pump — skip service call when already in target state.
-        # Without this guard, override=Aan fires set_hvac_mode every cycle.
+    # Pool Heat Pump — skip service call when already in target state.
+    # Without this guard, override=Aan fires set_hvac_mode every cycle.
+    try:
         if decisions.pool.action == 'on':
             if inputs.pool_climate != 'heat':
                 success = await ha_client.set_climate(
@@ -629,7 +694,12 @@ async def execute_decisions(
                     add_pending_command(
                         config.entities.pool_climate, 'heat'
                     )
-                logger.info("Pool Heat: ON")
+                    logger.info("Pool Heat: ON")
+                else:
+                    logger.warning(
+                        "Pool Heat: set_climate(heat) returned False — HA "
+                        "may have rejected the command"
+                    )
         elif decisions.pool.action == 'off':
             if inputs.pool_climate != 'off':
                 success = await ha_client.set_climate(
@@ -640,69 +710,135 @@ async def execute_decisions(
                     add_pending_command(
                         config.entities.pool_climate, 'off'
                     )
-                logger.info("Pool Heat: OFF")
+                    logger.info("Pool Heat: OFF")
+                else:
+                    logger.warning(
+                        "Pool Heat: set_climate(off) returned False — HA "
+                        "may have rejected the command"
+                    )
+    except Exception as e:
+        logger.error(f"Pool Heat: execute failed: {e}", exc_info=True)
 
-        # Pool fan: enforce 'low' when heating. The heat pump drifts to 'auto'
-        # on its own (~04:45 daily, likely internal defrost routine). Without
-        # this, 'auto' draws much more power than solar can supply.
+    # Pool fan: enforce 'low' when heating. The heat pump drifts to 'auto'
+    # on its own (~04:45 daily, likely internal defrost routine). Without
+    # this, 'auto' draws much more power than solar can supply.
+    try:
         if (inputs.pool_climate == 'heat'
                 and inputs.pool_fan_mode != 'low'):
-            await ha_client.set_fan_mode(
+            success = await ha_client.set_fan_mode(
                 config.entities.pool_climate, 'low'
             )
-            logger.info(
-                f"Pool fan: corrected {inputs.pool_fan_mode} -> low"
-            )
+            if success:
+                logger.info(
+                    f"Pool fan: corrected {inputs.pool_fan_mode} -> low"
+                )
+            else:
+                logger.warning(
+                    f"Pool fan: set_fan_mode(low) returned False — HA "
+                    f"may have rejected the command (currently "
+                    f"{inputs.pool_fan_mode})"
+                )
+    except Exception as e:
+        logger.error(f"Pool fan: execute failed: {e}", exc_info=True)
 
-        # Table Heater
+    # Table Heater
+    try:
         if (decisions.heater_table.action == 'on'
                 and inputs.heater_table_switch != 'on'):
             success = await ha_client.turn_on(config.entities.heater_table)
             if success:
                 confirmed_states['heater_table'] = True
                 add_pending_command(config.entities.heater_table, 'on')
-            logger.info("Table Heater: ON")
+                logger.info("Table Heater: ON")
+            else:
+                logger.warning(
+                    "Table Heater: turn_on returned False — HA may have "
+                    "rejected the command"
+                )
         elif (decisions.heater_table.action == 'off'
               and inputs.heater_table_switch != 'off'):
             success = await ha_client.turn_off(config.entities.heater_table)
             if success:
                 confirmed_states['heater_table'] = False
                 add_pending_command(config.entities.heater_table, 'off')
-            logger.info("Table Heater: OFF")
+                logger.info("Table Heater: OFF")
+            else:
+                logger.warning(
+                    "Table Heater: turn_off returned False — HA may have "
+                    "rejected the command"
+                )
+    except Exception as e:
+        logger.error(f"Table Heater: execute failed: {e}", exc_info=True)
 
-        # Right Heater (solar surplus only)
+    # Right Heater (solar surplus only)
+    try:
         if (decisions.heater_right.action == 'on'
                 and inputs.heater_right_switch != 'on'):
             success = await ha_client.turn_on(config.entities.heater_right)
             if success:
                 confirmed_states['heater_right'] = True
                 add_pending_command(config.entities.heater_right, 'on')
-            logger.info("Right Heater: ON")
+                logger.info("Right Heater: ON")
+            else:
+                logger.warning(
+                    "Right Heater: turn_on returned False — HA may have "
+                    "rejected the command"
+                )
         elif (decisions.heater_right.action == 'off'
               and inputs.heater_right_switch != 'off'):
             success = await ha_client.turn_off(config.entities.heater_right)
             if success:
                 confirmed_states['heater_right'] = False
                 add_pending_command(config.entities.heater_right, 'off')
-            logger.info("Right Heater: OFF")
+                logger.info("Right Heater: OFF")
+            else:
+                logger.warning(
+                    "Right Heater: turn_off returned False — HA may have "
+                    "rejected the command"
+                )
+    except Exception as e:
+        logger.error(f"Right Heater: execute failed: {e}", exc_info=True)
 
-        # Dishwasher (smart scheduling) - only send command if state changes
-        # Dishwasher: only send command when state actually changes
-        if decisions.dishwasher.action == 'on' and inputs.dishwasher_switch != 'on':
-            success = await ha_client.turn_on(config.entities.dishwasher_switch)
+    # Dishwasher (smart scheduling) - only send command when state changes
+    try:
+        if (decisions.dishwasher.action == 'on'
+                and inputs.dishwasher_switch != 'on'):
+            success = await ha_client.turn_on(
+                config.entities.dishwasher_switch
+            )
             if success:
                 confirmed_states['dishwasher'] = True
-                add_pending_command(config.entities.dishwasher_switch, 'on')
-            logger.info(f"Dishwasher: ON ({decisions.dishwasher.reason})")
-        elif decisions.dishwasher.action == 'off' and inputs.dishwasher_switch != 'off':
-            success = await ha_client.turn_off(config.entities.dishwasher_switch)
+                add_pending_command(
+                    config.entities.dishwasher_switch, 'on'
+                )
+                logger.info(
+                    f"Dishwasher: ON ({decisions.dishwasher.reason})"
+                )
+            else:
+                logger.warning(
+                    "Dishwasher: turn_on returned False — HA may have "
+                    "rejected the command"
+                )
+        elif (decisions.dishwasher.action == 'off'
+                and inputs.dishwasher_switch != 'off'):
+            success = await ha_client.turn_off(
+                config.entities.dishwasher_switch
+            )
             if success:
                 confirmed_states['dishwasher'] = False
-                add_pending_command(config.entities.dishwasher_switch, 'off')
-            logger.info(f"Dishwasher: PAUSED ({decisions.dishwasher.reason})")
-
+                add_pending_command(
+                    config.entities.dishwasher_switch, 'off'
+                )
+                logger.info(
+                    f"Dishwasher: PAUSED ({decisions.dishwasher.reason})"
+                )
+            else:
+                logger.warning(
+                    "Dishwasher: turn_off returned False — HA may have "
+                    "rejected the command"
+                )
     except Exception as e:
-        logger.error(f"Failed to execute decisions: {e}", exc_info=True)
+        logger.error(f"Dishwasher: execute failed: {e}", exc_info=True)
 
     return confirmed_states
 
@@ -753,18 +889,20 @@ def _update_device_state(inputs: PowerInputs, confirmed_states: dict[str, bool])
 
 async def _update_ha_status_helpers(inputs: PowerInputs, result) -> None:
     """Update HA input_text helpers with current status for external display."""
-    from .tariff import get_current_tariff
     ha = app_state.ha_client
     config = app_state.config
     now = datetime.now()
 
-    tariff = get_current_tariff(now, config)
+    tariff, _ = get_tariff(now)
     tariff_labels = {'peak': 'PIEK', 'off-peak': 'DAL', 'super-off-peak': 'SDAL'}
     tariff_label = tariff_labels.get(tariff, tariff)
 
+    # p1_power/p1_return are already in W (ha_client.parse_inputs applies
+    # units_p1=1000 multiplier at read time). pv_power is already in W
+    # (units_pv=1). No conversion needed here.
     pv = inputs.pv_power or 0
-    p1 = (inputs.p1_power or 0) * 1000  # kW to W
-    p1_ret = (inputs.p1_return or 0) * 1000
+    p1 = inputs.p1_power or 0
+    p1_ret = inputs.p1_return or 0
 
     net = p1 - p1_ret
     headroom = result.headroom if hasattr(result, 'headroom') else 0

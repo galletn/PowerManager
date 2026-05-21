@@ -1018,24 +1018,144 @@ def test_cold_start_peak_tariff_pause_fires_immediately(
         f"Expected 'PAUSE (peak tariff)' in plan; got: {result.plan}"
 
 
-def test_cold_start_not_charging_does_not_seed(
+def test_cold_start_plugged_not_charging_seeds_with_cleared_off_hysteresis(
     base_inputs, config, device_state, summer_noon
 ):
-    """Cold-start + sensor-says-not-charging → no seeding, no spurious behavior.
+    """Cold-start + sensor-says-plugged-not-charging → Story 1.10 seed fires
+    (on=False, last_change = now - (min_off_time+1)*1000).
 
-    Default device_state fixture, baseline `_solar_inputs(...)` with
-    `ev_state=READY` (not charging). The `last_change == 0 AND ev_charging`
-    guard fails → seeding skipped → device_state.ev stays untouched. No
-    spurious 'pause held off by hysteresis' plan entry should appear.
+    Supersedes Story 1.7 AC #2 ("no seeding for not-charging"). The
+    `last_change == 0` outer guard now applies to BOTH branches; the
+    `ctx['ev_charging']` predicate selects between Story 1.7 (on=True,
+    cleared ON hysteresis) and Story 1.10 (on=False, cleared OFF
+    hysteresis). The line-129 short-circuit in can_switch_device is no
+    longer reachable from _handle_ev for tracked sessions (plugged +
+    not-done) — the seed establishes the `last_change > 0` invariant.
+
+    Pinned here: the SEED contract (state.on, last_change). The end-to-end
+    behavior (START fires, witness present) is pinned by
+    test_cold_start_plugged_solar_start_fires_immediately.
     """
+    expected_now_ts = summer_noon.timestamp() * 1000
+    expected_seed_offset = (config.timing.min_off_time + 1) * 1000
+
     inputs = _solar_inputs(base_inputs, ev_state=EVState.READY)
     result = calculate_decisions(inputs, config, device_state, summer_noon)
 
-    assert device_state.ev.last_change == 0, (
-        f"Expected device_state.ev.last_change=0 (no seeding when not charging); "
+    # Story 1.10: seed fires for plugged-not-charging cold-start.
+    assert device_state.ev.last_change == expected_now_ts - expected_seed_offset, (
+        f"Expected device_state.ev.last_change to be seeded "
+        f"{expected_seed_offset}ms in the past "
+        f"(={expected_now_ts - expected_seed_offset}); "
         f"got {device_state.ev.last_change}"
     )
-    assert device_state.ev.on is False, \
-        f"Expected device_state.ev.on=False (unchanged); got {device_state.ev.on}"
+    assert device_state.ev.on is False, (
+        f"Expected device_state.ev.on=False after Story 1.10 seed; "
+        f"got {device_state.ev.on}"
+    )
     assert not any('pause held off by hysteresis' in e for e in result.plan), \
-        f"Expected no hysteresis-held witness in plan; got: {result.plan}"
+        f"Expected no hysteresis-held witness when not charging; got: {result.plan}"
+
+
+def test_cold_start_plugged_solar_start_fires_immediately(
+    base_inputs, config, device_state, summer_noon
+):
+    """Cold-start + sensor-says-READY + good solar → START fires immediately
+    via the Story 1.10 cleared-OFF-hysteresis seed (NOT the line-129
+    short-circuit).
+
+    Pins the symmetric counterpart to
+    test_cold_start_seeds_state_with_cleared_hysteresis (Story 1.7):
+    - That test pinned cold-start + CHARGING → pause fires immediately
+      via cleared-ON hysteresis.
+    - This test pins cold-start + READY → START fires immediately via
+      cleared-OFF hysteresis.
+
+    Closes the open peer-review item carried across Stories 1.4, 1.6,
+    AND 1.7 deferred-work: "ON/start direction cold-start bypass via
+    last_change==0 short-circuit".
+    """
+    expected_now_ts = summer_noon.timestamp() * 1000
+    expected_seed_offset = (config.timing.min_off_time + 1) * 1000
+
+    inputs = _solar_inputs(base_inputs)  # default: ev_state=READY, good solar
+    result = calculate_decisions(inputs, config, device_state, summer_noon)
+
+    # State tracking: ev.on stays False, last_change seeded past min_off_time.
+    assert device_state.ev.on is False, \
+        f"Expected device_state.ev.on=False (still off) after seeding; got {device_state.ev.on}"
+    assert device_state.ev.last_change == expected_now_ts - expected_seed_offset, (
+        f"Expected device_state.ev.last_change to be seeded "
+        f"{expected_seed_offset}ms in the past "
+        f"(={expected_now_ts - expected_seed_offset}); "
+        f"got {device_state.ev.last_change}"
+    )
+
+    # Behavior: START fires immediately (cleared OFF hysteresis).
+    assert result.decisions.ev.action == 'on', (
+        f"Expected START to fire immediately on cold-start with good solar; "
+        f"got {result.decisions.ev.action} (plan: {result.plan})"
+    )
+    assert result.decisions.ev.amps == config.ev.min_amps, (
+        f"Expected START at min_amps ({config.ev.min_amps}A); "
+        f"got {result.decisions.ev.amps}"
+    )
+    assert any('SOLAR START' in e for e in result.plan), \
+        f"Expected 'SOLAR START' in plan; got: {result.plan}"
+
+    # Negative witness: pause branch not entered.
+    assert not any('pause held off by hysteresis' in e for e in result.plan), \
+        f"Expected no hysteresis-held witness on START path; got: {result.plan}"
+
+
+def test_cold_start_seed_skipped_when_now_local_is_zero(
+    base_inputs, config, device_state, summer_noon
+):
+    """AC #4 defensive guard: when `ctx['now'] == 0` (e.g., a future refactor
+    drops the `now_ts` injection from calculate_decisions's ctx builder),
+    the seed MUST be skipped for BOTH the Story 1.7 (charging) and Story
+    1.10 (not-charging) branches. Without this guard, a missing `now`
+    silently re-enables the can_switch_device line-129 short-circuit and
+    Stories 1.7 + 1.10 are no longer load-bearing.
+
+    Injects `now == 0` by passing a datetime subclass whose `.timestamp()`
+    returns 0.0 — exercises the guard directly without depending on local
+    timezone offsets.
+    """
+    class _ZeroTimestampDatetime(datetime):
+        def timestamp(self):
+            return 0.0
+
+    zero_now = _ZeroTimestampDatetime(
+        summer_noon.year, summer_noon.month, summer_noon.day,
+        summer_noon.hour, summer_noon.minute, summer_noon.second,
+    )
+
+    # Branch A: ev_charging=True (Story 1.7) — seed MUST skip.
+    charging_inputs = _solar_inputs(
+        base_inputs,
+        ev_state=EVState.CHARGING,
+        ev_switch='on',
+        ev_power=4000,
+    )
+    calculate_decisions(charging_inputs, config, device_state, zero_now)
+    assert device_state.ev.last_change == 0, (
+        f"Story 1.7 (charging) branch must NOT seed when now_local == 0; "
+        f"got last_change={device_state.ev.last_change}"
+    )
+    assert device_state.ev.on is False, (
+        f"Story 1.7 (charging) branch must NOT flip ev.on when now_local == 0; "
+        f"got ev.on={device_state.ev.on}"
+    )
+
+    # Branch B: ev_charging=False (Story 1.10) — seed MUST skip.
+    not_charging_inputs = _solar_inputs(base_inputs, ev_state=EVState.READY)
+    calculate_decisions(not_charging_inputs, config, device_state, zero_now)
+    assert device_state.ev.last_change == 0, (
+        f"Story 1.10 (not-charging) branch must NOT seed when now_local == 0; "
+        f"got last_change={device_state.ev.last_change}"
+    )
+    assert device_state.ev.on is False, (
+        f"Story 1.10 (not-charging) branch must NOT flip ev.on when now_local == 0; "
+        f"got ev.on={device_state.ev.on}"
+    )

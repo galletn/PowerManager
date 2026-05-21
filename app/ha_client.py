@@ -73,48 +73,6 @@ class HAClient:
             and self._connected
         )
 
-    async def ensure_connected(self) -> bool:
-        """
-        Ensure connection to Home Assistant is healthy.
-
-        Checks if session is valid and performs a health check.
-        Reconnects if necessary.
-
-        Returns:
-            True if connected successfully, False otherwise.
-        """
-        # Check if session is valid
-        if not self.is_connected():
-            logger.warning("HA session is not connected, reconnecting...")
-            try:
-                await self.connect()
-            except Exception as e:
-                logger.error(f"Failed to reconnect to HA: {e}")
-                return False
-
-        # Perform a lightweight health check
-        try:
-            async with self._session.get(
-                f"{self.url}/api/",
-                timeout=aiohttp.ClientTimeout(total=5)
-            ) as resp:
-                if resp.status == 200:
-                    return True
-                elif resp.status == 401:
-                    logger.error("HA authentication failed - check token")
-                    return False
-                else:
-                    logger.warning(f"HA health check returned status {resp.status}")
-                    return False
-        except aiohttp.ClientError as e:
-            logger.warning(f"HA health check failed: {e}")
-            self._connected = False
-            return False
-        except asyncio.TimeoutError:
-            logger.warning("HA health check timed out")
-            self._connected = False
-            return False
-
     async def _request_with_retry(
         self,
         method: str,

@@ -30,14 +30,6 @@ class GridConfig:
 
 
 @dataclass
-class TariffPricesConfig:
-    """Electricity prices per kWh (EUR). Update monthly based on supplier rates."""
-    peak: float = 0.17
-    off_peak: float = 0.13
-    super_off_peak: float = 0.10
-
-
-@dataclass
 class EVConfig:
     """EV charger settings."""
     min_amps: int = 6
@@ -246,7 +238,6 @@ class Config:
     polling_interval: int = 30
     port: int = 8081  # Server port for uvicorn
     max_import: GridConfig = field(default_factory=GridConfig)
-    tariff_prices: TariffPricesConfig = field(default_factory=TariffPricesConfig)
     ev: EVConfig = field(default_factory=EVConfig)
     boiler: BoilerConfig = field(default_factory=BoilerConfig)
     pool: PoolConfig = field(default_factory=PoolConfig)
@@ -256,11 +247,8 @@ class Config:
     ac: ACConfig = field(default_factory=ACConfig)
     entities: EntitiesConfig = field(default_factory=EntitiesConfig)
     timing: TimingConfig = field(default_factory=TimingConfig)
-    summer_cool_threshold: float = 25.0
-    summer_target_temp: float = 22.0
     units_p1: int = 1000  # P1 meter: kW -> W
     units_pv: int = 1     # SolarEdge: already in W
-    enable_notifications: bool = True
     debug: bool = False
 
 

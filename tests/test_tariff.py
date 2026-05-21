@@ -1,41 +1,9 @@
 """Tests for Belgian tariff calculations."""
 
 import pytest
-from datetime import datetime, date
+from datetime import datetime
 
-from app.tariff import get_tariff, is_summer, get_belgian_holidays, easter_date
-
-
-class TestEasterCalculation:
-    """Test Easter date calculation."""
-
-    def test_easter_2024(self):
-        """Easter 2024 is March 31."""
-        assert easter_date(2024) == date(2024, 3, 31)
-
-    def test_easter_2025(self):
-        """Easter 2025 is April 20."""
-        assert easter_date(2025) == date(2025, 4, 20)
-
-
-class TestBelgianHolidays:
-    """Test Belgian holiday detection."""
-
-    def test_christmas(self):
-        """Christmas is a holiday."""
-        holidays = get_belgian_holidays(2024)
-        assert date(2024, 12, 25) in holidays
-
-    def test_national_day(self):
-        """July 21 is Belgian National Day."""
-        holidays = get_belgian_holidays(2024)
-        assert date(2024, 7, 21) in holidays
-
-    def test_easter_monday(self):
-        """Easter Monday is a holiday."""
-        holidays = get_belgian_holidays(2024)
-        # Easter 2024 is March 31, so Monday is April 1
-        assert date(2024, 4, 1) in holidays
+from app.tariff import get_tariff, is_summer
 
 
 class TestIsSummer:
