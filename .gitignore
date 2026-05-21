@@ -13,6 +13,19 @@ __pycache__/
 # Config (root only - contains HA token)
 /config.yaml
 
+# Internal security/quality review docs — too detailed for the
+# briefly-public-during-HA-rebuild window. Kept locally for reference.
+/docs/CODE_REVIEW.md
+/docs/CODE_REVIEW_PASS2.md
+/plan.md
+
+# BMAD workflow artifacts (story specs, deferred-work, audit reports)
+/_bmad/
+/_bmad-output/
+
+# Runtime state
+/pool_hist.json
+
 # SSL certificates (never commit these!)
 ssl/
 certs/

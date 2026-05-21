@@ -20,9 +20,10 @@ Power Manager runs as a **Home Assistant add-on** with ingress support. The dash
 
 The add-on Dockerfile clones from GitHub at build time. To deploy changes:
 
-1. Push changes to `https://github.com/galletn/PowerManager.git` (private repo - temporarily make public for builds)
-2. In HA: Settings > Add-ons > Power Manager > Rebuild
-3. Set repo back to private after rebuild
+1. Push changes to `https://github.com/galletn/PowerManager.git` (private repo - temporarily made public for builds)
+2. **Before flipping public**: run `./scripts/check-secrets.sh` from the repo root. Exits 0 if no secrets / private IPs / internal hostnames are in tracked files.
+3. Flip the repo public, rebuild in HA (Settings > Add-ons > Power Manager > Rebuild)
+4. Set repo back to private after rebuild
 
 ### Add-on Logs
 
