@@ -7,6 +7,7 @@ from dataclasses import replace
 from app.config import Config
 from app.models import PowerInputs, AllDeviceStates, EVState
 from app.decision_engine import calculate_decisions, fmt_w, grid_indicator, parse_override
+from tests._plan_helpers import assert_plan_contains
 
 
 class TestFormatting:
@@ -82,7 +83,7 @@ class TestCalculateDecisions:
         """Plan includes tariff information."""
         result = calculate_decisions(base_inputs, config, device_state, winter_peak)
 
-        assert any('PEAK' in entry for entry in result.plan)
+        assert_plan_contains(result.plan, 'PEAK')
 
     def test_includes_power_values_in_plan(self, base_inputs, config, device_state, winter_evening):
         """Plan includes power values."""
@@ -91,7 +92,7 @@ class TestCalculateDecisions:
 
         # Status line shows Import/Export and PV
         assert any('Import' in entry or 'Export' in entry for entry in result.plan)
-        assert any('PV' in entry for entry in result.plan)
+        assert_plan_contains(result.plan, 'PV')
 
 
 class TestManualOverrides:
@@ -103,7 +104,7 @@ class TestManualOverrides:
         result = calculate_decisions(inputs, config, device_state, winter_evening)
 
         assert result.decisions.boiler.action == 'on'
-        assert any('OVERRIDE ON' in entry for entry in result.plan)
+        assert_plan_contains(result.plan, 'OVERRIDE ON')
 
     def test_boiler_override_off(self, base_inputs, config, device_state, winter_evening):
         """Boiler override OFF forces boiler off."""
@@ -111,7 +112,7 @@ class TestManualOverrides:
         result = calculate_decisions(inputs, config, device_state, winter_evening)
 
         assert result.decisions.boiler.action == 'off'
-        assert any('OVERRIDE OFF' in entry for entry in result.plan)
+        assert_plan_contains(result.plan, 'OVERRIDE OFF')
 
     def test_ev_override_on(self, base_inputs, config, device_state, winter_evening):
         """EV override ON starts charging (respects headroom)."""

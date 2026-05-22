@@ -7,6 +7,7 @@ from dataclasses import replace
 from app.config import Config
 from app.models import PowerInputs, AllDeviceStates, EVState
 from app.decision_engine import check_frost_protection, calculate_decisions
+from tests._plan_helpers import assert_plan_contains
 
 
 class TestCheckFrostProtection:
@@ -108,4 +109,4 @@ class TestFrostProtectionIntegration:
         result = calculate_decisions(inputs, config, device_state, now)
 
         assert result.decisions.pool_pump.action == 'on'
-        assert any('Frost' in entry for entry in result.plan)
+        assert_plan_contains(result.plan, 'Frost')

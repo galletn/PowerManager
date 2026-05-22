@@ -7,6 +7,7 @@ from dataclasses import replace
 from app.config import Config
 from app.models import PowerInputs, AllDeviceStates, EVState
 from app.decision_engine import calculate_decisions, _apply_dishwasher_logic
+from tests._plan_helpers import assert_plan_contains
 
 
 class TestDishwasherNeverInterrupted:
@@ -27,7 +28,7 @@ class TestDishwasherNeverInterrupted:
         # Should NOT turn off the dishwasher
         assert result.decisions.dishwasher.action != 'off'
         # Plan should indicate it's running
-        assert any('RUNNING' in entry for entry in result.plan)
+        assert_plan_contains(result.plan, 'RUNNING')
 
     def test_dishwasher_running_during_peak_not_turned_off(self, base_inputs, config, device_state, winter_peak):
         """Even during peak tariff, running dishwasher should not be interrupted."""
@@ -61,7 +62,7 @@ class TestDishwasherWaitsDuringPeak:
         # Should not start during peak (action should remain 'none', not 'on')
         assert result.decisions.dishwasher.action == 'none'
         # Plan should indicate waiting
-        assert any('WAITING' in entry for entry in result.plan)
+        assert_plan_contains(result.plan, 'WAITING')
 
 
 class TestDishwasherRunsWithSolar:
@@ -145,7 +146,7 @@ class TestDishwasherOverrides:
 
         # Override should force it on
         assert result.decisions.dishwasher.action == 'on'
-        assert any('OVERRIDE ON' in entry for entry in result.plan)
+        assert_plan_contains(result.plan, 'OVERRIDE ON')
 
     def test_dishwasher_override_off(self, base_inputs, config, device_state, winter_offpeak):
         """Override OFF should prevent dishwasher from running even during off-peak."""
@@ -160,4 +161,4 @@ class TestDishwasherOverrides:
 
         # Override should force it off
         assert result.decisions.dishwasher.action == 'off'
-        assert any('OVERRIDE OFF' in entry for entry in result.plan)
+        assert_plan_contains(result.plan, 'OVERRIDE OFF')

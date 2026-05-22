@@ -7,6 +7,7 @@ from dataclasses import replace
 from app.config import Config
 from app.models import PowerInputs, AllDeviceStates, EVState
 from app.decision_engine import check_bmw_low_battery, calculate_decisions
+from tests._plan_helpers import assert_plan_contains
 
 
 class TestCheckBmwLowBattery:
@@ -196,4 +197,4 @@ class TestBmwIntegration:
         result = calculate_decisions(inputs, config, device_state, now)
 
         assert any('BMW i5' in a.message for a in result.alerts)
-        assert any('BMW i5' in entry for entry in result.plan)
+        assert_plan_contains(result.plan, 'BMW i5')
