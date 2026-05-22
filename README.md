@@ -100,8 +100,7 @@ PowerManager/
 ├── power-manager-addon/     # HA add-on packaging
 │   ├── config.yaml          # Add-on manifest
 │   ├── Dockerfile
-│   ├── run.sh
-│   └── dashboard-ingress.html
+│   └── run.sh
 ├── repository.yaml          # HA add-on repository metadata
 ├── tests/                   # Pytest tests
 ├── homeassistant/

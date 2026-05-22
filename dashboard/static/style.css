@@ -277,13 +277,6 @@ h2 {
     color: var(--ha-text-secondary);
 }
 
-/* Devices Grid */
-.devices-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 12px;
-}
-
 .device {
     background: rgba(0,0,0,0.02);
     border-radius: 8px;
@@ -302,32 +295,6 @@ h2 {
     border-left: 3px solid var(--ha-success);
 }
 
-.device-icon {
-    font-size: 24px;
-    width: 40px;
-    text-align: center;
-}
-
-.device-info {
-    flex: 1;
-    min-width: 0;
-}
-
-.device-name {
-    font-size: 14px;
-    font-weight: 500;
-    color: var(--ha-text-primary);
-}
-
-.device-status {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 12px;
-    color: var(--ha-text-secondary);
-    margin-top: 2px;
-}
-
 .status-dot {
     width: 8px;
     height: 8px;
@@ -342,54 +309,6 @@ h2 {
 .status-dot.charging {
     background: var(--ha-primary-color);
     box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--ha-primary-color);
-}
-
-.device-power {
-    font-size: 12px;
-    color: var(--ha-text-secondary);
-    margin-top: 4px;
-}
-
-.device-power .small {
-    opacity: 0.7;
-}
-
-.device-power .temp {
-    color: var(--ha-info);
-}
-
-.device-last-activity {
-    font-size: 10px;
-    color: var(--ha-text-secondary);
-    opacity: 0.8;
-    margin-top: 2px;
-    font-style: italic;
-}
-
-.device-controls {
-    display: flex;
-    gap: 4px;
-}
-
-.device-controls .btn {
-    width: 44px;
-    height: 44px;
-    border: none;
-    border-radius: 50%;
-    cursor: pointer;
-    font-size: 12px;
-    font-weight: 500;
-    transition: transform 0.1s, opacity 0.2s, background-color 0.2s;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.device-controls .btn:hover {
-}
-
-.device-controls .btn:active {
-    transform: scale(0.95);
 }
 
 .btn.auto {
@@ -654,47 +573,6 @@ h2 {
 
 .schedule-status-dot.charging {
     background: #2196F3;
-}
-
-/* Schedule Cards */
-.schedule-cards {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-    margin-bottom: 16px;
-}
-
-@media (max-width: 600px) {
-    .schedule-cards {
-        grid-template-columns: 1fr;
-    }
-}
-
-.schedule-card {
-    background: rgba(0,0,0,0.02);
-    border-radius: 8px;
-    padding: 12px;
-}
-
-.card-header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 8px;
-}
-
-.card-icon {
-    font-size: 16px;
-}
-
-.card-title {
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--ha-text-secondary);
-}
-
-.card-content {
-    font-size: 13px;
 }
 
 .schedule-item {
@@ -1126,10 +1004,6 @@ h2 {
         font-size: 18px;
     }
 
-    .devices-grid {
-        grid-template-columns: 1fr;
-    }
-
     .power-flow-visual {
         flex-wrap: wrap;
         gap: 16px;
@@ -1158,14 +1032,6 @@ h2 {
 }
 
 /* Button feedback animations */
-.device-controls .btn.success {
-    animation: btn-success-flash 0.5s ease;
-}
-
-.device-controls .btn.error {
-    animation: btn-error-shake 0.5s ease;
-}
-
 @keyframes btn-success-flash {
     0% { background-color: inherit; }
     50% { background-color: var(--ha-success); box-shadow: 0 0 8px var(--ha-success); }
@@ -1178,32 +1044,11 @@ h2 {
     20%, 40%, 60%, 80% { transform: translateX(4px); background-color: var(--ha-error); }
 }
 
-/* Inline error message for override failures */
-.override-error {
-    position: absolute;
-    bottom: -24px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: var(--ha-error);
-    color: white;
-    padding: 2px 8px;
-    border-radius: 4px;
-    font-size: 10px;
-    white-space: nowrap;
-    z-index: 10;
-    animation: fade-in-out 3s ease forwards;
-}
-
 @keyframes fade-in-out {
     0% { opacity: 0; }
     10% { opacity: 1; }
     80% { opacity: 1; }
     100% { opacity: 0; }
-}
-
-/* Position device-controls for error message placement */
-.device-controls {
-    position: relative;
 }
 
 /* Energy flow animations for arrows */

@@ -111,8 +111,7 @@ PowerManager/
 │   ├── config.yaml          # Add-on manifest (ingress, panel config)
 │   ├── Dockerfile           # Builds from python:3.12-alpine, clones repo
 │   ├── build.yaml           # Base image per architecture
-│   ├── run.sh               # Entry point (sets HA_URL, HA_TOKEN, PORT)
-│   └── dashboard-ingress.html # Dashboard with relative URLs for ingress
+│   └── run.sh               # Entry point (sets HA_URL, HA_TOKEN, PORT)
 ├── repository.yaml          # HA add-on repository metadata
 ├── tests/                   # Pytest tests
 ├── homeassistant/
