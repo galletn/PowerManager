@@ -61,10 +61,10 @@ class TestEngineNoLongerParsesACOverrides:
         captured = {}
 
         def fake_winter(decisions, plan, ctx):
-            captured["ovr"] = ctx["ovr"]
+            captured["ovr"] = ctx.ovr
 
         def fake_summer(decisions, plan, ctx):
-            captured["ovr"] = ctx["ovr"]
+            captured["ovr"] = ctx.ovr
 
         from datetime import datetime
         with patch(

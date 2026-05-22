@@ -3,7 +3,7 @@
 from collections import deque
 from dataclasses import dataclass, field
 from enum import IntEnum
-from typing import Optional
+from typing import Any, Callable, Optional
 
 
 class EVState(IntEnum):
@@ -169,6 +169,85 @@ class PowerInputs:
     bmw_ix1_time_to_full: Optional[float] = None
     bmw_ix1_charging_soc: Optional[float] = None  # Only valid during charging
     bmw_ix1_charging_range: Optional[float] = None  # Only valid during charging
+
+
+@dataclass
+class DecisionContext:
+    """Typed context passed from calculate_decisions to all _handle_* and
+    _apply_*_logic functions. Replaces the prior 45-key dict-based ctx.
+
+    Constructed once at the end of calculate_decisions's "input parsing"
+    block. Read-only by convention — handlers MAY mutate fields on
+    `device_state` (a member) but MUST NOT reassign ctx fields. Use
+    `dataclasses.replace(ctx, ...)` if a derived ctx is needed (not
+    currently any consumer).
+
+    Field defaults preserve the prior `ctx.get(key, default)` runtime
+    semantics from app/decision_engine.py — a missing field at a `.X`
+    access site now returns the dataclass default instead of raising.
+    """
+    # === Override / mode flags ===
+    ovr: dict = field(default_factory=dict)
+    is_summer: bool = False
+
+    # === EV input/state ===
+    ev_done: bool = False
+    ev_plugged: bool = False
+    ev_ready: bool = False
+    ev_charging: bool = False
+    ev_limit: int = 6
+    ev_power: float = 0.0
+    ev_hours_needed: float = 0.0
+
+    # === Boiler input/state ===
+    boiler_on: bool = False
+    boiler_full: bool = False
+    boiler_force: bool = False    # Runtime stores `inputs.boiler_force == 'on'`, not the raw HA string.
+    boiler_power: float = 0.0
+
+    # === Heater input/state (set in BOTH branches post-Story-1.15) ===
+    ht_on: bool = False
+    hr_on: bool = False
+    ht_power: float = 0.0
+
+    # === Pool input/state ===
+    pool_heating_on: bool = False
+    pool_power: float = 0.0
+    pool_season: bool = False
+
+    # === Dishwasher input/state ===
+    dw_switch_on: bool = False
+    dw_power: float = 0.0
+    dw_running: bool = False
+    dw_waiting: bool = False
+
+    # === Power state ===
+    headroom: float = 0.0
+    hyst: int = 0
+    pv: float = 0.0
+    p1: float = 0.0
+    p1_return: float = 0.0
+    net_p1: float = 0.0
+    is_exporting: bool = False
+    smooth_p1: float = 0.0
+    smooth_p1_return: float = 0.0
+    smooth_pv: float = 0.0
+    smooth_net_p1: float = 0.0
+    smooth_is_exporting: bool = False
+    battery_charge: float = 0.0
+    battery_soe: Optional[float] = None
+    battery_power: Optional[float] = None
+
+    # === Tariff / time ===
+    tariff: str = 'peak'
+    tariff_info: dict = field(default_factory=dict)
+    date: Any = None                # datetime
+    now: float = 0.0                # epoch ms (now.timestamp() * 1000)
+
+    # === Config / services / state references ===
+    config: Any = None              # app.config.Config — Any to avoid circular import
+    can_switch: Optional[Callable] = None
+    device_state: Optional[Any] = None  # AllDeviceStates
 
 
 @dataclass

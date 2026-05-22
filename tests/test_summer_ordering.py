@@ -10,6 +10,7 @@ the boiler was about to consume the off-peak limit, briefly overshooting the
 from unittest.mock import patch
 
 from app.decision_engine import _apply_summer_logic
+from app.models import DecisionContext
 
 
 def test_summer_runs_boiler_handler_before_ev_handler():
@@ -40,15 +41,15 @@ def test_summer_runs_boiler_handler_before_ev_handler():
     def fake_heaters(decisions, plan, ctx, headroom):
         call_order.append("heaters")
 
-    ctx = {
-        "ovr": {"table_heater": "auto"},
-        "headroom": 5000,
-        "hyst": None,
-        "config": None,
-        "can_switch": lambda *_args, **_kw: True,
-        "is_exporting": False,
-        "pv": 0,
-    }
+    ctx = DecisionContext(
+        ovr={"table_heater": "auto"},
+        headroom=5000,
+        hyst=0,
+        config=None,
+        can_switch=lambda *_args, **_kw: True,
+        is_exporting=False,
+        pv=0,
+    )
 
     with patch("app.decision_engine._handle_boiler", side_effect=fake_boiler), \
          patch("app.decision_engine._handle_ev", side_effect=fake_ev), \
